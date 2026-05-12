@@ -1,0 +1,30 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "Career Intelligence Platform",
+  description = "A trust-first career strategist and job search intelligence workspace.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="h-full antialiased">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <script>
+      import "htmx.org";
+    </script>
+  </head>
+  <body class="min-h-full flex flex-col font-sans">
+    <slot />
+  </body>
+</html>

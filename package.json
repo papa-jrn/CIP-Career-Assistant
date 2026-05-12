@@ -1,0 +1,31 @@
+{
+  "name": "career-intelligence-platform",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/serve-local.mjs",
+    "dev:astro": "astro dev",
+    "build": "astro build",
+    "start": "node ./dist/server/entry.mjs",
+    "preview": "astro preview",
+    "astro": "astro",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@astrojs/node": "^10.1.0",
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "astro": "^6.3.1",
+    "htmx.org": "^2.0.4",
+    "stripe": "^22.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.39.0",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,30 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { navItems, recommendations } from "../lib/cip/data";
+---
+
+<Layout title="CIP Career Assets">
+  <main class="mx-auto w-full max-w-5xl px-5 py-8">
+    <nav class="mb-8 flex flex-wrap gap-2">
+      {navItems.map((item) => (
+        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Asset Optimization</p>
+      <h1 class="mt-2 text-3xl font-semibold">Improve positioning without inventing claims.</h1>
+      <div class="mt-6 grid gap-4">
+        {recommendations.map((item) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-xl font-semibold">{item.area}</h2>
+              <span class="rounded-md bg-[rgba(164,93,17,0.12)] px-2 py-1 text-xs font-semibold text-[var(--warning)]">Needs approval</span>
+            </div>
+            <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{item.action}</p>
+            <p class="mt-3 text-sm font-semibold text-[var(--warning)]">{item.guardrail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  </main>
+</Layout>

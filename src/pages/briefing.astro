@@ -1,0 +1,25 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { briefingItems, navItems } from "../lib/cip/data";
+---
+
+<Layout title="CIP Weekly Briefing">
+  <main class="mx-auto w-full max-w-5xl px-5 py-8">
+    <nav class="mb-8 flex flex-wrap gap-2">
+      {navItems.map((item) => (
+        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Weekly Career Intelligence</p>
+      <h1 class="mt-2 text-3xl font-semibold">A recurring strategy memo, backed by sources.</h1>
+      <div class="mt-6 grid gap-4">
+        {briefingItems.map((item) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+            <p class="text-sm leading-6 text-[var(--muted)]">{item}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  </main>
+</Layout>

@@ -1,0 +1,45 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { intakeQuestions, navItems } from "../lib/cip/data";
+---
+
+<Layout title="CIP Intake">
+  <main class="mx-auto w-full max-w-5xl px-5 py-8">
+    <nav class="mb-8 flex flex-wrap gap-2">
+      {navItems.map((item) => (
+        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Identity Graph</p>
+      <h1 class="mt-2 text-3xl font-semibold">Collect the evidence before generating advice.</h1>
+      <form class="mt-8 grid gap-5">
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Resume or work history</span>
+          <textarea class="min-h-32 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, notes, or verified accomplishments."></textarea>
+        </label>
+        <div class="grid gap-5 md:grid-cols-2">
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">LinkedIn URL</span>
+            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+          </label>
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
+            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Add one or more links" />
+          </label>
+        </div>
+        <div class="grid gap-4">
+          {intakeQuestions.map((question) => (
+            <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <span class="text-sm font-semibold">{question}</span>
+              <textarea class="min-h-20 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder="Answer in rough notes. The system will structure it later."></textarea>
+            </label>
+          ))}
+        </div>
+        <button class="w-fit rounded-md bg-[var(--foreground)] px-5 py-2.5 text-sm font-semibold text-[var(--background)]" type="button">
+          Save intake draft
+        </button>
+      </form>
+    </section>
+  </main>
+</Layout>
