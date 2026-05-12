@@ -1,7 +1,11 @@
 import { getPublicEnv } from "@/lib/env";
 
 export function getTrustedSiteOrigin() {
-  return new URL(getPublicEnv().PUBLIC_SITE_URL).origin;
+  try {
+    return new URL(getPublicEnv().PUBLIC_SITE_URL).origin;
+  } catch {
+    return "http://127.0.0.1:4321";
+  }
 }
 
 export function isSafeRedirectPath(
@@ -24,17 +28,22 @@ export function isSameOriginRequest(request: Request) {
   const trustedOrigin = getTrustedSiteOrigin();
   const origin = request.headers.get("origin");
   if (origin) {
-    return origin === trustedOrigin;
+    return origin === trustedOrigin || isLocalDevOrigin(origin);
   }
 
   const referer = request.headers.get("referer");
   if (referer) {
     try {
-      return new URL(referer).origin === trustedOrigin;
+      const refererOrigin = new URL(referer).origin;
+      return refererOrigin === trustedOrigin || isLocalDevOrigin(refererOrigin);
     } catch {
       return false;
     }
   }
 
   return false;
+}
+
+function isLocalDevOrigin(origin: string) {
+  return origin === "http://127.0.0.1:4321" || origin === "http://localhost:4321";
 }

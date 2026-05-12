@@ -1,45 +1,109 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { intakeQuestions, navItems } from "../lib/cip/data";
+import { intakeQuestionFields } from "../lib/cip/intake";
+import { navItems } from "../lib/cip/data";
 ---
 
 <Layout title="CIP Intake">
-  <main class="mx-auto w-full max-w-5xl px-5 py-8">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
     <nav class="mb-8 flex flex-wrap gap-2">
       {navItems.map((item) => (
         <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
       ))}
     </nav>
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Identity Graph</p>
-      <h1 class="mt-2 text-3xl font-semibold">Collect the evidence before generating advice.</h1>
-      <form class="mt-8 grid gap-5">
-        <label class="grid gap-2">
-          <span class="text-sm font-semibold">Resume or work history</span>
-          <textarea class="min-h-32 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, notes, or verified accomplishments."></textarea>
-        </label>
-        <div class="grid gap-5 md:grid-cols-2">
-          <label class="grid gap-2">
-            <span class="text-sm font-semibold">LinkedIn URL</span>
-            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
-          </label>
-          <label class="grid gap-2">
-            <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
-            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Add one or more links" />
-          </label>
-        </div>
-        <div class="grid gap-4">
-          {intakeQuestions.map((question) => (
-            <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-              <span class="text-sm font-semibold">{question}</span>
-              <textarea class="min-h-20 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder="Answer in rough notes. The system will structure it later."></textarea>
+
+    <div class="grid gap-6 lg:grid-cols-[0.9fr_0.55fr]">
+      <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Identity Graph</p>
+        <h1 class="mt-2 text-3xl font-semibold">Resume and intake</h1>
+        <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+          This is the source material for the career model. Keep rough notes honest; the analysis engine will separate verified claims from hypotheses.
+        </p>
+
+        <form
+          class="mt-8 grid gap-5"
+          hx-post="/api/intake/save"
+          hx-target="#intake-result"
+          hx-swap="innerHTML"
+        >
+          <div class="grid gap-5 md:grid-cols-2">
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">Full name</span>
+              <input name="full_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
             </label>
-          ))}
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">Target title or direction</span>
+              <input name="target_title" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
+            </label>
+          </div>
+
+          <div class="grid gap-5 md:grid-cols-2">
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">Email</span>
+              <input name="email" type="email" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional for now" />
+            </label>
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">Salary target</span>
+              <input name="salary_target" type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
+            </label>
+          </div>
+
+          <fieldset class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <legend class="px-1 text-sm font-semibold">Preferred work model</legend>
+            <div class="mt-3 flex flex-wrap gap-3">
+              {["Remote", "Hybrid", "On-site", "Flexible"].map((mode) => (
+                <label class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">
+                  <input class="h-4 w-4 accent-[var(--accent)]" type="checkbox" name="work_modes" value={mode.toLowerCase()} />
+                  <span>{mode}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Resume or work history</span>
+            <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, verified accomplishments, work history, or a detailed career note."></textarea>
+          </label>
+
+          <div class="grid gap-5 md:grid-cols-2">
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">LinkedIn URL</span>
+              <input name="linkedin_url" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+            </label>
+            <label class="grid gap-2">
+              <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
+              <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine."></textarea>
+            </label>
+          </div>
+
+          <div class="grid gap-4">
+            {intakeQuestionFields.map((field) => (
+              <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <span class="text-sm font-semibold">{field.label}</span>
+                <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}></textarea>
+              </label>
+            ))}
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button class="rounded-md bg-[var(--foreground)] px-5 py-2.5 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit">
+              Save and analyze intake
+            </button>
+            <span class="text-sm text-[var(--muted)]">The first pass uses deterministic extraction; AI analysis comes next.</span>
+          </div>
+        </form>
+      </section>
+
+      <aside class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <h2 class="text-xl font-semibold">What this creates</h2>
+        <div class="mt-5 space-y-4 text-sm leading-6 text-[var(--muted)]">
+          <p>A structured identity draft with strengths, role hypotheses, source coverage, and follow-up questions.</p>
+          <p>When Supabase is configured and the user is signed in, the intake is saved as a `career_sources` record and summarized into `career_profiles`.</p>
+          <p>Nothing here should be treated as public resume copy until the user approves it.</p>
         </div>
-        <button class="w-fit rounded-md bg-[var(--foreground)] px-5 py-2.5 text-sm font-semibold text-[var(--background)]" type="button">
-          Save intake draft
-        </button>
-      </form>
-    </section>
+      </aside>
+    </div>
+
+    <div id="intake-result" class="mt-6" aria-live="polite"></div>
   </main>
 </Layout>
