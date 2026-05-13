@@ -1,14 +1,19 @@
 import { z } from "zod";
 
+const optionalEnv = (value: unknown) => value === "" ? undefined : value;
+
 const publicSchema = z.object({
   PUBLIC_SITE_URL: z.string().url(),
   PUBLIC_SUPABASE_URL: z.string().url(),
   PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_").optional(),
+  PUBLIC_STRIPE_PUBLISHABLE_KEY: z.preprocess(
+    optionalEnv,
+    z.string().startsWith("pk_").optional(),
+  ),
 });
 
 const stripeSecretSchema = z.object({
-  STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
+  STRIPE_SECRET_KEY: z.preprocess(optionalEnv, z.string().startsWith("sk_")),
 });
 
 const checkoutSchema = publicSchema.merge(stripeSecretSchema).extend({

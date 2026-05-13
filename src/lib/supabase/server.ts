@@ -14,13 +14,14 @@ export function createServer(cookies: AstroCookies) {
     import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
-        getAll() {
-          return cookies.getAll();
+        get(name) {
+          return cookies.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookies.set(name, value, options),
-          );
+        set(name, value, options) {
+          cookies.set(name, value, options);
+        },
+        remove(name, options) {
+          cookies.delete(name, options);
         },
       },
     },

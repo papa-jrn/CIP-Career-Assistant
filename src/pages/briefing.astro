@@ -1,6 +1,48 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { briefingItems, navItems } from "../lib/cip/data";
+import { formatRegion } from "../lib/cip/weekly-strategy";
+import { createServer } from "../lib/supabase/server";
+
+type Snapshot = {
+  id: string;
+  week_start: string;
+  region_focus: string[];
+  watched_employer_count: number;
+  opportunity_match_count: number;
+  summary: string;
+  next_actions: string[];
+  evidence: Array<Record<string, unknown>>;
+  created_at: string;
+};
+
+let signedIn = false;
+let snapshots: Snapshot[] = [];
+let loadError = "";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    signedIn = Boolean(user);
+
+    if (user) {
+      const { data, error } = await supabase
+        .from("career_strategy_snapshots")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("week_start", { ascending: false })
+        .limit(8);
+
+      if (error) loadError = error.message;
+      else snapshots = (data ?? []) as Snapshot[];
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Unable to load briefings.";
+  }
+}
 ---
 
 <Layout title="CIP Weekly Briefing">
@@ -11,15 +53,71 @@ import { briefingItems, navItems } from "../lib/cip/data";
       ))}
     </nav>
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Weekly Career Intelligence</p>
-      <h1 class="mt-2 text-3xl font-semibold">A recurring strategy memo, backed by sources.</h1>
-      <div class="mt-6 grid gap-4">
-        {briefingItems.map((item) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-            <p class="text-sm leading-6 text-[var(--muted)]">{item}</p>
-          </article>
-        ))}
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Weekly Career Intelligence</p>
+          <h1 class="mt-2 text-3xl font-semibold">A recurring strategy memo, backed by watched employers and matches.</h1>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            Use this to turn employer monitoring into a weekly path forward: what to research, what to adapt, and where to focus outreach.
+          </p>
+        </div>
+        <form hx-post="/api/briefing/generate" hx-target="#briefing-result" hx-swap="innerHTML" hx-indicator="#briefing-loading">
+          <button class="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit" disabled={!signedIn}>
+            Generate weekly snapshot
+          </button>
+        </form>
       </div>
+
+      <div id="briefing-loading" class="htmx-indicator mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
+          <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
+          Building weekly career strategy from watched employers and opportunity matches...
+        </div>
+      </div>
+      <div id="briefing-result" class="mt-5"></div>
+
+      {loadError ? (
+        <p class="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>
+      ) : null}
+
+      {snapshots.length ? (
+        <div class="mt-6 grid gap-4">
+          {snapshots.map((snapshot) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-xl font-semibold">Week of {snapshot.week_start}</h2>
+                <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                  {snapshot.watched_employer_count} employers / {snapshot.opportunity_match_count} matches
+                </span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{snapshot.summary}</p>
+              {snapshot.region_focus?.length ? (
+                <div class="mt-4 flex flex-wrap gap-2">
+                  {snapshot.region_focus.map((region) => (
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{formatRegion(region)}</span>
+                  ))}
+                </div>
+              ) : null}
+              <ol class="mt-5 space-y-3">
+                {snapshot.next_actions.map((action, index) => (
+                  <li class="flex gap-3 text-sm leading-6 text-[var(--muted)]">
+                    <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--foreground)] text-xs font-semibold text-[var(--background)]">{index + 1}</span>
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ol>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div class="mt-6 grid gap-4">
+          {briefingItems.map((item) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+              <p class="text-sm leading-6 text-[var(--muted)]">{item}</p>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   </main>
 </Layout>

@@ -13,7 +13,9 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     if (!error) {
       return redirect(next);
     }
+    console.error("Supabase auth callback failed:", error.message);
+    return redirect(`/login?error=auth&reason=${encodeURIComponent(error.message)}`);
   }
 
-  return redirect("/login?error=auth");
+  return redirect("/login?error=auth&reason=Missing%20auth%20code");
 };

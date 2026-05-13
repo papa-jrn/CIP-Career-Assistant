@@ -13,10 +13,12 @@ create table if not exists public.career_profiles (
 
 alter table public.career_profiles enable row level security;
 
+drop policy if exists "career_profiles_select_own" on public.career_profiles;
 create policy "career_profiles_select_own"
   on public.career_profiles for select
   using (auth.uid() = user_id);
 
+drop policy if exists "career_profiles_write_own" on public.career_profiles;
 create policy "career_profiles_write_own"
   on public.career_profiles for all
   using (auth.uid() = user_id)
@@ -35,6 +37,7 @@ create table if not exists public.career_sources (
 
 alter table public.career_sources enable row level security;
 
+drop policy if exists "career_sources_own" on public.career_sources;
 create policy "career_sources_own"
   on public.career_sources for all
   using (auth.uid() = user_id)
@@ -55,6 +58,7 @@ create table if not exists public.opportunities (
 
 alter table public.opportunities enable row level security;
 
+drop policy if exists "opportunities_read_authenticated" on public.opportunities;
 create policy "opportunities_read_authenticated"
   on public.opportunities for select
   to authenticated
@@ -76,6 +80,7 @@ create table if not exists public.opportunity_matches (
 
 alter table public.opportunity_matches enable row level security;
 
+drop policy if exists "opportunity_matches_own" on public.opportunity_matches;
 create policy "opportunity_matches_own"
   on public.opportunity_matches for all
   using (auth.uid() = user_id)
@@ -94,6 +99,7 @@ create table if not exists public.career_recommendations (
 
 alter table public.career_recommendations enable row level security;
 
+drop policy if exists "career_recommendations_own" on public.career_recommendations;
 create policy "career_recommendations_own"
   on public.career_recommendations for all
   using (auth.uid() = user_id)
@@ -112,6 +118,7 @@ create table if not exists public.weekly_briefings (
 
 alter table public.weekly_briefings enable row level security;
 
+drop policy if exists "weekly_briefings_own" on public.weekly_briefings;
 create policy "weekly_briefings_own"
   on public.weekly_briefings for all
   using (auth.uid() = user_id)
@@ -130,6 +137,7 @@ create table if not exists public.audit_events (
 
 alter table public.audit_events enable row level security;
 
+drop policy if exists "audit_events_select_own" on public.audit_events;
 create policy "audit_events_select_own"
   on public.audit_events for select
   using (auth.uid() = user_id);

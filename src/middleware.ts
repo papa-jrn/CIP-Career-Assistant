@@ -38,13 +38,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
       import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
       {
         cookies: {
-          getAll() {
-            return context.cookies.getAll();
+          get(name) {
+            return context.cookies.get(name)?.value;
           },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              context.cookies.set(name, value, options),
-            );
+          set(name, value, options) {
+            context.cookies.set(name, value, options);
+          },
+          remove(name, options) {
+            context.cookies.delete(name, options);
           },
         },
       },

@@ -42,3 +42,12 @@ select {
 ::selection {
   background: rgba(14, 124, 134, 0.18);
 }
+
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: block;
+}

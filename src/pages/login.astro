@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 
 const error = Astro.url.searchParams.get("error") === "auth";
+const reason = Astro.url.searchParams.get("reason");
 ---
 
 <Layout title="Sign in - Career Intelligence Platform">
@@ -12,22 +13,17 @@ const error = Astro.url.searchParams.get("error") === "auth";
       <div class="text-center">
         <h1 class="text-2xl font-semibold tracking-tight">Sign in</h1>
         <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Magic link via Supabase. No password is stored in this app.
+          Use your Supabase account or request a magic link.
         </p>
       </div>
       {
         error ? (
           <p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            Sign-in failed. Try again or contact support.
+            Sign-in failed. {reason ? `Supabase said: ${reason}` : "Try again or contact support."}
           </p>
         ) : null
       }
-      <form
-        class="space-y-4"
-        hx-post="/api/auth/login"
-        hx-target="#login-result"
-        hx-swap="innerHTML"
-      >
+      <form id="login-form" class="space-y-4">
         <div>
           <label for="email" class="sr-only">Email</label>
           <input
@@ -40,14 +36,40 @@ const error = Astro.url.searchParams.get("error") === "auth";
             class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-foreground shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-zinc-400 dark:focus:ring-zinc-400"
           />
         </div>
+        <div>
+          <label for="password" class="sr-only">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Password"
+            class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-foreground shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-zinc-400 dark:focus:ring-zinc-400"
+          />
+        </div>
         <button
+          id="password-submit"
           type="submit"
           class="flex w-full justify-center rounded-lg bg-foreground px-3 py-2 text-sm font-medium text-background transition hover:opacity-90 htmx-request:opacity-50"
         >
-          Email me a link
+          Sign in
+        </button>
+        <button
+          id="signup-submit"
+          type="button"
+          class="flex w-full justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-foreground transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+        >
+          Create password account
+        </button>
+        <button
+          id="magic-link-submit"
+          type="button"
+          class="flex w-full justify-center rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 underline-offset-4 transition hover:text-foreground hover:underline dark:text-zinc-400"
+        >
+          Email me a magic link
         </button>
       </form>
-      <div id="login-result"></div>
+      <div id="login-result" class="text-center text-sm"></div>
       <p class="text-center text-sm text-zinc-500">
         <a
           href="/"
@@ -58,3 +80,139 @@ const error = Astro.url.searchParams.get("error") === "auth";
     </div>
   </div>
 </Layout>
+
+<script>
+  import { createBrowser } from "../lib/supabase/browser";
+
+  const form = document.querySelector<HTMLFormElement>("#login-form");
+  const passwordButton =
+    document.querySelector<HTMLButtonElement>("#password-submit");
+  const signupButton =
+    document.querySelector<HTMLButtonElement>("#signup-submit");
+  const magicLinkButton =
+    document.querySelector<HTMLButtonElement>("#magic-link-submit");
+  const result = document.querySelector<HTMLDivElement>("#login-result");
+  const supabase = createBrowser();
+
+  function getCredentials() {
+    const formData = new FormData(form);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    return { email, password };
+  }
+
+  function setButtonsDisabled(disabled: boolean) {
+    if (passwordButton) passwordButton.disabled = disabled;
+    if (signupButton) signupButton.disabled = disabled;
+    if (magicLinkButton) magicLinkButton.disabled = disabled;
+  }
+
+  function showMessage(message: string, kind: "info" | "success" | "error") {
+    if (!result) {
+      return;
+    }
+
+    if (kind === "success") {
+      result.className =
+        "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200";
+    } else if (kind === "error") {
+      result.className = "text-center text-sm text-red-700 dark:text-red-300";
+    } else {
+      result.className = "text-center text-sm text-zinc-500";
+    }
+    result.textContent = message;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const { email, password } = getCredentials();
+    if (!email || !password) {
+      showMessage("Enter your email and password.", "error");
+      return;
+    }
+
+    setButtonsDisabled(true);
+    showMessage("Signing in...", "info");
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      showMessage(error.message, "error");
+      setButtonsDisabled(false);
+      return;
+    }
+
+    window.location.href = "/intake";
+  });
+
+  signupButton?.addEventListener("click", async () => {
+    const { email, password } = getCredentials();
+    if (!email || !password) {
+      showMessage("Enter your email and a password to create an account.", "error");
+      return;
+    }
+
+    if (password.length < 6) {
+      showMessage("Password must be at least 6 characters.", "error");
+      return;
+    }
+
+    setButtonsDisabled(true);
+    showMessage("Creating your account...", "info");
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      showMessage(error.message, "error");
+      setButtonsDisabled(false);
+      return;
+    }
+
+    if (data.session) {
+      window.location.href = "/intake";
+      return;
+    }
+
+    showMessage(
+      "Account created. If Supabase requires confirmation, check your email before signing in.",
+      "success",
+    );
+    setButtonsDisabled(false);
+  });
+
+  magicLinkButton?.addEventListener("click", async () => {
+    const { email } = getCredentials();
+    if (!email) {
+      showMessage("Enter your email first.", "error");
+      return;
+    }
+
+    setButtonsDisabled(true);
+    showMessage("Sending your magic link...", "info");
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      showMessage(error.message, "error");
+      setButtonsDisabled(false);
+      return;
+    }
+
+    showMessage("Check your email for a sign-in link.", "success");
+  });
+</script>

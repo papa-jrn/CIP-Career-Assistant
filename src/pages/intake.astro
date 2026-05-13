@@ -1,7 +1,50 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { intakeQuestionFields } from "../lib/cip/intake";
+import { intakeQuestionFields, type IntakeForm } from "../lib/cip/intake";
 import { navItems } from "../lib/cip/data";
+import { createServer } from "../lib/supabase/server";
+
+let savedIntake: Partial<IntakeForm> | null = null;
+let savedAt: string | null = null;
+let signedInEmail = "";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      signedInEmail = user.email ?? "";
+      const { data } = await supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "resume_intake")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data?.extracted_text) {
+        const parsed = JSON.parse(data.extracted_text);
+        savedIntake = parsed?.intake ?? null;
+        savedAt = data.created_at ?? null;
+      }
+    }
+  } catch {
+    savedIntake = null;
+  }
+}
+
+const savedWorkModes = new Set(savedIntake?.work_modes ?? []);
+const advisorModeLabel = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+  ? "OpenAI advisor analysis is enabled."
+  : "The first pass uses deterministic extraction; add OPENAI_API_KEY for AI advisor analysis.";
+
+function fieldValue(name: keyof IntakeForm) {
+  return savedIntake?.[name] ?? "";
+}
 ---
 
 <Layout title="CIP Intake">
@@ -19,32 +62,38 @@ import { navItems } from "../lib/cip/data";
         <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
           This is the source material for the career model. Keep rough notes honest; the analysis engine will separate verified claims from hypotheses.
         </p>
+        {savedIntake ? (
+          <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
+            Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.
+          </p>
+        ) : null}
 
         <form
           class="mt-8 grid gap-5"
           hx-post="/api/intake/save"
           hx-target="#intake-result"
           hx-swap="innerHTML"
+          hx-indicator="#intake-loading"
         >
           <div class="grid gap-5 md:grid-cols-2">
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Full name</span>
-              <input name="full_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
+              <input name="full_name" value={fieldValue("full_name")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
             </label>
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Target title or direction</span>
-              <input name="target_title" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
+              <input name="target_title" value={fieldValue("target_title")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
             </label>
           </div>
 
           <div class="grid gap-5 md:grid-cols-2">
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Email</span>
-              <input name="email" type="email" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional for now" />
+              <input name="email" type="email" value={fieldValue("email") || signedInEmail} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional for now" />
             </label>
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Salary target</span>
-              <input name="salary_target" type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
+              <input name="salary_target" value={fieldValue("salary_target")} type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
             </label>
           </div>
 
@@ -53,7 +102,7 @@ import { navItems } from "../lib/cip/data";
             <div class="mt-3 flex flex-wrap gap-3">
               {["Remote", "Hybrid", "On-site", "Flexible"].map((mode) => (
                 <label class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">
-                  <input class="h-4 w-4 accent-[var(--accent)]" type="checkbox" name="work_modes" value={mode.toLowerCase()} />
+                  <input class="h-4 w-4 accent-[var(--accent)]" type="checkbox" name="work_modes" value={mode.toLowerCase()} checked={savedWorkModes.has(mode.toLowerCase())} />
                   <span>{mode}</span>
                 </label>
               ))}
@@ -62,17 +111,17 @@ import { navItems } from "../lib/cip/data";
 
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Resume or work history</span>
-            <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, verified accomplishments, work history, or a detailed career note."></textarea>
+            <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, verified accomplishments, work history, or a detailed career note.">{fieldValue("resume_text")}</textarea>
           </label>
 
           <div class="grid gap-5 md:grid-cols-2">
             <label class="grid gap-2">
               <span class="text-sm font-semibold">LinkedIn URL</span>
-              <input name="linkedin_url" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+              <input name="linkedin_url" value={fieldValue("linkedin_url")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
             </label>
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
-              <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine."></textarea>
+              <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine.">{fieldValue("portfolio_urls")}</textarea>
             </label>
           </div>
 
@@ -80,7 +129,7 @@ import { navItems } from "../lib/cip/data";
             {intakeQuestionFields.map((field) => (
               <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
                 <span class="text-sm font-semibold">{field.label}</span>
-                <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}></textarea>
+                <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}>{fieldValue(field.name)}</textarea>
               </label>
             ))}
           </div>
@@ -89,7 +138,13 @@ import { navItems } from "../lib/cip/data";
             <button class="rounded-md bg-[var(--foreground)] px-5 py-2.5 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit">
               Save and analyze intake
             </button>
-            <span class="text-sm text-[var(--muted)]">The first pass uses deterministic extraction; AI analysis comes next.</span>
+            <span class="text-sm text-[var(--muted)]">{advisorModeLabel}</span>
+          </div>
+          <div id="intake-loading" class="htmx-indicator rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
+              <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
+              Analyzing intake, updating the identity graph, and building advisor notes...
+            </div>
           </div>
         </form>
       </section>
@@ -99,6 +154,7 @@ import { navItems } from "../lib/cip/data";
         <div class="mt-5 space-y-4 text-sm leading-6 text-[var(--muted)]">
           <p>A structured identity draft with strengths, role hypotheses, source coverage, and follow-up questions.</p>
           <p>When Supabase is configured and the user is signed in, the intake is saved as a `career_sources` record and summarized into `career_profiles`.</p>
+          <p>Returning users reload their latest saved intake so the profile can keep evolving instead of starting over.</p>
           <p>Nothing here should be treated as public resume copy until the user approves it.</p>
         </div>
       </aside>
