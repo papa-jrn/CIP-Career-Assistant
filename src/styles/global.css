@@ -39,6 +39,20 @@ select {
   font: inherit;
 }
 
+button:not(:disabled),
+a[href],
+summary,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 ::selection {
   background: rgba(14, 124, 134, 0.18);
 }

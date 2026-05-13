@@ -4,7 +4,7 @@ import { profileText } from "@/lib/cip/profile";
 
 export interface EmployerCandidate {
   name: string;
-  region: "upper_valley" | "northeast_kingdom" | "remote_new_england";
+  region: string;
   category: string;
   location: string;
   estimated_size: string;

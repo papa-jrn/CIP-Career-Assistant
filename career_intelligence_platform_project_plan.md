@@ -783,3 +783,317 @@ Then expand toward:
 
 > A scalable career intelligence SaaS platform.
 
+---
+
+# 18. Employer Discovery Reset
+
+## What We Learned
+
+The first employer-discovery implementation created useful rails, but not the actual engine.
+
+It included:
+
+- Hardcoded regional employer seeds
+- Hardcoded discovery sources
+- A UI for geography and sector selection
+- Candidate/save database tables
+- A watched-employer workflow
+
+This is not enough.
+
+The product goal is not to show prebuilt regional lists. The product goal is to let any user enter a geography and discover credible employers in that area.
+
+Hardcoded lists are acceptable only as test fixtures and regression checks. They should not drive normal product search results.
+
+---
+
+## Correct Product Direction
+
+CIP should begin labor-market research with:
+
+> Find credible employers in a geography, then monitor those employers for relevant roles.
+
+Not:
+
+> Search public job boards and hope the listings are useful.
+
+The employer-discovery flow should be:
+
+1. User enters a geography, such as `Sunapee, NH`, `Lyndon, VT`, `Boston, MA`, or `Burlington, VT`.
+2. User optionally chooses radius, employer size, and sectors.
+3. The system identifies the relevant search area.
+4. The system discovers source directories:
+   - Chambers of commerce
+   - Economic development agencies
+   - Municipal business directories
+   - School systems
+   - Healthcare systems
+   - Higher education institutions
+   - Regional planning commissions
+   - Workforce boards
+   - Business associations
+   - Networking groups when useful
+5. The system extracts candidate employers from those sources.
+6. The system verifies each employer:
+   - Website
+   - Careers/help-wanted page
+   - Location
+   - Estimated employee size
+   - Sector/category
+   - Confidence
+   - Source URLs
+7. The user reviews candidates.
+8. The user saves selected employers to watched employers.
+9. Later, employer-specific adapters monitor those saved employers for jobs.
+
+---
+
+## What Must Change
+
+### 1. Remove Hardcoded Employer Data From Normal Search
+
+Hardcoded employers such as Dartmouth Health, King Arthur Baking, New London Hospital, and NVRH should not be returned just because they exist in code.
+
+They should become regression fixtures only.
+
+Example regression test:
+
+> When running discovery for `Sunapee, NH`, the real discovery algorithm should rediscover New London Hospital, Colby-Sawyer College, Mount Sunapee, and the Lake Sunapee Region Chamber directory.
+
+If it does not, the algorithm needs improvement.
+
+---
+
+### 2. Build the Actual Discovery Algorithm
+
+For a query like `Lyndon, VT`, the app should generate and execute searches such as:
+
+- `Lyndon VT chamber business directory`
+- `Caledonia County major employers`
+- `Lyndon VT economic development employers`
+- `Lyndon VT school district jobs`
+- `Lyndon VT healthcare employers`
+- `Northeast Kingdom largest employers`
+- `Northeast Kingdom business directory`
+
+The algorithm should then:
+
+- Find likely source pages
+- Extract organization names
+- Classify employers
+- Estimate employer size where possible
+- Locate career pages
+- Store candidates with source citations
+- Mark confidence and review status
+
+This is the real Layer 3 employer-discovery engine.
+
+---
+
+### 3. Fix the Employer Search UI
+
+The UI should not imply that an engine exists before it does.
+
+The employer search page should show:
+
+- Search geography
+- Radius/search area
+- Nearby municipalities included
+- Source directories found
+- Candidate employers found
+- Largest discovered employers
+- Top sectors found
+- Which candidates are saved
+
+The current target/ring graphic is only a placeholder. A real map may be useful later, but the first priority is the data engine.
+
+Do not add Google Maps or Mapbox before the discovery engine is working. If mapping is needed, start with a simple geocoding/radius model and a clear textual area summary.
+
+---
+
+### 4. Use Presets Only After Search Or As Saved User Context
+
+Saved regional presets can be useful after a user has:
+
+- Searched a region
+- Saved employers
+- Built a recurring watched-employer map
+
+They should not dominate the first-time search UI.
+
+A new user should be able to start with:
+
+> Boston, MA
+
+or:
+
+> Sunapee, NH
+
+and receive a real discovery result, not a hardcoded list or an empty placeholder.
+
+---
+
+## Immediate Next Build
+
+The next implementation should focus on the real discovery engine:
+
+- Move hardcoded employer/source lists into fixtures or test data.
+- Add a real `employer_discovery_runs` table.
+- Add a source-discovery step powered by AI/web search.
+- Store discovered source pages separately from employer candidates.
+- Extract employer candidates from discovered sources.
+- Add regression tests using Upper Valley, Northeast Kingdom, and Lake Sunapee known anchors.
+- Simplify the UI around the real engine.
+
+The goal is to stop building pretty pixels around fake data and build the employer-search engine first.
+
+---
+
+# 19. Product Integrity Rule
+
+This project must not pretend unfinished systems are real.
+
+If a capability is not implemented, the UI and documentation should say so plainly.
+
+Examples:
+
+- `Employer discovery engine is not implemented yet.`
+- `This result is a test fixture, not live discovery.`
+- `This adapter is planned but not active.`
+- `This analysis uses deterministic fallback, not AI.`
+
+Do not present hardcoded data, fixture data, placeholder visuals, or seeded examples as live search results.
+
+Do not use polished UI to imply a working engine exists underneath.
+
+This is especially important because CIP is intended to help people navigate a difficult job market. Users may be worried about losing work, under financial pressure, or unable to afford tools that do not deliver real value. Trust is not a nice-to-have; it is the product.
+
+---
+
+## Working Agreement
+
+When developing this app:
+
+- Be direct about what works and what does not.
+- Ask questions when product intent is unclear.
+- Do not hand-wave missing architecture.
+- Do not hide uncertainty behind confident language.
+- Push on weak assumptions.
+- Separate prototype, fixture, fallback, and production behavior.
+- Label AI-generated, deterministic, manually seeded, and live-sourced outputs differently.
+- Prioritize useful truth over impressive UI.
+
+The user expectation for this project is:
+
+> No hallucination, no smoke, no fake engines.
+
+If something needs more research, say so.
+
+If a feature is only a scaffold, say so.
+
+If a design is misleading, fix the design before extending it.
+
+---
+
+## Current Honest Capability Status
+
+- Intake: first real pass exists.
+- Identity graph: first real pass exists.
+- AI advisor analysis: partially implemented; real only when `OPENAI_API_KEY` is active and the response succeeds.
+- Saved intake reload: implemented.
+- Authentication: implemented for test use.
+- Employer geography search: first live engine pass exists using server-side OpenAI Responses API web search when `OPENAI_API_KEY` is configured.
+- Watched employer/business discovery: partial. Live source and candidate discovery can run, but result quality needs repeated testing, source inspection, and regression checks.
+- Business search by geography: first implementation exists. It no longer returns hardcoded fixture employers as normal search results.
+- Employer adapters/job monitoring: not implemented yet.
+- Weekly strategy snapshot: scaffold based on saved employers and opportunity matches.
+
+The employer page must continue to label the map layer, adapters, and any unfinished monitoring features honestly.
+
+---
+
+## First Engine Pass Implemented
+
+Added:
+
+- `business-search-engine.ts`
+- `/api/employers/discover` live search path
+- `employer_discovery_runs` database table
+- UI status label for whether live business search is configured
+- Clear empty/not-configured states instead of fixture results
+
+The old hardcoded discovery seed path has been removed from the normal employer search endpoint. Known employers can still be kept elsewhere as fixture/regression targets, but they should not power user-facing search results.
+
+Next validation tasks:
+
+- Run live searches for `Sunapee, NH`, `Lyndon, VT`, `Upper Valley`, `Burlington, VT`, and `Boston, MA`.
+- Confirm returned employers are source-backed.
+- Confirm sources are useful and clickable.
+- Check whether known anchors are rediscovered without being hardcoded.
+- Add regression tests after the first live-search sample set is reviewed.
+
+---
+
+## Geography Engine Fix
+
+The first live-search test for `Norwich, VT` failed because the engine treated the location as text, not as a search area. It latched onto web-visible exact-name matches instead of expanding to the 50-mile Upper Valley labor market.
+
+Fix direction:
+
+- Geocode the user's place first.
+- Use the returned latitude/longitude as the center.
+- Query nearby towns/cities/villages inside the radius.
+- Generate source-search queries from the center, county, nearby places, and selected sectors.
+- Pass the geocoded search area into the AI search prompt.
+- Show the geocoded area and nearby places in the UI so bad geography can be caught immediately.
+
+Implemented first pass:
+
+- Added `geography-engine.ts`.
+- Uses Nominatim/OpenStreetMap for one geocoding lookup per search.
+- Uses Overpass for a single nearby-place query inside the radius.
+- Adds generated source queries to the live business-search prompt.
+- Employer discovery now fails honestly if geocoding fails instead of guessing from the raw place name.
+
+Production note:
+
+The public Nominatim service has usage limits and requires a meaningful User-Agent, attribution, and caching for repeated queries. This is acceptable for prototype testing, but a paid/commercial version should use a proper geocoding provider or a self-hosted geocoding stack.
+
+---
+
+## Business Model Concern
+
+CIP may eventually be sellable, but monetization must be handled carefully.
+
+The likely users include people who:
+
+- Know their job may be at risk
+- Are unemployed or underemployed
+- Are trying to move into a better career path
+- May not be able to afford another subscription
+- Need trustworthy guidance, not generic AI output
+
+This makes the business model ethically sensitive.
+
+Possible models to discuss:
+
+- Founder-led coaching plus software, where the app supports a high-touch service.
+- Low-cost individual subscription with clear free trial and no dark patterns.
+- Pay-what-you-can or scholarship seats for unemployed users.
+- B2B partnerships with workforce boards, schools, bootcamps, libraries, or career centers.
+- Employer-sponsored outplacement or transition support.
+- University/career-center licensing.
+- Local economic-development partnerships.
+- One-time paid career intelligence report instead of recurring subscription.
+
+Any paid version must make the value concrete:
+
+- Better target-employer maps
+- Better role fit analysis
+- Source-backed opportunity recommendations
+- Career asset improvements
+- Weekly strategy actions
+- Measurable interview/application outcomes
+
+The app should not charge people for vague encouragement, fake job discovery, or generic AI resume advice.
+
