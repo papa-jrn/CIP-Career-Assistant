@@ -3,7 +3,7 @@ import type { IntakeForm } from "@/lib/cip/intake";
 
 export interface EvidenceCard {
   id: string;
-  source: "advisor_question" | "proof_gap" | "exploration_lane" | "story_builder";
+  source: "advisor_question" | "proof_gap" | "exploration_lane" | "story_builder" | "opportunity_mapping";
   question: string;
   whyItMatters: string;
   helpfulAnswer: string[];
@@ -26,17 +26,27 @@ export function buildEvidenceCards(
   const cards: EvidenceCard[] = [];
 
   for (const [index, question] of (advisor?.followUpQuestions ?? draft?.nextQuestions ?? []).entries()) {
+    const isOpportunityQuestion = isOpportunityMappingQuestion(question);
     cards.push({
       id: `advisor-${index}`,
-      source: "advisor_question",
+      source: isOpportunityQuestion ? "opportunity_mapping" : "advisor_question",
       question,
-      whyItMatters: "This answer helps turn the analysis from a hypothesis into a defensible career story.",
-      helpfulAnswer: [
-        "A concrete example",
-        "Who or what was affected",
-        "What changed because of your work",
-        "Any metric, artifact, link, or person who could verify it",
-      ],
+      whyItMatters: isOpportunityQuestion
+        ? "The evidence base is strong enough to start turning the profile into a search, employer, and networking map."
+        : "This answer helps turn the analysis from a hypothesis into a defensible career story.",
+      helpfulAnswer: isOpportunityQuestion
+        ? [
+            "Target industries, employer types, or exclusions",
+            "Geography, commute, remote, or hybrid constraints",
+            "LinkedIn exports, alumni paths, or warm-introduction leads",
+            "Which proof-backed story should open conversations",
+          ]
+        : [
+            "A concrete example",
+            "Who or what was affected",
+            "What changed because of your work",
+            "Any metric, artifact, link, or person who could verify it",
+          ],
     });
   }
 
@@ -101,6 +111,16 @@ export function buildEvidenceCards(
   return dedupeCards(cards).slice(0, 12);
 }
 
+export function renderEvidenceCardsHtml(cards: EvidenceCard[]) {
+  if (!cards.length) return "";
+
+  return `
+    <div class="mt-6 grid gap-5">
+      ${cards.map(renderEvidenceCard).join("")}
+    </div>
+  `;
+}
+
 export function parseEvidenceResponse(form: FormData): EvidenceResponsePayload {
   return {
     questionId: getText(form, "question_id"),
@@ -112,9 +132,90 @@ export function parseEvidenceResponse(form: FormData): EvidenceResponsePayload {
   };
 }
 
+function renderEvidenceCard(card: EvidenceCard, index: number) {
+  return `
+    <article class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">${escapeHtml(sourceLabel(card.source))}</p>
+          <h2 class="mt-1 text-xl font-semibold">${escapeHtml(card.question)}</h2>
+        </div>
+        <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Question ${index + 1}</span>
+      </div>
+      <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(card.whyItMatters)}</p>
+      <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <p class="text-xs font-semibold uppercase text-[var(--muted)]">A useful answer includes</p>
+        <ul class="mt-2 grid gap-2 text-sm text-[var(--muted)] md:grid-cols-2">
+          ${card.helpfulAnswer.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </div>
+
+      <form class="mt-5 grid gap-4" hx-post="/api/evidence/save" hx-target="#evidence-result-${escapeHtml(card.id)}" hx-swap="innerHTML">
+        <input type="hidden" name="question_id" value="${escapeHtml(card.id)}" />
+        <input type="hidden" name="question" value="${escapeHtml(card.question)}" />
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Your answer</span>
+          <textarea name="answer" required class="min-h-32 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Rough notes are fine. Situation, action, scope, result, proof."></textarea>
+        </label>
+        <div class="grid gap-4 md:grid-cols-3">
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Confidence</span>
+            <select name="confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+              <option value="known">I know this</option>
+              <option value="needs_metric">Need metric</option>
+              <option value="needs_source">Need source</option>
+              <option value="not_sure">Not sure yet</option>
+            </select>
+          </label>
+          <label class="grid gap-2 md:col-span-2">
+            <span class="text-sm font-semibold">Proof link or source</span>
+            <input name="proof_url" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="URL, document name, person, project, or private source note" />
+          </label>
+        </div>
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">What should the AI be careful about?</span>
+          <input name="source_note" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private client, estimate only, needs exact date, don't use publicly yet." />
+        </label>
+        <div class="flex flex-wrap items-center gap-3">
+          <button class="cip-fancy-button" type="submit"><span>Save evidence</span></button>
+          <div id="evidence-result-${escapeHtml(card.id)}" class="text-sm text-[var(--muted)]" aria-live="polite"></div>
+        </div>
+      </form>
+    </article>
+  `;
+}
+
+function sourceLabel(source: string) {
+  return source.replaceAll("_", " ");
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function isOpenGap(gap: string) {
   const lower = gap.toLowerCase();
   return lower.startsWith("add ") || lower.startsWith("separate ") || lower.includes("needs") || lower.includes("missing");
+}
+
+function isOpportunityMappingQuestion(question: string) {
+  const normalized = question.toLowerCase();
+  return [
+    "industr",
+    "geograph",
+    "remote",
+    "employer",
+    "linkedin",
+    "connection",
+    "alumni",
+    "network",
+    "introduction",
+    "outreach",
+  ].some((term) => normalized.includes(term));
 }
 
 function gapToQuestion(gap: string) {

@@ -1,6 +1,8 @@
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, type AdvisorAnalysis, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
+import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-builder";
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
+import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "@/lib/cip/source-analysis";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -48,28 +50,57 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html('<p class="text-sm font-semibold text-red-700">Save an intake before re-analyzing evidence.</p>', 400);
     }
 
-    const { data: evidenceRows, error: evidenceError } = await supabase
-      .from("career_sources")
-      .select("extracted_text, created_at")
-      .eq("user_id", user.id)
-      .eq("source_type", "evidence_response")
-      .order("created_at", { ascending: false })
-      .limit(40);
+    const [
+      { data: evidenceRows, error: evidenceError },
+      { data: sourceRows, error: sourceError },
+      { count: analysisCount },
+    ] = await Promise.all([
+      supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_response")
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "source_analysis")
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("career_sources")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_analysis"),
+    ]);
 
     if (evidenceError) {
       return html(`<p class="text-sm font-semibold text-red-700">Could not load evidence: ${escapeHtml(evidenceError.message)}</p>`, 500);
     }
 
+    if (sourceError) {
+      return html(`<p class="text-sm font-semibold text-red-700">Could not load source analysis: ${escapeHtml(sourceError.message)}</p>`, 500);
+    }
+
     const evidenceResponses = (evidenceRows ?? [])
       .map((row) => parseEvidenceResponse(row.extracted_text))
       .filter(Boolean) as AdvisorEvidenceResponse[];
+    const sourceEvidence = sourceAnalysesToEvidence(
+      (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
+    );
+    const combinedEvidence = [...sourceEvidence, ...evidenceResponses];
 
-    if (!evidenceResponses.length) {
-      return html('<p class="text-sm font-semibold text-red-700">Save at least one evidence answer before running re-analysis.</p>', 400);
+    if (!combinedEvidence.length) {
+      return html('<p class="text-sm font-semibold text-red-700">Save evidence or analyze linked sources before running re-analysis.</p>', 400);
     }
 
     const draft = buildIdentityDraft(intake);
-    const advisor = await buildAdvisorAnalysis(intake, draft, evidenceResponses);
+    const advisor = await buildAdvisorAnalysis(intake, draft, combinedEvidence, {
+      evidenceRound: (analysisCount ?? 0) + 1,
+      sourceEvidenceCount: sourceEvidence.length,
+    });
 
     const { error: saveError } = await supabase.from("career_sources").insert({
       user_id: user.id,
@@ -79,6 +110,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       extracted_text: JSON.stringify({
         intake_created_at: intakeRow?.created_at ?? null,
         evidence_count: evidenceResponses.length,
+        source_evidence_count: sourceEvidence.length,
         advisor,
         created_at: new Date().toISOString(),
       }),
@@ -89,12 +121,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-sm font-semibold text-[var(--warning)]">Re-analysis completed, but saving the analysis failed: ${escapeHtml(saveError.message)}</p>
-          ${renderAnalysis(advisor, evidenceResponses.length)}
+          ${renderAnalysis(advisor, combinedEvidence.length)}
+          ${renderEvidenceQuestionCardsUpdate(intake, draft, advisor)}
         </div>
       `);
     }
 
-    return html(renderAnalysis(advisor, evidenceResponses.length));
+    return html(`${renderAnalysis(advisor, combinedEvidence.length)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor)}`);
   } catch (error) {
     return html(
       `<p class="text-sm font-semibold text-red-700">Evidence re-analysis failed: ${escapeHtml(error instanceof Error ? error.message : "Unexpected error.")}</p>`,
@@ -111,6 +144,16 @@ function parseSavedIntake(value: string | null): IntakeForm | null {
     return intake.success ? intake.data : null;
   } catch {
     return null;
+  }
+}
+
+function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed?.items) ? parsed.items : [];
+  } catch {
+    return [];
   }
 }
 
@@ -146,8 +189,11 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number) {
       <div class="mt-5 grid gap-4 lg:grid-cols-3">
         ${renderList("Stronger positioning", advisor.positioning)}
         ${renderList("Remaining proof gaps", advisor.skillGaps)}
-        ${renderList("Next follow-up questions", advisor.followUpQuestions)}
+        ${renderList("Next step questions", advisor.followUpQuestions)}
       </div>
+      <p class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+        New evidence-gathering questions have been generated from this analysis. Scroll down to the updated research gathering cards below and answer the next round there.
+      </p>
       <div class="mt-5 grid gap-4 lg:grid-cols-2">
         <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
           <h3 class="text-sm font-semibold">Evidence ledger updates</h3>
@@ -162,6 +208,19 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number) {
           </div>
         </div>
       </div>
+    </section>
+  `;
+}
+
+function renderEvidenceQuestionCardsUpdate(
+  intake: IntakeForm,
+  draft: Parameters<typeof buildAdvisorAnalysis>[1],
+  advisor: AdvisorAnalysis,
+) {
+  const cards = buildEvidenceCards(intake, draft, advisor);
+  return `
+    <section id="evidence-question-cards" hx-swap-oob="innerHTML">
+      ${renderEvidenceCardsHtml(cards)}
     </section>
   `;
 }

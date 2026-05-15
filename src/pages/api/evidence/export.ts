@@ -23,7 +23,7 @@ export const GET: APIRoute = async ({ cookies }) => {
       .from("career_sources")
       .select("id, source_type, title, url, extracted_text, trust_state, created_at")
       .eq("user_id", user.id)
-      .in("source_type", ["resume_intake", "evidence_response"])
+      .in("source_type", ["resume_intake", "evidence_response", "source_analysis", "evidence_analysis", "analysis_review"])
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -36,6 +36,9 @@ export const GET: APIRoute = async ({ cookies }) => {
       counts: {
         resume_intake: (data ?? []).filter((row) => row.source_type === "resume_intake").length,
         evidence_response: (data ?? []).filter((row) => row.source_type === "evidence_response").length,
+        source_analysis: (data ?? []).filter((row) => row.source_type === "source_analysis").length,
+        evidence_analysis: (data ?? []).filter((row) => row.source_type === "evidence_analysis").length,
+        analysis_review: (data ?? []).filter((row) => row.source_type === "analysis_review").length,
       },
       sources: (data ?? []).map((row) => ({
         ...row,

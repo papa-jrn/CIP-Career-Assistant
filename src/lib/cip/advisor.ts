@@ -47,6 +47,11 @@ export interface AdvisorEvidenceResponse {
   sourceNote?: string;
 }
 
+export interface AdvisorAnalysisContext {
+  evidenceRound?: number;
+  sourceEvidenceCount?: number;
+}
+
 export async function buildAdvisorAnalysis(
   intake: IntakeForm,
   draft: {
@@ -56,22 +61,25 @@ export async function buildAdvisorAnalysis(
     nextQuestions: string[];
   },
   evidenceResponses: AdvisorEvidenceResponse[] = [],
+  context: AdvisorAnalysisContext = {},
 ): Promise<AdvisorAnalysis> {
   const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (openAiKey) {
-    const ai = await tryBuildAiAnalysis(intake, draft, evidenceResponses, openAiKey);
+    const ai = await tryBuildAiAnalysis(intake, draft, evidenceResponses, context, openAiKey);
     if (ai) return ai;
   }
 
-  return buildDeterministicAnalysis(intake, draft, evidenceResponses);
+  return buildDeterministicAnalysis(intake, draft, evidenceResponses, context);
 }
 
 async function tryBuildAiAnalysis(
   intake: IntakeForm,
   draft: Parameters<typeof buildAdvisorAnalysis>[1],
   evidenceResponses: AdvisorEvidenceResponse[],
+  context: AdvisorAnalysisContext,
   openAiKey: string,
 ) {
+  const shouldPivotToOpportunityMapping = shouldMoveToOpportunityMapping(evidenceResponses, context);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -84,19 +92,25 @@ async function tryBuildAiAnalysis(
         {
           role: "system",
           content:
-            "You are a careful career intelligence analyst and strategic thought partner. Your job is not to flatter the user. Dig for underused strengths, hidden career adjacencies, and proof gaps. Do not invent credentials, employers, metrics, or live job listings. Treat resume text and intake answers as evidence, but clearly separate verified facts, user-stated preferences, inferences, and open questions. Produce concise, evidence-aware JSON only.",
+            "You are a careful career intelligence analyst and strategic thought partner. Your job is not to flatter the user. Dig for underused strengths, hidden career adjacencies, and proof gaps. Do not invent credentials, employers, metrics, or live job listings. Treat resume text, intake answers, saved evidence, and linked-source analysis as evidence. Cross-check them before asking follow-up questions. If a resume plus source analysis already establishes a role or contribution, do not ask the user to clarify that same involvement; ask only for missing metrics, outcomes, scope, or permission to use it publicly. Respect explicit exclusions and preferences already stated by the user. Produce concise, evidence-aware JSON only.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: evidenceResponses.length
-              ? "Re-analyze this career intake using the saved evidence responses. Promote stronger claims only when the evidence supports them. Keep weak or vague answers as follow-up questions."
+            task: shouldPivotToOpportunityMapping
+              ? "The user has completed multiple evidence rounds. Stop asking low-value proof questions unless a critical claim is unsupported. Produce a readiness-oriented re-analysis and make follow-up questions about opportunity mapping: target industries, geography/remote preferences, employer categories, network connections, LinkedIn/alumni data the user can provide, and next search strategy."
+              : evidenceResponses.length
+              ? "Re-analyze this career intake using saved evidence responses and linked-source analysis. Retire stale proof gaps and follow-up questions that are already answered by the resume, evidence, or source analysis. Promote stronger claims when the evidence supports them. Keep only genuinely unresolved gaps as follow-up questions."
               : "Analyze this career intake and produce strategic follow-up questions, positioning, skill gaps, and role briefs.",
             output_schema: {
               summary: "One concise paragraph.",
               positioning: ["3-5 source-grounded positioning points."],
-              followUpQuestions: ["4-6 questions that would improve analysis quality."],
-              skillGaps: ["3-5 likely gaps or proof gaps to verify."],
+              followUpQuestions: shouldPivotToOpportunityMapping
+                ? ["4-6 opportunity-mapping questions about industries, geography/remote, target employer types, and network data. Do not ask for tiny metrics unless essential."]
+                : ["4-6 questions that would improve analysis quality and are not already answered by supplied evidence."],
+              skillGaps: shouldPivotToOpportunityMapping
+                ? ["3-5 remaining go-to-market gaps such as target industries, geography, employer list, networking map, or LinkedIn data access."]
+                : ["3-5 genuinely remaining gaps; do not list exclusions, roles, tools, or projects already stated in evidence."],
               evidenceLedger: [
                 {
                   claim: "Specific career claim or hypothesis.",
@@ -126,6 +140,15 @@ async function tryBuildAiAnalysis(
             intake,
             draft,
             evidenceResponses,
+            analysisContext: context,
+            stale_question_guardrails: [
+              "Do not ask the user to clarify involvement with an organization if the resume names a leadership role there and source evidence supports related work.",
+              "Do not ask for industries to exclude if exclusions already appear in intake or saved evidence.",
+              "Do not ask what AI tools/projects the user can discuss if GitHub/source analysis already lists AI coding projects. Instead ask which project has the strongest outcome, user impact, or technical depth.",
+              "For video/story production links, use metadata as evidence of a public artifact, but ask for transcript, role, audience, reach, or production responsibility if those are missing.",
+              "After 3 evidence rounds or many saved evidence answers, do not keep asking increasingly narrow proof questions such as exact budgets or team sizes unless they are crucial to a target role.",
+              "Late-stage questions should help the user move toward connections: target industries, target geography, remote/hybrid filters, likely employers, LinkedIn connections, alumni networks, and warm introductions.",
+            ],
           }),
         },
       ],
@@ -280,8 +303,11 @@ function buildDeterministicAnalysis(
   intake: IntakeForm,
   draft: Parameters<typeof buildAdvisorAnalysis>[1],
   evidenceResponses: AdvisorEvidenceResponse[] = [],
+  context: AdvisorAnalysisContext = {},
 ): AdvisorAnalysis {
   const strongest = draft.strengths.slice(0, 4);
+  const evidenceText = evidenceResponses.map((response) => `${response.question}\n${response.answer}\n${response.sourceNote}`).join("\n").toLowerCase();
+  const shouldPivot = shouldMoveToOpportunityMapping(evidenceResponses, context);
   const roleBriefs = draft.possibleRoles.slice(0, 5).map((role) => ({
     role,
     whyItFits: buildRoleRationale(role, strongest),
@@ -293,20 +319,21 @@ function buildDeterministicAnalysis(
     mode: "deterministic",
     summary:
       evidenceResponses.length
-        ? `This re-analysis includes ${evidenceResponses.length} saved evidence answer${evidenceResponses.length === 1 ? "" : "s"}. The strongest next move is to separate answers that are ready for public positioning from answers that still need metrics, sources, or narrower follow-up.`
+        ? shouldPivot
+          ? `This profile now has enough saved evidence to shift from proof gathering into opportunity and connection mapping. The next useful work is choosing target industries, geography/remote constraints, employer categories, and network paths.`
+          : `This re-analysis includes ${evidenceResponses.length} saved evidence answer${evidenceResponses.length === 1 ? "" : "s"}. The strongest next move is to separate answers that are ready for public positioning from answers that still need metrics, sources, or narrower follow-up.`
         : "This draft points toward roles where leadership, operations, communication, and applied AI work can be framed as business value. The next analysis pass should verify proof, compensation fit, and which role families are strongest in the live market.",
     positioning: [
       `Lead with ${strongest.slice(0, 2).join(" and ") || "transferable operating strengths"} as the through-line.`,
       "Treat role hypotheses as research lanes until real postings and salary ranges are compared.",
       "Keep every public-facing claim tied to resume evidence, public links, or user-confirmed examples.",
     ],
-    followUpQuestions: draft.nextQuestions,
-    skillGaps: [
-      "Hard metrics from past work that can be used safely.",
-      "Concrete AI, automation, or technical workflow examples.",
-      "Preferred industries and deal-breaker industries.",
-      "Compensation floor, target, and tradeoffs by remote or hybrid work.",
-    ],
+    followUpQuestions: shouldPivot
+      ? buildOpportunityMappingQuestions(intake, evidenceText)
+      : buildRemainingFollowUpQuestions(draft.nextQuestions, intake, evidenceText),
+    skillGaps: shouldPivot
+      ? buildOpportunityMappingGaps(intake, evidenceText)
+      : buildRemainingSkillGaps(intake, evidenceText),
     evidenceLedger: buildDeterministicEvidenceLedger(intake, draft, evidenceResponses),
     explorationAreas: buildDeterministicExplorationAreas(intake, draft),
     claimSafetyNotes: [
@@ -316,6 +343,85 @@ function buildDeterministicAnalysis(
     ],
     roleBriefs,
   };
+}
+
+function shouldMoveToOpportunityMapping(
+  evidenceResponses: AdvisorEvidenceResponse[],
+  context: AdvisorAnalysisContext,
+) {
+  return (context.evidenceRound ?? 0) >= 3 || evidenceResponses.length >= 14 || (context.sourceEvidenceCount ?? 0) >= 8;
+}
+
+function buildOpportunityMappingQuestions(intake: IntakeForm, evidenceText: string) {
+  const questions = [
+    "Which 3-5 industries should we actively target first, and which should remain excluded?",
+    "Which geographies should we search: local commuting radius, specific metro areas, regional employers, and remote-only options?",
+    "Which employer types feel most promising now: universities, workforce organizations, media/communications teams, SaaS/product teams, nonprofits, healthcare, or local/regional institutions?",
+    "Can you provide LinkedIn connection data, alumni network leads, or a short list of people/organizations where a warm introduction may exist?",
+    "Which proof-backed project examples should anchor outreach conversations and interview positioning?",
+  ];
+
+  if (!evidenceText.includes("linkedin")) {
+    questions.push("Can you export or summarize LinkedIn connections so the app can map warm-introduction paths without scraping LinkedIn?");
+  }
+
+  return questions.slice(0, 6);
+}
+
+function buildOpportunityMappingGaps(intake: IntakeForm, evidenceText: string) {
+  return [
+    "Target industry shortlist and explicit exclusions for the first search pass.",
+    "Geography/remote/hybrid search rules, including commute radius and preferred regions.",
+    "A network dataset the app is allowed to use: LinkedIn export, pasted connections, alumni contacts, or manually curated leads.",
+    "A first list of target employers to compare against the evidence-backed profile.",
+    "Outreach story angle: which verified project examples should open conversations.",
+  ];
+}
+
+function buildRemainingFollowUpQuestions(
+  baseQuestions: string[],
+  intake: IntakeForm,
+  evidenceText: string,
+) {
+  const questions = [...baseQuestions];
+  if (evidenceText.includes("github") || evidenceText.includes("ai") || evidenceText.includes("automation")) {
+    questions.push("Which AI or coding project has the clearest outcome, user impact, or technical depth?");
+  }
+  if (evidenceText.includes("video") || evidenceText.includes("story") || evidenceText.includes("production")) {
+    questions.push("Which video/story projects best prove production responsibility, audience reach, or narrative judgment?");
+  }
+  if (!intake.claim_boundaries && !evidenceText.includes("do not use publicly")) {
+    questions.push("Which strong claims are safe to use publicly, and which should remain private or contextual?");
+  }
+
+  return questions
+    .filter((question) => !isAnsweredGenericQuestion(question, intake, evidenceText))
+    .slice(0, 6);
+}
+
+function buildRemainingSkillGaps(intake: IntakeForm, evidenceText: string) {
+  const gaps = [
+    "Hard metrics from past work that can be used safely.",
+    "Specific outcomes, audience reach, usage, or before/after results for public project evidence.",
+    "Which project examples should anchor resume, LinkedIn, and interview positioning.",
+    "Compensation floor, target, and tradeoffs by remote or hybrid work.",
+  ];
+  if (!evidenceText.includes("github") && !evidenceText.includes("ai")) {
+    gaps.push("Concrete AI, automation, or technical workflow examples.");
+  }
+  if (!intake.industry_preferences.toLowerCase().includes("military") && !evidenceText.includes("military")) {
+    gaps.push("Preferred industries and deal-breaker industries.");
+  }
+  return gaps.slice(0, 5);
+}
+
+function isAnsweredGenericQuestion(question: string, intake: IntakeForm, evidenceText: string) {
+  const normalized = question.toLowerCase();
+  const combined = `${intake.resume_text}\n${intake.industry_preferences}\n${intake.career_constraints}\n${intake.public_evidence}\n${evidenceText}`.toLowerCase();
+  if (normalized.includes("industry") && combined.includes("military")) return true;
+  if ((normalized.includes("ai") || normalized.includes("tool")) && (combined.includes("github") || combined.includes("ai"))) return true;
+  if (normalized.includes("involvement") && combined.includes("executive director")) return true;
+  return false;
 }
 
 function normalizeEvidenceLedger(

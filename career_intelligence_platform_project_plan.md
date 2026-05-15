@@ -1246,6 +1246,220 @@ The re-analysis should produce:
 
 This keeps the model additive. The app does not overwrite the intake or evidence answers; it creates a new analysis artifact that can be compared against prior runs.
 
+## Strategic Question Review Plan
+
+The Evidence Builder and Evidence Re-analysis layers still do not fully solve one important user need:
+
+> "These are the specific questions I need this analysis to answer."
+
+The strategic partner layer should let the user enter direct open questions and force the system to answer them from saved context.
+
+Inputs:
+
+- Latest saved `resume_intake`
+- Saved `evidence_response` records
+- Latest saved `evidence_analysis`
+- User-entered strategic questions
+
+Outputs for each question:
+
+- Verdict: `answered`, `partially_answered`, `not_enough_evidence`, or `needs_follow_up`
+- Direct answer
+- Supporting evidence
+- Missing evidence
+- Recommended next action
+
+Product rules:
+
+- Do not answer beyond the evidence.
+- Do not smooth over uncertainty.
+- If the question is not answerable yet, say exactly what evidence would make it answerable.
+- Save reviews as additive `analysis_review` source records.
+- Include `analysis_review` records in backup exports.
+- Show active thinking/analysis animation while reviews are running so longer AI passes do not feel frozen.
+
+## Linked Source Analysis Plan
+
+Project links, GitHub repositories, articles, and public websites cannot be treated as meaningful evidence simply because the user pasted URLs.
+
+The app must inspect those sources and convert them into structured evidence.
+
+Inputs:
+
+- Intake `portfolio_urls`
+- Intake `public_evidence`
+- Evidence Builder `proof_url`
+- Evidence Builder source notes that contain URLs
+
+The linked-source analyzer should:
+
+- Fetch public URLs when possible.
+- For GitHub repositories, fetch README content first.
+- For video links, fetch available public metadata and require transcript/user confirmation before making detailed production claims.
+- Extract project name, source type, technologies/domains, and what the page actually proves.
+- Identify likely career claims supported by the source.
+- Identify what still needs user confirmation, especially the user's exact role and contribution.
+- Save results as additive `source_analysis` records.
+- Feed `source_analysis` records into evidence re-analysis and strategic question review.
+- Cross-check source evidence against the resume/intake before asking generic role-confirmation questions.
+
+Product integrity rule:
+
+If the app has not fetched and analyzed a link, it should not imply that the link strengthened the user's analysis. Raw URLs are references; analyzed URLs become evidence.
+
+If the resume and source analysis already establish a user's role or contribution, the advisor should retire that question and ask only for the next missing layer: metrics, audience, outcomes, scope, transcript, or permission to use the claim publicly.
+
+## Evidence Rounds Plan
+
+Evidence gathering should be iterative, but it should not become endless.
+
+Recommended loop:
+
+1. **Round 0: Intake**
+   - Resume/work history, preferences, constraints, public links, claim boundaries.
+
+2. **Round 1: Initial Evidence Builder**
+   - Advisor follow-up questions, initial proof gaps, obvious missing source material.
+
+3. **Round 2: Source-informed Evidence**
+   - After linked-source analysis and re-analysis, refresh the evidence cards from the updated advisor questions.
+   - Retire stale questions that are already answered.
+   - Ask sharper questions about metrics, scope, outcomes, audience, technical depth, and public-use permission.
+
+4. **Round 3: Strategic Closeout**
+   - Use strategic question review to answer the user's remaining explicit questions.
+   - Ask only final high-value questions if the answer is still not supported.
+
+The app should usually need **2 to 3 evidence rounds after intake**. If it still needs many more questions after that, it should explain why:
+
+- Missing metrics
+- Missing source links
+- Contradictory evidence
+- Unclear role ownership
+- Unclear target direction
+- Sensitive/private claims that cannot be used publicly
+
+After each evidence re-analysis, the app should update the evidence-gathering cards below the advisor readout. The questions should not remain static. Static questions make the product feel like a form; refreshed questions make it feel like a strategic partner.
+
+After round 3, the app should usually pivot from proof gathering to **opportunity mapping**:
+
+- Target industries and excluded industries
+- Geography, commute radius, regions, and remote/hybrid preferences
+- Employer categories to prioritize
+- Existing relationships, warm introductions, and alumni networks
+- Proof-backed stories to use in outreach
+
+The app should not keep asking low-value questions such as exact budgets, team sizes, or tiny analytics details unless those details are essential for a target role.
+
+When the evidence phase reaches this point, the Evidence page should switch to a completed-state layout:
+
+- Show the "ready for opportunity mapping" message.
+- Show the latest evidence analysis immediately below it.
+- Stop showing another "next questions" block in the completed state. At that point, more questions should be optional, not the main call to action.
+- Replace the question loop with a clear "Next steps" handoff into Opportunities, Employers, and Assets.
+- Collapse the evidence-gathering tools behind an "Add more information for analysis" control.
+- Keep recently saved evidence visible for audit/history.
+- Move LinkedIn/profile/network gathering into Opportunities or Assets instead of continuing to crowd the Evidence step.
+
+## Opportunity Handoff Plan
+
+The holistic product goal is not just to analyze a resume. CIP should help a user build a proof-backed understanding of their background, then turn that understanding into a path toward the best-fit job at the pay scale they want.
+
+The core journey should be:
+
+1. **Intake**
+   - Capture resume history, constraints, preferences, public links, and raw career material.
+
+2. **Evidence Builder**
+   - Identify proof gaps, ask human-friendly follow-up questions, and collect source material without making the user feel judged.
+
+3. **Source Analysis**
+   - Read provided GitHub repositories, articles, project pages, and other public sources so the AI treats real work as evidence instead of decoration.
+
+4. **Strategic Re-analysis**
+   - Merge intake, evidence responses, and source analysis into a stronger advisor readout.
+   - Retire stale questions when the evidence already answers them.
+
+5. **Opportunity Mapping**
+   - Translate the completed analysis into target roles, industries to pursue or exclude, compensation targets, geography, remote/hybrid preferences, and employer categories.
+
+6. **Employer Discovery**
+   - Use the opportunity map to search, filter, and rank employers.
+   - Exclude already saved businesses from candidate lists.
+   - Prioritize employers that match role direction, location preferences, pay potential, mission fit, and relationship paths.
+
+7. **Career Assets**
+   - Turn the analysis into a targeted resume, LinkedIn/profile updates, outreach stories, portfolio positioning, and interview talking points.
+
+The Evidence page should therefore feel like a graduation point once enough material exists. The primary CTA should become "Find opportunities," with secondary paths to target employers and prepare assets. Additional evidence collection should remain available, but it should be framed as optional refinement.
+
+## Network Mapping Plan
+
+Networking intelligence is a key next layer, but it must be handled honestly.
+
+The app should not pretend it can inspect private LinkedIn connections unless the user has explicitly provided accessible data.
+
+Acceptable inputs:
+
+- LinkedIn profile URL
+- LinkedIn connections export supplied by the user
+- Manually pasted connection names, companies, and roles
+- Alumni/university search results supplied by the user
+- Target company employee lists supplied by the user
+- Public profile links where access is allowed
+
+Network mapping should answer:
+
+- Which user connections work at target companies?
+- Which connections are adjacent to target industries?
+- Which alumni or university paths create plausible warm introductions?
+- Which employers already have a relationship path?
+- Which outreach story should be used for each connection?
+
+LinkedIn/university networking should become a **warm-introduction map**, not a scraping feature.
+
+## Opportunities Coaching Plan
+
+The Opportunities page should be the user's guided transition from "we understand your background" to "here is where to look, why, and how to approach it."
+
+The page should coach the user through:
+
+1. **Opportunity criteria**
+   - Target compensation range
+   - Required, preferred, and excluded industries
+   - Geography, commute radius, relocation limits, and remote/hybrid preference
+   - Role families that match the completed evidence analysis
+   - Non-negotiables such as no military work, mission alignment, travel limits, or schedule constraints
+
+2. **Employer discovery setup**
+   - Convert the opportunity criteria into employer-search prompts.
+   - Explain why each employer category is being searched.
+   - Let the user save, reject, or investigate employers.
+   - Hide employers that are already saved so candidate lists do not repeat work.
+
+3. **Relationship mapping**
+   - Ask whether the user wants to add relationship data before outreach planning.
+   - Accept uploaded or pasted LinkedIn connection data, alumni lists, manually entered contacts, and public profile links.
+   - Match contacts to saved employers and adjacent industries.
+   - Generate warm-introduction paths and outreach angles.
+
+4. **Action plan**
+   - Recommend the next small batch of employers to research.
+   - Recommend which career assets need updating before outreach.
+   - Generate outreach messages only after the user approves the target and relationship context.
+
+LinkedIn data import is possible, but it should be framed carefully. The app can coach the user to download their own LinkedIn data archive or paste/export connection information that LinkedIn makes available to them. CIP should not scrape LinkedIn, bypass access controls, or claim it can inspect private connections directly.
+
+LinkedIn coaching UI should include:
+
+- A "Bring in networking data" step inside Opportunities or Assets.
+- Plain-language instructions for getting a LinkedIn connections export or archive.
+- A file upload/paste area for connection names, companies, titles, profile URLs, and notes.
+- A privacy note explaining that relationship data is used to map warm introductions.
+- A review screen before any contact data is used in outreach.
+
+The networking layer should make the user feel guided, not surveilled. The app's job is to help them see relationship paths they already have access to and turn those paths into respectful outreach.
+
 ---
 
 ## Geography Engine Fix

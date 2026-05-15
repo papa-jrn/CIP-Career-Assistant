@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { navItems } from "../lib/cip/data";
-import { buildEvidenceCards, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
+import { buildEvidenceCards, renderEvidenceCardsHtml, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
 import type { AdvisorAnalysis } from "../lib/cip/advisor";
 import { createServer } from "../lib/supabase/server";
 
@@ -12,13 +12,17 @@ type IntakeSource = {
 };
 
 let latestSource: IntakeSource | null = null;
+let latestAnalysisAdvisor: Partial<AdvisorAnalysis> | null = null;
+let latestAnalysisCreatedAt: string | null = null;
 let savedAt: string | null = null;
 let latestEvidenceAt: string | null = null;
 let evidenceResponses: EvidenceResponsePayload[] = [];
 let sourceCounts = {
   intake: 0,
   evidence: 0,
+  source: 0,
   analysis: 0,
+  review: 0,
 };
 let loadState: "ready" | "signin" | "local" | "error" = "local";
 
@@ -47,7 +51,16 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         .order("created_at", { ascending: false })
         .limit(8);
 
-      const [{ count: intakeCount }, { count: evidenceCount }, { count: analysisCount }] = await Promise.all([
+      const { data: analysisData } = await supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_analysis")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const [{ count: intakeCount }, { count: evidenceCount }, { count: sourceCount }, { count: analysisCount }, { count: reviewCount }] = await Promise.all([
         supabase
           .from("career_sources")
           .select("id", { count: "exact", head: true })
@@ -62,16 +75,30 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .from("career_sources")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
+          .eq("source_type", "source_analysis"),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
           .eq("source_type", "evidence_analysis"),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "analysis_review"),
       ]);
 
       latestSource = intakeData?.extracted_text ? JSON.parse(intakeData.extracted_text) : null;
+      latestAnalysisAdvisor = parseAnalysisAdvisor(analysisData?.extracted_text ?? null);
+      latestAnalysisCreatedAt = analysisData?.created_at ?? null;
       savedAt = intakeData?.created_at ?? null;
       latestEvidenceAt = responseData?.[0]?.created_at ?? null;
       sourceCounts = {
         intake: intakeCount ?? 0,
         evidence: evidenceCount ?? 0,
+        source: sourceCount ?? 0,
         analysis: analysisCount ?? 0,
+        review: reviewCount ?? 0,
       };
       evidenceResponses = (responseData ?? [])
         .map((row) => parseEvidencePayload(row.extracted_text))
@@ -87,8 +114,11 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 }
 
 const cards = latestSource
-  ? buildEvidenceCards(latestSource.intake ?? {}, latestSource.draft, latestSource.advisor)
+  ? buildEvidenceCards(latestSource.intake ?? {}, latestSource.draft, latestAnalysisAdvisor ?? latestSource.advisor)
   : [];
+const readyForOpportunityMapping = sourceCounts.analysis >= 3 || sourceCounts.evidence >= 14;
+const latestPositioning = Array.isArray(latestAnalysisAdvisor?.positioning) ? latestAnalysisAdvisor.positioning : [];
+const latestSkillGaps = Array.isArray(latestAnalysisAdvisor?.skillGaps) ? latestAnalysisAdvisor.skillGaps : [];
 
 function parseEvidencePayload(value: string | null) {
   if (!value) return null;
@@ -100,9 +130,16 @@ function parseEvidencePayload(value: string | null) {
   }
 }
 
-function sourceLabel(source: string) {
-  return source.replaceAll("_", " ");
+function parseAnalysisAdvisor(value: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.advisor ?? null;
+  } catch {
+    return null;
+  }
 }
+
 ---
 
 <Layout title="CIP Evidence Builder">
@@ -159,7 +196,117 @@ function sourceLabel(source: string) {
       </div>
     </section>
 
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+    {readyForOpportunityMapping ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--accent-soft)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Ready for opportunity mapping</p>
+        <h2 class="mt-1 text-2xl font-semibold">Great work gathering this evidence</h2>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          The profile now has enough source material to move from proof gathering into opportunity mapping. Next, turn this analysis into target roles, compensation goals, geography and remote preferences, employer categories, and career assets.
+        </p>
+      </section>
+    ) : null}
+
+    {readyForOpportunityMapping && latestAnalysisAdvisor ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Latest evidence analysis</p>
+            <h2 class="mt-1 text-2xl font-semibold">Current readout</h2>
+          </div>
+          {latestAnalysisCreatedAt ? (
+            <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
+              {new Date(latestAnalysisCreatedAt).toLocaleString()}
+            </span>
+          ) : null}
+        </div>
+        <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{latestAnalysisAdvisor.summary}</p>
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Positioning</h3>
+            {latestPositioning.length ? (
+              <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+                {latestPositioning.slice(0, 6).map((item) => <li>{item}</li>)}
+              </ul>
+            ) : (
+              <p class="mt-3 text-sm text-[var(--muted)]">No positioning notes saved yet.</p>
+            )}
+          </div>
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Remaining gaps</h3>
+            {latestSkillGaps.length ? (
+              <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+                {latestSkillGaps.slice(0, 6).map((item) => <li>{item}</li>)}
+              </ul>
+            ) : (
+              <p class="mt-3 text-sm text-[var(--muted)]">No remaining gaps saved yet.</p>
+            )}
+          </div>
+        </div>
+        <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-5">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next steps</p>
+          <h3 class="mt-1 text-xl font-semibold">Now go look for the right opportunities</h3>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            This evidence phase has done its job: it gives the app a stronger read on your background. The next step is to map that readout against roles, employers, pay expectations, location/remote preferences, and the assets you will use to make the case.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <a class="cip-fancy-button" href="/opportunities">
+              <span>Find opportunities</span>
+            </a>
+            <a class="cip-fancy-button cip-fancy-button-secondary" href="/employers">
+              <span>Map target employers</span>
+            </a>
+            <a class="cip-fancy-button cip-fancy-button-secondary" href="/assets">
+              <span>Prepare career assets</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    ) : null}
+
+    <details class={readyForOpportunityMapping ? "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" : "contents"} open={!readyForOpportunityMapping}>
+      {readyForOpportunityMapping ? (
+        <summary class="text-lg font-semibold text-[var(--accent-strong)]">Add more information for analysis</summary>
+      ) : null}
+
+      <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Source evidence</p>
+          <h2 class="mt-1 text-2xl font-semibold">Analyze GitHub repos, articles, and project links</h2>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            This fetches saved URLs from intake and evidence answers, reads available project/article text, and turns those links into structured career evidence before the advisor re-analyzes your profile.
+          </p>
+          <p class="mt-3 text-sm font-semibold text-[var(--muted)]">Saved source-analysis runs: {sourceCounts.source}</p>
+        </div>
+        <form hx-post="/api/evidence/analyze-sources" hx-target="#source-analysis-result" hx-swap="innerHTML" hx-indicator="#source-analysis-loading">
+          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.intake === 0}>
+            <span>Analyze linked sources</span>
+          </button>
+        </form>
+      </div>
+      <div id="source-analysis-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
+        <div class="cip-thinking-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Source analysis in progress</p>
+          <div class="cip-thinking-lines" aria-hidden="true">
+            <span>Finding GitHub, article, and project URLs...</span>
+            <span>Fetching public source pages and READMEs...</span>
+            <span>Extracting technologies, domains, and project signals...</span>
+            <span>Separating proven work from assumptions...</span>
+            <span>Saving structured source evidence...</span>
+          </div>
+          <p class="sr-only">Analyzing linked project sources.</p>
+          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>
+      <div id="source-analysis-result" class="mt-5" aria-live="polite"></div>
+      </section>
+
+      <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next advisor pass</p>
@@ -175,69 +322,80 @@ function sourceLabel(source: string) {
           </button>
         </form>
       </div>
-      <div id="evidence-analysis-loading" class="htmx-indicator mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-        <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
-          <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
-          Re-reading saved evidence and updating the advisor analysis...
+      <div id="evidence-analysis-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
+        <div class="cip-thinking-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence analysis in progress</p>
+          <div class="cip-thinking-lines" aria-hidden="true">
+            <span>Loading saved intake and evidence answers...</span>
+            <span>Separating strong claims from weak proof...</span>
+            <span>Updating proof gaps and exploration lanes...</span>
+            <span>Rebuilding the advisor evidence ledger...</span>
+            <span>Saving the new analysis artifact...</span>
+          </div>
+          <p class="sr-only">Re-reading saved evidence and updating the advisor analysis.</p>
+          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
         </div>
       </div>
       <div id="evidence-analysis-result" class="mt-5" aria-live="polite"></div>
-    </section>
+      </section>
 
-    {cards.length ? (
-      <div class="mt-6 grid gap-5">
-        {cards.map((card, index) => (
-          <article class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">{sourceLabel(card.source)}</p>
-                <h2 class="mt-1 text-xl font-semibold">{card.question}</h2>
-              </div>
-              <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Question {index + 1}</span>
-            </div>
-            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{card.whyItMatters}</p>
-            <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-              <p class="text-xs font-semibold uppercase text-[var(--muted)]">A useful answer includes</p>
-              <ul class="mt-2 grid gap-2 text-sm text-[var(--muted)] md:grid-cols-2">
-                {card.helpfulAnswer.map((item) => <li>{item}</li>)}
-              </ul>
-            </div>
-
-            <form class="mt-5 grid gap-4" hx-post="/api/evidence/save" hx-target={`#evidence-result-${card.id}`} hx-swap="innerHTML">
-              <input type="hidden" name="question_id" value={card.id} />
-              <input type="hidden" name="question" value={card.question} />
-              <label class="grid gap-2">
-                <span class="text-sm font-semibold">Your answer</span>
-                <textarea name="answer" required class="min-h-32 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Rough notes are fine. Situation, action, scope, result, proof."></textarea>
-              </label>
-              <div class="grid gap-4 md:grid-cols-3">
-                <label class="grid gap-2">
-                  <span class="text-sm font-semibold">Confidence</span>
-                  <select name="confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
-                    <option value="known">I know this</option>
-                    <option value="needs_metric">Need metric</option>
-                    <option value="needs_source">Need source</option>
-                    <option value="not_sure">Not sure yet</option>
-                  </select>
-                </label>
-                <label class="grid gap-2 md:col-span-2">
-                  <span class="text-sm font-semibold">Proof link or source</span>
-                  <input name="proof_url" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="URL, document name, person, project, or private source note" />
-                </label>
-              </div>
-              <label class="grid gap-2">
-                <span class="text-sm font-semibold">What should the AI be careful about?</span>
-                <input name="source_note" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private client, estimate only, needs exact date, don't use publicly yet." />
-              </label>
-              <div class="flex flex-wrap items-center gap-3">
-                <button class="cip-fancy-button" type="submit"><span>Save evidence</span></button>
-                <div id={`evidence-result-${card.id}`} class="text-sm text-[var(--muted)]" aria-live="polite"></div>
-              </div>
-            </form>
-          </article>
-        ))}
+      <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
+      <div>
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Strategic partner layer</p>
+        <h2 class="mt-1 text-2xl font-semibold">Ask the questions the analysis must answer</h2>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          Use this for the specific things you still need the advisor to resolve. The review will answer from saved intake, evidence answers, and the latest re-analysis, then label what is proven, partial, unsupported, or needs a sharper follow-up.
+        </p>
       </div>
-    ) : null}
+      <form class="mt-5 grid gap-4" hx-post="/api/evidence/review" hx-target="#strategic-review-result" hx-swap="innerHTML" hx-indicator="#strategic-review-loading">
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Strategic questions</span>
+          <textarea
+            name="strategic_questions"
+            required
+            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            placeholder={`One question per line.\nExample: What roles should I stop considering?\nExample: What is the strongest $120K+ positioning angle?\nExample: What part of my story still lacks proof?`}
+          ></textarea>
+        </label>
+        <div class="flex flex-wrap items-center gap-3">
+          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.evidence === 0 || sourceCounts.intake === 0}>
+            <span>Review strategic questions</span>
+          </button>
+          <span class="text-sm text-[var(--muted)]">Answers are saved as a new analysis review record.</span>
+        </div>
+        <p class="text-sm font-semibold text-[var(--muted)]">Saved strategic reviews: {sourceCounts.review}</p>
+      </form>
+      <div id="strategic-review-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
+        <div class="cip-thinking-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Strategic review in progress</p>
+          <div class="cip-thinking-lines" aria-hidden="true">
+            <span>Reading your specific questions...</span>
+            <span>Checking saved evidence against each question...</span>
+            <span>Separating answered questions from open gaps...</span>
+            <span>Writing direct answers with caveats...</span>
+            <span>Saving the strategic review artifact...</span>
+          </div>
+          <p class="sr-only">Reviewing strategic questions against saved evidence.</p>
+          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>
+      <div id="strategic-review-result" class="mt-5" aria-live="polite"></div>
+      </section>
+
+      <section id="evidence-question-cards" hx-swap-oob="true">
+        {cards.length ? <Fragment set:html={renderEvidenceCardsHtml(cards)} /> : null}
+      </section>
+    </details>
 
     <aside class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <h2 class="text-xl font-semibold">Recently saved evidence</h2>
