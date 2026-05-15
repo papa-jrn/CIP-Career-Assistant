@@ -27,8 +27,8 @@ import {
         <a class="rounded-md border border-[var(--line)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10" href="/login">
           Sign in
         </a>
-        <a class="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-[var(--background)]" href="/intake">
-          Start intake
+        <a class="cip-fancy-button" href="/intake">
+          <span>Start intake</span>
         </a>
       </div>
     </div>
@@ -49,7 +49,7 @@ import {
           <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <div class="flex items-center justify-between gap-3">
               <h2 class="text-sm font-semibold">{signal.label}</h2>
-              <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">{signal.value}</span>
+              <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">{signal.value}</span>
             </div>
             <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{signal.detail}</p>
           </article>

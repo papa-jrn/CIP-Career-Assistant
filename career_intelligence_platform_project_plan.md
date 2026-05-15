@@ -1032,6 +1032,220 @@ Next validation tasks:
 - Check whether known anchors are rediscovered without being hardcoded.
 - Add regression tests after the first live-search sample set is reviewed.
 
+## Employer Search Hardening Plan
+
+The employer discovery engine is a real prototype, not a finished trusted engine yet.
+
+What is solid:
+
+- GeoCodio is incorporated as the primary geocoder when `GEOCODIO_API_KEY` is configured.
+- The product flow is correctly geography-first: discover credible employers in a labor market before monitoring jobs.
+- Hardcoded fixture employers are no longer returned as normal search results.
+- The result schema supports source-backed candidates, source pages, confidence labels, and candidate review.
+
+What still needs to happen:
+
+1. **Live-search validation**
+   - Run repeated searches for `Sunapee, NH`, `Lyndon, VT`, `Upper Valley`, `Burlington, VT`, and `Boston, MA`.
+   - Confirm the engine finds real local anchors.
+   - Confirm source pages are useful, clickable, and connected to returned employers.
+
+2. **Source quality scoring**
+   - Add app-side scoring rules, not only AI-returned scores.
+   - Chambers, municipal directories, school districts, hospital systems, economic development pages, workforce boards, and employer-owned career pages should score differently.
+   - Penalize vague, stale, uncited, SEO-only, or geographically mismatched sources.
+
+3. **Dedupe and saved-state discipline**
+   - If an employer is already watched, future discovery runs should mark it as already saved or avoid returning it as a candidate.
+   - Duplicate candidates should be handled server-side, not only hidden in the UI.
+   - Candidate rows should clearly distinguish new, already saved, promoted, cleared, and needs-review states.
+
+4. **Regression fixtures**
+   - Known anchors should be used as test expectations, not user-facing seeded results.
+   - Example: a Sunapee-region discovery should naturally rediscover New London Hospital, Colby-Sawyer College, Mount Sunapee, and Lake Sunapee Region Chamber sources.
+   - If those anchors are not found, the algorithm or source-search queries need improvement.
+
+5. **Result inspection**
+   - Each candidate should show why it was included:
+     - source URL
+     - geography confidence
+     - employer-size confidence
+     - sector/category confidence
+     - careers-page confidence
+   - Low-confidence candidates should be useful but visibly marked as requiring human review.
+
+6. **Caching and rate limits**
+   - Cache geocoding and nearby-place results by geography/radius.
+   - Cache discovery runs by geography/radius/sectors/minimum size where appropriate.
+   - Avoid repeated API spend for identical searches during testing and normal use.
+
+7. **Employer monitoring**
+   - Discovery finds employers; it does not yet monitor jobs.
+   - The next product payoff requires employer-specific adapters or monitoring flows for saved employers.
+   - Until implemented, the UI must keep labeling adapter/monitoring features as planned or manual-review only.
+
+The next employer-search phase should be a **Discovery QA loop**:
+
+1. Run a live search.
+2. Inspect sources.
+3. Mark source and candidate quality.
+4. Compare results against known anchors.
+5. Improve source queries and scoring rules.
+6. Add regression tests once a geography has a reviewed baseline.
+
+---
+
+## Resume / Intake Intelligence Hardening Plan
+
+The resume and intake analysis should behave like a strategic partner, not a praise generator.
+
+The product goal is for the AI to help the user notice:
+
+- Strengths that are truly supported by evidence
+- Patterns the user may be underselling
+- Career adjacencies that are plausible but need validation
+- Gaps, risks, or missing proof points
+- Questions worth exploring before rewriting a resume or chasing roles
+
+What is now implemented:
+
+- The advisor prompt explicitly separates verified resume evidence, user-stated preferences, medium-confidence inference, and open questions.
+- The advisor returns an `evidenceLedger` that explains each major claim, the evidence behind it, why it matters, and what should be validated next.
+- The advisor returns `explorationAreas` that turn interesting but unproven possibilities into practical research lanes.
+- The advisor returns `claimSafetyNotes` so weak assumptions are visible instead of hidden inside confident prose.
+- The deterministic fallback now produces a basic evidence ledger and exploration lanes when the AI service is unavailable.
+- The intake result UI renders the evidence ledger and exploration lanes after the main advisor analysis.
+
+What still needs to happen:
+
+1. **Structured resume parsing**
+   - Extract roles, dates, employers, industries, tools, measurable achievements, credentials, and project evidence.
+   - Keep the original text snippets attached to each extracted fact.
+   - Flag missing dates, vague claims, unexplained gaps, and unsupported seniority signals.
+
+2. **Intake cross-checking**
+   - Compare resume evidence against questionnaire answers.
+   - Identify contradictions, underexplained transitions, and stated goals that do not yet have enough supporting proof.
+   - Convert mismatches into follow-up questions instead of smoothing them over.
+
+3. **Claim confidence model**
+   - Every strategic claim should carry a confidence level and evidence type.
+   - High confidence should require direct resume/intake support.
+   - Medium confidence can use pattern recognition, but must name the inference.
+   - Low confidence should become a question or experiment, not a recommendation.
+
+4. **Career hypothesis generation**
+   - Generate multiple career hypotheses from the same profile.
+   - For each hypothesis, list supporting evidence, missing evidence, market validation needed, and first action.
+   - Avoid locking the user into a single story too early.
+
+5. **Resume improvement map**
+   - Recommend resume edits only after the evidence ledger is built.
+   - Tie every edit suggestion to a target role, missing proof point, or stronger positioning angle.
+   - Separate cosmetic fixes from strategic repositioning.
+
+6. **Interview-style follow-up loop**
+   - Ask a small number of sharp follow-up questions after intake.
+   - Questions should target the highest-value unknowns: outcomes, scale, leadership scope, technical depth, constraints, and preferred work style.
+   - New answers should update the evidence ledger instead of starting the analysis over.
+
+7. **Regression profiles**
+   - Save a few representative anonymized intake/resume examples.
+   - Test that the system does not overpraise, invent unsupported claims, or miss obvious strategic opportunities.
+   - Track whether analysis improves after prompt/schema changes.
+
+The next resume-intake phase should be an **Evidence QA loop**:
+
+1. Parse the resume into structured facts.
+2. Attach source snippets to those facts.
+3. Compare facts against intake answers.
+4. Generate career hypotheses with confidence levels.
+5. Ask targeted follow-up questions.
+6. Update the evidence ledger.
+7. Only then produce resume, positioning, and opportunity recommendations.
+
+This is the part that can make CIP feel materially different from a generic AI career coach. The system should earn trust by showing its work, naming uncertainty, and pushing the user toward better evidence.
+
+---
+
+## Evidence Builder Plan
+
+The advisor analysis now creates useful open loops: follow-up questions, claim safety notes, and evidence-to-find items. Those should not be left as static text.
+
+The next product layer is an **Evidence Builder**: a guided interview and proof workspace that helps the user answer the right questions without feeling judged.
+
+Product principles:
+
+- The tone should be collaborative, not interrogating.
+- Questions should explain why they matter.
+- The UI should reduce blank-page pressure by showing what a good answer includes.
+- Answers should be saved as additive evidence records, not overwrite older intake data.
+- Each answer should preserve the user's uncertainty level.
+- The system should avoid turning unverified stories into public resume claims too early.
+- The UI should show data health: number of saved intake versions, number of saved evidence answers, and latest timestamps from the signed-in user's Supabase session.
+
+Recommended UI model:
+
+1. **Question cards**
+   - One evidence question per card.
+   - Show the question, why the app is asking, and what a useful answer includes.
+   - Include a generous answer box, optional proof/source field, and confidence selector.
+
+2. **Evidence status**
+   - Track whether the answer is `known`, `needs metric`, `needs source`, or `not sure yet`.
+   - This makes progress visible without forcing fake certainty.
+
+3. **Story structure**
+   - Encourage answers that cover situation, action, scope, result, and proof.
+   - The interface should help the user remember useful stories rather than demand polished copy.
+
+4. **AI follow-up later**
+   - After a user answers a card, the AI can ask one or two sharper follow-ups.
+   - Example: "Can we add scale here? Was this used by 5 people, 50 people, customers, students, or a team?"
+   - This should happen inside the context of a card, not as an unbounded chat window.
+
+5. **Version safety**
+   - Intake saves should create new `resume_intake` source records.
+   - Evidence answers should create separate `evidence_response` source records.
+   - Older records should remain available for history, comparison, and rollback.
+   - The app should make additive persistence visible so users trust that new analysis did not erase prior context.
+
+Initial implementation target:
+
+- Add an Evidence Builder page.
+- Load the newest saved intake.
+- Generate cards from advisor follow-up questions, proof gaps, and exploration-lane evidence needs.
+- Save each answer as an additive evidence record in `career_sources`.
+- Show recently saved evidence answers on the page.
+
+Future implementation:
+
+- Add intake history and version comparison.
+- Link evidence responses back into the advisor ledger.
+- Let the AI ask targeted follow-up questions after a card is answered.
+- Promote verified evidence into resume bullets, LinkedIn copy, or portfolio case-study drafts only after user approval.
+
+## Evidence Re-analysis Plan
+
+Once evidence answers are saved, the next advisor pass should not start from the original intake alone. It should include:
+
+- Latest saved `resume_intake`
+- All recent `evidence_response` records
+- The user's confidence level on each answer
+- Proof/source notes and caution notes
+- The previous proof gaps and exploration lanes
+
+The re-analysis should produce:
+
+- Updated evidence ledger
+- Stronger or weaker positioning claims
+- Remaining proof gaps
+- New follow-up questions
+- Updated exploration lanes
+- A saved `evidence_analysis` source record
+
+This keeps the model additive. The app does not overwrite the intake or evidence answers; it creates a new analysis artifact that can be compared against prior runs.
+
 ---
 
 ## Geography Engine Fix

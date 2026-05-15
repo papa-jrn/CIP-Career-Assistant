@@ -62,13 +62,20 @@ function fieldValue(name: keyof IntakeForm) {
         <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
           This is the source material for the career model. Keep rough notes honest; the analysis engine will separate verified claims from hypotheses.
         </p>
-        {savedIntake ? (
-          <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
-            Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.
-          </p>
-        ) : null}
+        <div id="intake-save-status" class="mt-4">
+          {savedIntake ? (
+            <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
+              Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.
+            </p>
+          ) : (
+            <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
+              No saved intake has been loaded for this session yet.
+            </p>
+          )}
+        </div>
 
         <form
+          id="intake-form"
           class="mt-8 grid gap-5"
           hx-post="/api/intake/save"
           hx-target="#intake-result"
@@ -135,15 +142,29 @@ function fieldValue(name: keyof IntakeForm) {
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <button class="rounded-md bg-[var(--foreground)] px-5 py-2.5 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit">
-              Save and analyze intake
+            <button class="cip-fancy-button" type="submit" data-intake-submit>
+              <span data-ready-label>Save and analyze intake</span>
+              <span data-busy-label hidden>Analyzing intake...</span>
             </button>
             <span class="text-sm text-[var(--muted)]">{advisorModeLabel}</span>
           </div>
-          <div id="intake-loading" class="htmx-indicator rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
-              <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
-              Analyzing intake, updating the identity graph, and building advisor notes...
+          <div id="intake-loading" class="htmx-indicator cip-thinking-panel" role="status" aria-live="polite">
+            <div class="cip-thinking-orbit" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Analysis in progress</p>
+              <div class="cip-thinking-lines" aria-hidden="true">
+                <span>Reading resume evidence and work history...</span>
+                <span>Separating verified facts from career hypotheses...</span>
+                <span>Building the evidence ledger and safety notes...</span>
+                <span>Finding underused strengths and exploration lanes...</span>
+                <span>Saving the intake and refreshing the identity graph...</span>
+              </div>
+              <p class="sr-only">Analyzing intake, updating the identity graph, and building advisor notes.</p>
+              <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
             </div>
           </div>
         </form>
@@ -162,4 +183,41 @@ function fieldValue(name: keyof IntakeForm) {
 
     <div id="intake-result" class="mt-6" aria-live="polite"></div>
   </main>
+
+  <script>
+    const intakeForm = document.querySelector("#intake-form");
+    const submitButton = document.querySelector("[data-intake-submit]");
+    const readyLabel = document.querySelector("[data-ready-label]");
+    const busyLabel = document.querySelector("[data-busy-label]");
+
+    function setIntakeBusy(isBusy) {
+      intakeForm?.setAttribute("aria-busy", String(isBusy));
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = isBusy;
+      }
+      if (readyLabel instanceof HTMLElement && busyLabel instanceof HTMLElement) {
+        readyLabel.hidden = isBusy;
+        busyLabel.hidden = !isBusy;
+      }
+    }
+
+    document.body.addEventListener("htmx:beforeRequest", (event) => {
+      if (event.target === intakeForm) {
+        setIntakeBusy(true);
+        document.querySelector("#intake-loading")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+
+    document.body.addEventListener("htmx:afterRequest", (event) => {
+      if (event.target === intakeForm) {
+        setIntakeBusy(false);
+      }
+    });
+
+    document.body.addEventListener("htmx:responseError", (event) => {
+      if (event.target === intakeForm) {
+        setIntakeBusy(false);
+      }
+    });
+  </script>
 </Layout>

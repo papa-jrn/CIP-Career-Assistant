@@ -113,31 +113,47 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 const savedRegionKeys = [...new Set([...sources.map((source) => source.region), ...candidates.map((candidate) => candidate.region)])];
 const focusRegions = savedRegionKeys;
 const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
+const geocodioEnabled = Boolean(import.meta.env.GEOCODIO_API_KEY);
+const savedEmployerNames = new Set(employers.map((employer) => normalizeEmployerName(employer.name)));
+const visibleCandidates = candidates.filter((candidate) => {
+  const alreadySaved = savedEmployerNames.has(normalizeEmployerName(candidate.name));
+  return candidate.review_state !== "promoted" && !alreadySaved;
+});
+
+function normalizeEmployerName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
 ---
 
 <Layout title="CIP Watched Employers">
-  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+  <main class="cip-page-shell min-h-screen">
+  <div class="mx-auto w-full max-w-6xl px-5 py-8">
     <nav class="mb-8 flex flex-wrap gap-2">
       {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+        <a class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm font-semibold text-[var(--muted)] shadow-sm hover:border-[var(--accent)] hover:text-[var(--accent-strong)]" href={item.href}>{item.label}</a>
       ))}
     </nav>
 
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+    <section class="cip-card rounded-lg p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Watched Employer Assistant</p>
-          <h1 class="mt-2 text-3xl font-semibold">Build a trusted target-employer map before chasing postings.</h1>
+          <h1 class="mt-2 max-w-4xl text-4xl font-semibold tracking-tight">Find credible employers before chasing postings.</h1>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            Start with geography and sectors. Discover employer candidates, then save the businesses you want to watch.
+            Start with a place, expand it into a real labor-market area, then save source-backed businesses worth watching.
           </p>
-          <p class={`mt-3 inline-flex rounded-md px-2 py-1 text-xs font-semibold ${liveBusinessSearchEnabled ? "bg-[rgba(14,124,134,0.12)] text-[var(--accent-strong)]" : "bg-yellow-50 text-yellow-800"}`}>
-            {liveBusinessSearchEnabled ? "Live AI web search enabled" : "Live business search not configured: add OPENAI_API_KEY"}
-          </p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <p class={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${liveBusinessSearchEnabled ? "cip-pill" : "bg-yellow-50 text-yellow-800"}`}>
+              {liveBusinessSearchEnabled ? "Live AI web search enabled" : "Live business search not configured: add OPENAI_API_KEY"}
+            </p>
+            <p class={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${geocodioEnabled ? "cip-pill" : "bg-[var(--background)] text-[var(--muted)]"}`}>
+              {geocodioEnabled ? "GeoCodio primary geocoder active" : "GeoCodio not configured; fallback geocoder will be used"}
+            </p>
+          </div>
         </div>
       </div>
 
-      <form class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5" hx-post="/api/employers/discover" hx-target="#employer-discovery-result" hx-swap="innerHTML" hx-indicator="#employer-discovery-loading">
+      <form class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5 shadow-sm" hx-post="/api/employers/discover" hx-target="#employer-discovery-result" hx-swap="innerHTML" hx-indicator="#employer-discovery-loading">
         <div>
           <h2 class="text-lg font-semibold">Find businesses by geography</h2>
           <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
@@ -145,7 +161,7 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
           </p>
         </div>
         <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr_0.8fr]">
-          <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+          <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <span class="text-sm font-semibold">Geography</span>
             <input name="custom_geography" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Sunapee, NH; Burlington, VT; Portland, ME..." />
             <span class="text-xs text-[var(--muted)]">Start here. The search uses the exact place you enter; fixture/preset employers are not returned as normal search results.</span>
@@ -164,7 +180,7 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
             ) : null}
           </label>
 
-          <fieldset class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+          <fieldset class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <legend class="px-1 text-sm font-semibold">Sectors</legend>
             <div class="mt-3 grid gap-2 text-sm">
               {["healthcare", "education", "municipality", "technology", "manufacturing", "communications", "operations", "community"].map((sector) => (
@@ -176,7 +192,7 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
             </div>
           </fieldset>
 
-          <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+          <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <span class="text-sm font-semibold">Minimum employer size</span>
             <select name="minimum_size" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
               <option value="100" selected>100+ or likely 100+</option>
@@ -190,8 +206,8 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
               <option value="100">100 miles</option>
               <option value="150">150 miles</option>
             </select>
-            <button class="mt-2 rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit">
-              Search businesses
+            <button class="cip-fancy-button mt-2" type="submit">
+              <span>Search businesses</span>
             </button>
             {!signedIn ? (
               <span class="text-xs font-semibold text-[var(--warning)]">Sign in to save search results.</span>
@@ -248,10 +264,10 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
             <h2 class="text-xl font-semibold">Area focus</h2>
             <p class="mt-2 text-sm text-[var(--muted)]">The search expands from the geography into nearby municipalities and regional business ecosystems.</p>
           </div>
-          <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">{sources.length} source directories</span>
+          <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{sources.length} source directories</span>
         </div>
         <div class="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          <div class="relative min-h-72 overflow-hidden rounded-md border border-[var(--line)] bg-[linear-gradient(135deg,rgba(14,124,134,0.10),transparent_55%),var(--panel)] p-5">
+          <div class="relative min-h-72 overflow-hidden rounded-md border border-[var(--line)] bg-[linear-gradient(135deg,rgba(126,217,87,0.18),transparent_55%),var(--panel)] p-5">
             <div class="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--accent)] opacity-30"></div>
             <div class="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--accent)] opacity-40"></div>
             <div class="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)]"></div>
@@ -318,11 +334,11 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
             <h2 class="text-xl font-semibold">Employer candidates</h2>
             <p class="mt-2 text-sm text-[var(--muted)]">This is the saved candidate queue from previous searches. Current search results can now be saved directly from the result panel above.</p>
           </div>
-          <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">{candidates.length} candidates</span>
+          <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{visibleCandidates.length} candidates</span>
         </div>
-        <form class="mt-4" hx-post="/api/employers/promote" hx-target="#candidate-promote-result" hx-swap="innerHTML">
+        <form id="candidate-queue-form" class="mt-4" hx-post="/api/employers/promote" hx-target="#candidate-promote-result" hx-swap="innerHTML">
           <div class="grid gap-3">
-            {candidates.length ? candidates.map((candidate) => (
+            {visibleCandidates.length ? visibleCandidates.map((candidate) => (
               <label class="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4 md:grid-cols-[auto_1fr_auto]">
                 <input class="mt-1 h-4 w-4 accent-[var(--accent)]" type="checkbox" name="candidate_ids" value={candidate.id} checked={candidate.review_state === "pending"} />
                 <div>
@@ -338,45 +354,33 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
                 </div>
                 <div class="flex min-w-28 flex-col items-start gap-2 md:items-end">
                   <span class="text-2xl font-semibold text-[var(--accent-strong)]">{candidate.fit_score}%</span>
-                  <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold">{candidate.priority}</span>
+                  <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{candidate.priority}</span>
                 </div>
               </label>
             )) : (
               <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-                <p class="text-sm text-[var(--muted)]">No candidates yet. Run employer discovery above.</p>
+                <p class="text-sm text-[var(--muted)]">No unsaved candidates in the queue. Run employer discovery above to find more source-backed businesses.</p>
               </div>
             )}
           </div>
-          {candidates.length ? (
+          {visibleCandidates.length ? (
             <div class="mt-4 flex flex-wrap gap-2">
-              <button class="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit">
-                Save selected businesses
+              <button class="cip-fancy-button" type="submit">
+                <span>Save selected businesses</span>
               </button>
               <button
-                class="rounded-md border border-[var(--line)] px-4 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)] htmx-request:opacity-60"
-                type="submit"
-                formaction="/api/employers/candidates/clear"
-                formmethod="post"
-                name="mode"
-                value="selected"
-                hx-post="/api/employers/candidates/clear"
-                hx-target="#candidate-promote-result"
-                hx-swap="innerHTML"
+                class="cip-fancy-button cip-fancy-button-secondary"
+                type="button"
+                data-clear-candidates="selected"
               >
-                Clear selected
+                <span>Clear selected</span>
               </button>
               <button
-                class="rounded-md border border-[var(--line)] px-4 py-2 text-sm font-semibold text-[var(--warning)] htmx-request:opacity-60"
-                type="submit"
-                formaction="/api/employers/candidates/clear"
-                formmethod="post"
-                name="mode"
-                value="all_unpromoted"
-                hx-post="/api/employers/candidates/clear"
-                hx-target="#candidate-promote-result"
-                hx-swap="innerHTML"
+                class="cip-fancy-button cip-fancy-button-warning"
+                type="button"
+                data-clear-candidates="all_unpromoted"
               >
-                Clear all unpromoted
+                <span>Clear all unpromoted</span>
               </button>
             </div>
           ) : null}
@@ -414,7 +418,7 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
             </div>
             <div class="flex min-w-40 flex-col items-start gap-2 lg:items-end">
               <span class="text-3xl font-semibold text-[var(--accent-strong)]">{employer.fit_score}%</span>
-              <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold">{employer.priority} priority</span>
+              <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{employer.priority} priority</span>
               <span class="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{employer.adapter_status.replace("_", " ")}</span>
               <div class="mt-2 flex flex-wrap gap-2 lg:justify-end">
                 {employer.source_url ? <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href={employer.source_url} target="_blank" rel="noreferrer">Source</a> : null}
@@ -430,6 +434,7 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
         )}
       </div>
     </section>
+  </div>
   </main>
   <style>
     .loading-phrases {
@@ -471,4 +476,49 @@ const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
       }
     }
   </style>
+  <script is:inline>
+    document.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-clear-candidates]");
+      if (!button) return;
+
+      const mode = button.getAttribute("data-clear-candidates") || "selected";
+      const form = document.getElementById("candidate-queue-form");
+      const result = document.getElementById("candidate-promote-result");
+      if (!form || !result) return;
+
+      const payload = new FormData();
+      payload.set("mode", mode);
+
+      if (mode === "selected") {
+        const checked = form.querySelectorAll('input[name="candidate_ids"]:checked');
+        if (!checked.length) {
+          result.innerHTML = '<p class="text-sm text-red-700">Select at least one candidate to clear.</p>';
+          return;
+        }
+        checked.forEach((input) => payload.append("candidate_ids", input.value));
+      }
+
+      button.setAttribute("aria-disabled", "true");
+      button.disabled = true;
+      result.innerHTML = '<p class="text-sm font-semibold text-[var(--accent-strong)]">Updating candidate queue...</p>';
+
+      try {
+        const response = await fetch("/api/employers/candidates/clear", {
+          method: "POST",
+          body: payload,
+          credentials: "same-origin",
+        });
+        const html = await response.text();
+        result.innerHTML = html;
+        if (response.ok) {
+          window.setTimeout(() => window.location.reload(), 250);
+        }
+      } catch {
+        result.innerHTML = '<p class="text-sm text-red-700">Unable to clear candidates. Try again.</p>';
+      } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-disabled");
+      }
+    });
+  </script>
 </Layout>

@@ -1,0 +1,259 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { navItems } from "../lib/cip/data";
+import { buildEvidenceCards, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
+import type { AdvisorAnalysis } from "../lib/cip/advisor";
+import { createServer } from "../lib/supabase/server";
+
+type IntakeSource = {
+  intake?: Record<string, unknown>;
+  draft?: { evidenceChecklist?: string[]; nextQuestions?: string[] };
+  advisor?: Partial<AdvisorAnalysis>;
+};
+
+let latestSource: IntakeSource | null = null;
+let savedAt: string | null = null;
+let latestEvidenceAt: string | null = null;
+let evidenceResponses: EvidenceResponsePayload[] = [];
+let sourceCounts = {
+  intake: 0,
+  evidence: 0,
+  analysis: 0,
+};
+let loadState: "ready" | "signin" | "local" | "error" = "local";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: intakeData } = await supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "resume_intake")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: responseData } = await supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_response")
+        .order("created_at", { ascending: false })
+        .limit(8);
+
+      const [{ count: intakeCount }, { count: evidenceCount }, { count: analysisCount }] = await Promise.all([
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "resume_intake"),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "evidence_response"),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "evidence_analysis"),
+      ]);
+
+      latestSource = intakeData?.extracted_text ? JSON.parse(intakeData.extracted_text) : null;
+      savedAt = intakeData?.created_at ?? null;
+      latestEvidenceAt = responseData?.[0]?.created_at ?? null;
+      sourceCounts = {
+        intake: intakeCount ?? 0,
+        evidence: evidenceCount ?? 0,
+        analysis: analysisCount ?? 0,
+      };
+      evidenceResponses = (responseData ?? [])
+        .map((row) => parseEvidencePayload(row.extracted_text))
+        .filter(Boolean)
+        .map((item) => item as EvidenceResponsePayload);
+      loadState = latestSource ? "ready" : "local";
+    } else {
+      loadState = "signin";
+    }
+  } catch {
+    loadState = "error";
+  }
+}
+
+const cards = latestSource
+  ? buildEvidenceCards(latestSource.intake ?? {}, latestSource.draft, latestSource.advisor)
+  : [];
+
+function parseEvidencePayload(value: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.response ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function sourceLabel(source: string) {
+  return source.replaceAll("_", " ");
+}
+---
+
+<Layout title="CIP Evidence Builder">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+    <nav class="mb-8 flex flex-wrap gap-2">
+      {navItems.map((item) => (
+        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
+
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence Builder</p>
+      <h1 class="mt-2 text-3xl font-semibold">Turn proof gaps into usable career evidence</h1>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Answer these one at a time. The point is not polished resume copy yet; it is to capture honest source material, confidence, and proof that the advisor can use later.
+      </p>
+      <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
+        {loadState === "ready" && savedAt ? `Built from the latest saved intake from ${new Date(savedAt).toLocaleString()}.` : ""}
+        {loadState === "signin" ? "Sign in and save an intake before building evidence." : ""}
+        {loadState === "local" ? "Save an intake first so the Evidence Builder can generate targeted questions." : ""}
+        {loadState === "error" ? "The latest intake could not be loaded. Check Supabase configuration and saved intake data." : ""}
+      </div>
+      <div class="mt-5 flex flex-wrap items-center gap-3">
+        <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/evidence/export" target="_blank" rel="noreferrer">
+          <span>Download evidence backup</span>
+        </a>
+        <p class="text-sm leading-6 text-[var(--muted)]">
+          Exports saved intake versions and evidence answers from your signed-in Supabase session.
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-6 grid gap-4 md:grid-cols-3">
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+        <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved intake versions</p>
+        <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{sourceCounts.intake}</p>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {savedAt ? `Newest: ${new Date(savedAt).toLocaleString()}` : "No saved intake found for this signed-in session."}
+        </p>
+      </div>
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+        <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved evidence answers</p>
+        <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{sourceCounts.evidence}</p>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {latestEvidenceAt ? `Newest: ${new Date(latestEvidenceAt).toLocaleString()}` : "No evidence answers found yet."}
+        </p>
+      </div>
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+        <p class="text-xs font-semibold uppercase text-[var(--muted)]">Version safety</p>
+        <p class="mt-2 text-lg font-semibold">Additive saves</p>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          Intake and evidence saves create new source records. Older rows are preserved for history.
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next advisor pass</p>
+          <h2 class="mt-1 text-2xl font-semibold">Re-analyze with saved evidence</h2>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            This takes the latest intake plus saved evidence answers and asks the advisor to update the ledger, proof gaps, exploration lanes, and positioning. The new analysis is saved as another source record.
+          </p>
+          <p class="mt-3 text-sm font-semibold text-[var(--muted)]">Saved re-analysis runs: {sourceCounts.analysis}</p>
+        </div>
+        <form hx-post="/api/evidence/analyze" hx-target="#evidence-analysis-result" hx-swap="innerHTML" hx-indicator="#evidence-analysis-loading">
+          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.evidence === 0 || sourceCounts.intake === 0}>
+            <span>Re-analyze evidence</span>
+          </button>
+        </form>
+      </div>
+      <div id="evidence-analysis-loading" class="htmx-indicator mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
+          <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
+          Re-reading saved evidence and updating the advisor analysis...
+        </div>
+      </div>
+      <div id="evidence-analysis-result" class="mt-5" aria-live="polite"></div>
+    </section>
+
+    {cards.length ? (
+      <div class="mt-6 grid gap-5">
+        {cards.map((card, index) => (
+          <article class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">{sourceLabel(card.source)}</p>
+                <h2 class="mt-1 text-xl font-semibold">{card.question}</h2>
+              </div>
+              <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Question {index + 1}</span>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{card.whyItMatters}</p>
+            <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <p class="text-xs font-semibold uppercase text-[var(--muted)]">A useful answer includes</p>
+              <ul class="mt-2 grid gap-2 text-sm text-[var(--muted)] md:grid-cols-2">
+                {card.helpfulAnswer.map((item) => <li>{item}</li>)}
+              </ul>
+            </div>
+
+            <form class="mt-5 grid gap-4" hx-post="/api/evidence/save" hx-target={`#evidence-result-${card.id}`} hx-swap="innerHTML">
+              <input type="hidden" name="question_id" value={card.id} />
+              <input type="hidden" name="question" value={card.question} />
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Your answer</span>
+                <textarea name="answer" required class="min-h-32 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Rough notes are fine. Situation, action, scope, result, proof."></textarea>
+              </label>
+              <div class="grid gap-4 md:grid-cols-3">
+                <label class="grid gap-2">
+                  <span class="text-sm font-semibold">Confidence</span>
+                  <select name="confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+                    <option value="known">I know this</option>
+                    <option value="needs_metric">Need metric</option>
+                    <option value="needs_source">Need source</option>
+                    <option value="not_sure">Not sure yet</option>
+                  </select>
+                </label>
+                <label class="grid gap-2 md:col-span-2">
+                  <span class="text-sm font-semibold">Proof link or source</span>
+                  <input name="proof_url" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="URL, document name, person, project, or private source note" />
+                </label>
+              </div>
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">What should the AI be careful about?</span>
+                <input name="source_note" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private client, estimate only, needs exact date, don't use publicly yet." />
+              </label>
+              <div class="flex flex-wrap items-center gap-3">
+                <button class="cip-fancy-button" type="submit"><span>Save evidence</span></button>
+                <div id={`evidence-result-${card.id}`} class="text-sm text-[var(--muted)]" aria-live="polite"></div>
+              </div>
+            </form>
+          </article>
+        ))}
+      </div>
+    ) : null}
+
+    <aside class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <h2 class="text-xl font-semibold">Recently saved evidence</h2>
+      {evidenceResponses.length ? (
+        <div class="mt-4 grid gap-3">
+          {evidenceResponses.map((response) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <p class="text-sm font-semibold">{response.question}</p>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{response.answer}</p>
+              <p class="mt-3 text-xs font-semibold uppercase text-[var(--accent-strong)]">{response.confidence.replaceAll("_", " ")}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">No evidence answers saved yet. Start with one card and keep it rough.</p>
+      )}
+    </aside>
+  </main>
+</Layout>

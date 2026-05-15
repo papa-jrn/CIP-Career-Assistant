@@ -24,16 +24,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return html('<p class="text-sm text-red-700">Select at least one candidate to clear.</p>', 400);
   }
 
-  const query = supabase
-    .from("employer_candidates")
-    .delete()
-    .eq("user_id", user.id)
-    .neq("review_state", "promoted");
-
   const { error, count } =
     mode === "all_unpromoted"
-      ? await query.select("id", { count: "exact", head: true })
-      : await query.in("id", candidateIds).select("id", { count: "exact", head: true });
+      ? await supabase
+          .from("employer_candidates")
+          .delete()
+          .eq("user_id", user.id)
+          .neq("review_state", "promoted")
+          .select("id", { count: "exact" })
+      : await supabase
+          .from("employer_candidates")
+          .delete()
+          .eq("user_id", user.id)
+          .in("id", candidateIds)
+          .select("id", { count: "exact" });
 
   if (error) {
     return html(`<p class="text-sm text-red-700">${escapeHtml(error.message)}</p>`, 500);
@@ -44,13 +48,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       <p class="text-sm font-semibold text-[var(--accent-strong)]">${count ?? 0} candidate${count === 1 ? "" : "s"} cleared from the queue.</p>
       <p class="mt-2 text-sm text-[var(--muted)]">Refresh this page to see the updated candidate queue.</p>
     </div>
-  `);
+  `, 200, { "HX-Refresh": "true" });
 };
 
-function html(body: string, status = 200) {
+function html(body: string, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(body, {
     status,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: { "Content-Type": "text/html; charset=utf-8", ...extraHeaders },
   });
 }
 

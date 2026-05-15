@@ -106,8 +106,8 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
           </p>
         </div>
         <form hx-post="/api/labor-market/ingest" hx-target="#market-run-result" hx-swap="innerHTML" hx-indicator="#market-loading">
-          <button class="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-[var(--background)] htmx-request:opacity-60" type="submit" disabled={!signedIn}>
-            Run market research
+          <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
+            <span>Run market research</span>
           </button>
         </form>
       </div>
@@ -172,7 +172,7 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
               </div>
               <div class="flex min-w-36 flex-col items-start gap-2 md:items-end">
                 <span class="text-3xl font-semibold text-[var(--accent-strong)]">{match.match_score}%</span>
-                <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold">{match.confidence} confidence</span>
+                <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold">{match.confidence} confidence</span>
                 <span class="text-xs text-[var(--muted)]">{salaryLabel(match.opportunities)}</span>
                 {match.opportunities.source_url ? (
                   <a class="mt-2 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href={match.opportunities.source_url} target="_blank" rel="noreferrer">View source</a>
@@ -199,7 +199,7 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
               </div>
               <div class="flex min-w-32 flex-col items-start gap-2 md:items-end">
                 <span class="text-3xl font-semibold text-[var(--accent-strong)]">{item.match}%</span>
-                <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold">{item.confidence} confidence</span>
+                <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold">{item.confidence} confidence</span>
               </div>
             </article>
           ))}

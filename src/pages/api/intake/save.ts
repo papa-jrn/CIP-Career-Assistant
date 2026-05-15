@@ -18,21 +18,27 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const intake = parsed.data;
   const draft = buildIdentityDraft(intake);
   const advisor = await buildAdvisorAnalysis(intake, draft);
-  const persistence = await tryPersistIntake(intake, draft, cookies);
+  const persistence = await tryPersistIntake(intake, draft, advisor, cookies);
 
   return html(renderIntakeResult(draft, advisor, persistence));
 };
 
+type PersistenceResult =
+  | { state: "local" | "signin" }
+  | { state: "saved"; savedAt: string }
+  | { state: "error"; message: string };
+
 async function tryPersistIntake(
   intake: ReturnType<typeof parseIntakeForm> extends { data: infer T } ? T : never,
   draft: ReturnType<typeof buildIdentityDraft>,
+  advisor: AdvisorAnalysis,
   cookies: Parameters<typeof createServer>[0],
-) {
+): Promise<PersistenceResult> {
   if (
     !import.meta.env.PUBLIC_SUPABASE_URL ||
     !import.meta.env.PUBLIC_SUPABASE_ANON_KEY
   ) {
-    return "local";
+    return { state: "local" };
   }
 
   try {
@@ -41,16 +47,24 @@ async function tryPersistIntake(
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) return "signin";
+    if (!user) return { state: "signin" };
 
-    const { error: sourceError } = await supabase.from("career_sources").insert({
-      user_id: user.id,
-      source_type: "resume_intake",
-      title: intake.full_name ? `${intake.full_name} intake` : "Career intake",
-      url: intake.linkedin_url || null,
-      extracted_text: JSON.stringify({ intake, draft }),
-      trust_state: "user_submitted",
-    });
+    const { data: source, error: sourceError } = await supabase
+      .from("career_sources")
+      .insert({
+        user_id: user.id,
+        source_type: "resume_intake",
+        title: intake.full_name ? `${intake.full_name} intake` : "Career intake",
+        url: intake.linkedin_url || null,
+        extracted_text: JSON.stringify({ intake, draft, advisor }),
+        trust_state: "user_submitted",
+      })
+      .select("created_at")
+      .single();
+
+    if (sourceError) {
+      return { state: "error", message: `Intake source save failed: ${sourceError.message}` };
+    }
 
     const { error: profileError } = await supabase.from("career_profiles").insert({
       user_id: user.id,
@@ -62,9 +76,16 @@ async function tryPersistIntake(
       confidence: "low",
     });
 
-    return sourceError || profileError ? "error" : "saved";
-  } catch {
-    return "error";
+    if (profileError) {
+      return { state: "error", message: `Intake saved, but profile summary failed: ${profileError.message}` };
+    }
+
+    return { state: "saved", savedAt: source?.created_at ?? new Date().toISOString() };
+  } catch (error) {
+    return {
+      state: "error",
+      message: error instanceof Error ? error.message : "Unexpected save error.",
+    };
   }
 }
 
@@ -79,23 +100,26 @@ function splitList(value: string) {
 function renderIntakeResult(
   draft: ReturnType<typeof buildIdentityDraft>,
   advisor: AdvisorAnalysis,
-  persistence: "local" | "signin" | "saved" | "error",
+  persistence: PersistenceResult,
 ) {
   const status = {
     local: "Draft analyzed locally. Add Supabase keys and sign in to persist it.",
     signin: "Draft analyzed. Sign in to save it to your career profile.",
     saved: "Intake saved to your career profile.",
-    error: "Draft analyzed, but saving failed. Check Supabase configuration and migrations.",
-  }[persistence];
+    error: persistence.state === "error" ? `Draft analyzed, but saving needs attention. ${persistence.message}` : "",
+  }[persistence.state];
 
   return `
+    ${renderSaveStatusUpdate(persistence)}
     <section class="rounded-lg border border-[var(--line)] bg-[var(--background)] p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-xl font-semibold">Identity graph draft</h2>
-        <span class="rounded-md bg-[rgba(14,124,134,0.12)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(status)}</span>
+        <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(status)}</span>
       </div>
       ${renderIdentityGraph(draft)}
       ${renderAdvisorAnalysis(advisor)}
+      ${renderEvidenceLedger(advisor)}
+      ${renderExplorationAreas(advisor)}
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         ${renderList("Detected strengths", draft.strengths)}
         ${renderList("Role hypotheses", draft.possibleRoles)}
@@ -104,6 +128,124 @@ function renderIntakeResult(
       </div>
     </section>
   `;
+}
+
+function renderSaveStatusUpdate(persistence: PersistenceResult) {
+  if (persistence.state === "saved") {
+    return `
+      <div id="intake-save-status" class="mt-4" hx-swap-oob="innerHTML">
+        <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
+          Latest intake saved ${escapeHtml(new Date(persistence.savedAt).toLocaleString())}.
+        </p>
+      </div>
+    `;
+  }
+
+  if (persistence.state === "error") {
+    return `
+      <div id="intake-save-status" class="mt-4" hx-swap-oob="innerHTML">
+        <p class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+          Intake analysis completed, but saving failed: ${escapeHtml(persistence.message)}
+        </p>
+      </div>
+    `;
+  }
+
+  if (persistence.state === "signin") {
+    return `
+      <div id="intake-save-status" class="mt-4" hx-swap-oob="innerHTML">
+        <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
+          Intake analysis completed, but you need to sign in before it can be saved.
+        </p>
+      </div>
+    `;
+  }
+
+  return `
+    <div id="intake-save-status" class="mt-4" hx-swap-oob="innerHTML">
+      <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
+        Intake analysis completed locally. Supabase is not configured for persistence.
+      </p>
+    </div>
+  `;
+}
+
+function renderEvidenceLedger(advisor: AdvisorAnalysis) {
+  return `
+    <section class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence ledger</p>
+          <h3 class="mt-1 text-lg font-semibold">What we know, what we infer, and what needs proof</h3>
+        </div>
+        <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Claim discipline</span>
+      </div>
+      <div class="mt-4 grid gap-3">
+        ${advisor.evidenceLedger.map(renderEvidenceLedgerItem).join("")}
+      </div>
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <h4 class="text-sm font-semibold">Claim safety notes</h4>
+        ${renderInlineList(advisor.claimSafetyNotes)}
+      </div>
+    </section>
+  `;
+}
+
+function renderEvidenceLedgerItem(item: AdvisorAnalysis["evidenceLedger"][number]) {
+  return `
+    <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <h4 class="font-semibold">${escapeHtml(item.claim)}</h4>
+        <span class="rounded-md px-2 py-1 text-xs font-semibold ${evidenceStatusClass(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
+      </div>
+      <p class="mt-3 text-sm leading-6 text-[var(--muted)]"><span class="font-semibold text-[var(--foreground)]">Evidence:</span> ${escapeHtml(item.evidence)}</p>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]"><span class="font-semibold text-[var(--foreground)]">Why it matters:</span> ${escapeHtml(item.whyItMatters)}</p>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]"><span class="font-semibold text-[var(--foreground)]">Validate next:</span> ${escapeHtml(item.nextValidationStep)}</p>
+    </article>
+  `;
+}
+
+function renderExplorationAreas(advisor: AdvisorAnalysis) {
+  return `
+    <section class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-5">
+      <div>
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Exploration lanes</p>
+        <h3 class="mt-1 text-lg font-semibold">Places the AI partner thinks are worth testing</h3>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          These are not final recommendations. They are research lanes where the user may have hidden leverage if evidence appears.
+        </p>
+      </div>
+      <div class="mt-4 grid gap-3 lg:grid-cols-3">
+        ${advisor.explorationAreas.map(renderExplorationArea).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderExplorationArea(area: AdvisorAnalysis["explorationAreas"][number]) {
+  return `
+    <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+      <h4 class="font-semibold">${escapeHtml(area.area)}</h4>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(area.whyExplore)}</p>
+      <div class="mt-4">
+        <p class="text-xs font-semibold uppercase text-[var(--muted)]">Evidence to find</p>
+        ${renderInlineList(area.evidenceToFind)}
+      </div>
+      <p class="mt-4 text-sm leading-6 text-[var(--accent-strong)]"><span class="font-semibold">First experiment:</span> ${escapeHtml(area.firstExperiment)}</p>
+    </article>
+  `;
+}
+
+function evidenceStatusClass(status: string) {
+  if (status === "verified_from_resume") return "bg-[var(--accent-soft)] text-[var(--accent-strong)]";
+  if (status === "stated_by_user") return "bg-[var(--panel)] text-[var(--accent-strong)] border border-[var(--line)]";
+  if (status === "inferred_medium_confidence") return "bg-yellow-50 text-yellow-800";
+  if (status === "needs_user_confirmation") return "bg-[rgba(126,217,87,0.12)] text-[var(--accent-strong)] border border-[var(--line)]";
+  return "bg-red-50 text-red-800";
+}
+
+function formatStatus(status: string) {
+  return status.replaceAll("_", " ");
 }
 
 function renderAdvisorAnalysis(advisor: AdvisorAnalysis) {
@@ -183,7 +325,7 @@ function renderIdentityGraph(draft: ReturnType<typeof buildIdentityDraft>) {
   return `
     <div class="mt-5 overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]">
       <div class="grid gap-0 lg:grid-cols-[1fr_0.72fr]">
-        <div class="relative min-h-[360px] bg-[radial-gradient(circle_at_center,rgba(14,124,134,0.10),transparent_58%)] p-4">
+        <div class="relative min-h-[360px] bg-[radial-gradient(circle_at_center,rgba(126,217,87,0.16),transparent_58%)] p-4">
           <svg class="h-[360px] w-full" viewBox="0 0 720 360" role="img" aria-labelledby="identity-graph-title identity-graph-desc">
             <title id="identity-graph-title">Identity graph draft</title>
             <desc id="identity-graph-desc">A draft graph connecting the candidate profile to strengths, role hypotheses, evidence, and next questions.</desc>
