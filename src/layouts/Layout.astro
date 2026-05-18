@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import { createServer } from "../lib/supabase/server";
 
 interface Props {
   title?: string;
@@ -10,6 +11,20 @@ const {
   title = "Career Intelligence Platform",
   description = "A trust-first career strategist and job search intelligence workspace.",
 } = Astro.props;
+
+let signedInEmail = "";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    signedInEmail = user?.email ?? "";
+  } catch {
+    signedInEmail = "";
+  }
+}
 ---
 
 <!doctype html>
@@ -25,6 +40,27 @@ const {
     </script>
   </head>
   <body class="min-h-full flex flex-col font-sans">
+    <div class="border-b border-[var(--line)] bg-[var(--background)]">
+      <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-2 text-sm">
+        <a href="/" class="font-semibold text-[var(--foreground)]">Career Intelligence Platform</a>
+        {signedInEmail ? (
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="text-[var(--muted)]">
+              Signed in as <span class="font-semibold text-[var(--foreground)]">{signedInEmail}</span>
+            </span>
+            <form hx-post="/api/auth/logout" hx-swap="none">
+              <button class="rounded-md border border-[var(--line)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10" type="submit">
+                Sign out
+              </button>
+            </form>
+          </div>
+        ) : (
+          <a class="rounded-md border border-[var(--line)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10" href="/login">
+            Sign in
+          </a>
+        )}
+      </div>
+    </div>
     <slot />
   </body>
 </html>

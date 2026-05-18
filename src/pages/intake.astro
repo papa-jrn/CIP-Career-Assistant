@@ -65,11 +65,11 @@ function fieldValue(name: keyof IntakeForm) {
         <div id="intake-save-status" class="mt-4">
           {savedIntake ? (
             <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
-              Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.
+              Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}{signedInEmail ? ` for ${signedInEmail}` : ""}.
             </p>
           ) : (
             <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
-              No saved intake has been loaded for this session yet.
+              {signedInEmail ? `Signed in as ${signedInEmail}. No saved intake has been loaded for this session yet.` : "You are not signed in. Save and analysis can run, but persistence requires sign-in."}
             </p>
           )}
         </div>

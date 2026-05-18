@@ -1,4 +1,5 @@
 import type { AdvisorAnalysis } from "@/lib/cip/advisor";
+import type { EvidenceSufficiencyPhase } from "@/lib/cip/evidence-sufficiency";
 import type { IntakeForm } from "@/lib/cip/intake";
 
 export interface EvidenceCard {
@@ -18,23 +19,41 @@ export interface EvidenceResponsePayload {
   sourceNote: string;
 }
 
+export interface EvidenceCardOptions {
+  phase?: EvidenceSufficiencyPhase;
+}
+
 export function buildEvidenceCards(
   intake: Partial<IntakeForm>,
   draft?: { evidenceChecklist?: string[]; nextQuestions?: string[] },
   advisor?: Partial<AdvisorAnalysis>,
+  options: EvidenceCardOptions = {},
 ): EvidenceCard[] {
+  if (options.phase === "complete") return [];
+
   const cards: EvidenceCard[] = [];
+  const enhancementOnly = options.phase === "enhancement";
 
   for (const [index, question] of (advisor?.followUpQuestions ?? draft?.nextQuestions ?? []).entries()) {
     const isOpportunityQuestion = isOpportunityMappingQuestion(question);
+    const isEnhancementQuestion = enhancementOnly || isEnhancementPrompt(question);
     cards.push({
       id: `advisor-${index}`,
-      source: isOpportunityQuestion ? "opportunity_mapping" : "advisor_question",
+      source: isOpportunityQuestion || isEnhancementQuestion ? "opportunity_mapping" : "advisor_question",
       question,
-      whyItMatters: isOpportunityQuestion
+      whyItMatters: isEnhancementQuestion
+        ? "The evidence base is already strong. This final pass is only for strengthening the most useful positioning angles before opportunity mapping."
+        : isOpportunityQuestion
         ? "The evidence base is strong enough to start turning the profile into a search, employer, and networking map."
         : "This answer helps turn the analysis from a hypothesis into a defensible career story.",
-      helpfulAnswer: isOpportunityQuestion
+      helpfulAnswer: isEnhancementQuestion
+        ? [
+            "A missing accomplishment or project that would sharpen the strongest story",
+            "A direction, industry, or employer type to avoid",
+            "A private detail that can guide strategy without becoming public copy",
+            "Which proof-backed story should anchor the next phase",
+          ]
+        : isOpportunityQuestion
         ? [
             "Target industries, employer types, or exclusions",
             "Geography, commute, remote, or hybrid constraints",
@@ -49,6 +68,8 @@ export function buildEvidenceCards(
           ],
     });
   }
+
+  if (enhancementOnly) return dedupeCards(cards).slice(0, 6);
 
   for (const [index, gap] of (draft?.evidenceChecklist ?? []).entries()) {
     if (!isOpenGap(gap)) continue;
@@ -216,6 +237,13 @@ function isOpportunityMappingQuestion(question: string) {
     "introduction",
     "outreach",
   ].some((term) => normalized.includes(term));
+}
+
+function isEnhancementPrompt(question: string) {
+  const normalized = question.toLowerCase();
+  return ["enhance", "stronger", "sharpen", "underweighted", "anchor", "private", "avoid"].some((term) =>
+    normalized.includes(term),
+  );
 }
 
 function gapToQuestion(gap: string) {

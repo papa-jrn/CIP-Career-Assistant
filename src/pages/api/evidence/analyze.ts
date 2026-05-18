@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, type AdvisorAnalysis, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
 import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-builder";
+import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "@/lib/cip/source-analysis";
 import { isSameOriginRequest } from "@/lib/security";
@@ -97,9 +98,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     const draft = buildIdentityDraft(intake);
-    const advisor = await buildAdvisorAnalysis(intake, draft, combinedEvidence, {
-      evidenceRound: (analysisCount ?? 0) + 1,
+    const evidenceRound = (analysisCount ?? 0) + 1;
+    const sufficiency = calculateEvidenceSufficiency(intake, combinedEvidence, {
+      evidenceRound,
       sourceEvidenceCount: sourceEvidence.length,
+    });
+    const advisor = await buildAdvisorAnalysis(intake, draft, combinedEvidence, {
+      evidenceRound,
+      sourceEvidenceCount: sourceEvidence.length,
+      sufficiency,
     });
 
     const { error: saveError } = await supabase.from("career_sources").insert({
@@ -111,6 +118,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         intake_created_at: intakeRow?.created_at ?? null,
         evidence_count: evidenceResponses.length,
         source_evidence_count: sourceEvidence.length,
+        evidence_sufficiency: sufficiency,
         advisor,
         created_at: new Date().toISOString(),
       }),
@@ -121,13 +129,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-sm font-semibold text-[var(--warning)]">Re-analysis completed, but saving the analysis failed: ${escapeHtml(saveError.message)}</p>
-          ${renderAnalysis(advisor, combinedEvidence.length)}
-          ${renderEvidenceQuestionCardsUpdate(intake, draft, advisor)}
+          ${renderAnalysis(advisor, combinedEvidence.length, sufficiency)}
+          ${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}
         </div>
       `);
     }
 
-    return html(`${renderAnalysis(advisor, combinedEvidence.length)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor)}`);
+    return html(`${renderAnalysis(advisor, combinedEvidence.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}`);
   } catch (error) {
     return html(
       `<p class="text-sm font-semibold text-red-700">Evidence re-analysis failed: ${escapeHtml(error instanceof Error ? error.message : "Unexpected error.")}</p>`,
@@ -175,7 +183,9 @@ function parseEvidenceResponse(value: string | null): AdvisorEvidenceResponse | 
   }
 }
 
-function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number) {
+function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number, sufficiency: EvidenceSufficiencyScore) {
+  const isComplete = sufficiency.phase === "complete";
+  const isEnhancement = sufficiency.phase === "enhancement";
   return `
     <section class="rounded-lg border border-[var(--line)] bg-[var(--background)] p-5">
       <div class="flex flex-wrap items-start justify-between gap-3">
@@ -183,17 +193,18 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number) {
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence re-analysis</p>
           <h2 class="mt-1 text-xl font-semibold">Updated advisor readout</h2>
         </div>
-        <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">${evidenceCount} evidence answer${evidenceCount === 1 ? "" : "s"}</span>
+        <div class="flex flex-wrap gap-2">
+          <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">${evidenceCount} evidence answer${evidenceCount === 1 ? "" : "s"}</span>
+          <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">Evidence score ${sufficiency.score}</span>
+        </div>
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(advisor.summary)}</p>
-      <div class="mt-5 grid gap-4 lg:grid-cols-3">
+      <div class="mt-5 grid gap-4 ${isComplete ? "lg:grid-cols-2" : "lg:grid-cols-3"}">
         ${renderList("Stronger positioning", advisor.positioning)}
         ${renderList("Remaining proof gaps", advisor.skillGaps)}
-        ${renderList("Next step questions", advisor.followUpQuestions)}
+        ${isComplete ? "" : renderList(isEnhancement ? "Final enhancement questions" : "Next step questions", advisor.followUpQuestions)}
       </div>
-      <p class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
-        New evidence-gathering questions have been generated from this analysis. Scroll down to the updated research gathering cards below and answer the next round there.
-      </p>
+      ${renderSufficiencyNotice(sufficiency)}
       <div class="mt-5 grid gap-4 lg:grid-cols-2">
         <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
           <h3 class="text-sm font-semibold">Evidence ledger updates</h3>
@@ -216,12 +227,43 @@ function renderEvidenceQuestionCardsUpdate(
   intake: IntakeForm,
   draft: Parameters<typeof buildAdvisorAnalysis>[1],
   advisor: AdvisorAnalysis,
+  sufficiency: EvidenceSufficiencyScore,
 ) {
-  const cards = buildEvidenceCards(intake, draft, advisor);
+  const cards = buildEvidenceCards(intake, draft, advisor, { phase: sufficiency.phase });
   return `
     <section id="evidence-question-cards" hx-swap-oob="innerHTML">
       ${renderEvidenceCardsHtml(cards)}
     </section>
+  `;
+}
+
+function renderSufficiencyNotice(sufficiency: EvidenceSufficiencyScore) {
+  if (sufficiency.phase === "complete") {
+    return `
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence phase complete</p>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(sufficiency.reason)}</p>
+        <div class="mt-4 flex flex-wrap gap-3">
+          <a class="cip-fancy-button" href="/opportunities"><span>Find opportunities</span></a>
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/employers"><span>Map target employers</span></a>
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/assets"><span>Prepare career assets</span></a>
+        </div>
+      </div>
+    `;
+  }
+
+  if (sufficiency.phase === "enhancement") {
+    return `
+      <p class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+        Evidence score ${sufficiency.score}: standard proof gathering is now diminishing returns. Scroll down for one final enhancement round, then run the final analysis and move to opportunity mapping.
+      </p>
+    `;
+  }
+
+  return `
+    <p class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+      New evidence-gathering questions have been generated from this analysis. Scroll down to the updated research gathering cards below and answer the next round there.
+    </p>
   `;
 }
 

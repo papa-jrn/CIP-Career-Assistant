@@ -1361,6 +1361,82 @@ When the evidence phase reaches this point, the Evidence page should switch to a
 - Keep recently saved evidence visible for audit/history.
 - Move LinkedIn/profile/network gathering into Opportunities or Assets instead of continuing to crowd the Evidence step.
 
+## Evidence Sufficiency Score Plan
+
+The app needs a measurable stopping point so it does not trap users in a forever loop of proof gathering.
+
+Use an **Evidence Sufficiency Score**:
+
+```txt
+score_years = clamp(detected_career_years, 5, 20)
+evidence_sufficiency_score = round((useful_evidence_count / score_years) * 100)
+```
+
+Career-years rule:
+
+- Use a minimum denominator of 5 years so early-career users still need enough breadth for a useful analysis.
+- Use a maximum denominator of 20 years so experienced workers are not punished for having 25 or 30 years of history.
+- A 30-year career should be analyzed for relevance, not forced to provide 30 proof items.
+- Hiring strategy usually emphasizes the most relevant 10 to 20 years, not every year in a long career.
+
+Examples:
+
+```txt
+15 useful evidence items / 20 scored career years = 75
+20 useful evidence items / 20 scored career years = 100
+29 useful evidence items / 20 scored career years = 145
+20 useful evidence items / 30 raw career years still uses 20 scored years = 100
+```
+
+Useful evidence should be deduplicated and strategy-relevant. It can include saved evidence answers, public project/source analysis, measurable outcomes, leadership/scope examples, constraints, exclusions, compensation goals, and source-backed work samples. Repeated, vague, or very low-confidence answers should not inflate the score.
+
+Linked sources must be counted as individual evidence items, not as one bulk answer. Seven GitHub repositories plus three article/project links should count as up to ten distinct evidence items once they are supplied or analyzed, assuming they are not duplicate URLs. A single evidence answer that contains multiple distinct URLs should credit each distinct URL. A `source_analysis` run should count each analyzed source item, not merely the fact that one source-analysis run occurred.
+
+Article, blog, and resource index pages should be expanded when possible. If a user provides a page such as `/articles/` that links to 10 authored articles, the analyzer should discover and inspect the individual article URLs within a reasonable cap instead of counting the index page as one generic website. Weak or unverified sources should still appear in the record, but should carry less scoring weight than fetched, moderate, or strong evidence.
+
+Evidence phases:
+
+1. **Evidence Building**
+   - Score below 75.
+   - Ask direct evidence questions.
+   - Goal: establish what the person has done and what can be proven.
+
+2. **Evidence Strengthening**
+   - Score 75 to 99.
+   - Ask fewer, sharper questions.
+   - Goal: fill only the gaps that could change positioning, compensation strategy, target roles, or employer search.
+
+3. **Final Enhancement**
+   - Score 100+ before the final closeout.
+   - Stop asking generic proof questions.
+   - Ask one final round of enhancement questions:
+     - "Can you think of anything that would make this strong positioning angle even stronger?"
+     - "Is there one accomplishment the analysis has underweighted?"
+     - "Which proof-backed story should anchor resume, LinkedIn, outreach, and interviews?"
+     - "Is there anything impressive but private that should guide strategy without becoming public copy?"
+
+4. **Evidence Complete**
+   - After the final enhancement round, or when the user has 25+ useful evidence items, or after 4 evidence-analysis rounds.
+   - Stop generating evidence cards.
+   - Show the final evidence-phase analysis.
+   - Move the main CTA to Opportunities, Employers, and Assets.
+
+Hard stop rules:
+
+- If `useful_evidence_count >= 25`, evidence gathering is complete.
+- If `evidence_analysis_round >= 4`, evidence gathering is complete unless a true contradiction blocks strategy.
+- If `evidence_sufficiency_score >= 100`, the next question set must be a final enhancement round, not another proof round.
+- If `evidence_sufficiency_score >= 100` and the app has already had enough analysis rounds to close out, evidence gathering is complete.
+- If a question would not change targeting, compensation strategy, employer discovery, or career assets, suppress it.
+
+The user-facing language should make the transition clear:
+
+> "You have provided enough evidence for a strong career analysis. One final refinement round will focus only on strengthening your best positioning angles. After that, we will move into opportunity mapping."
+
+After closeout:
+
+> "Evidence phase complete. Your profile is ready for opportunity mapping."
+
 ## Opportunity Handoff Plan
 
 The holistic product goal is not just to analyze a resume. CIP should help a user build a proof-backed understanding of their background, then turn that understanding into a path toward the best-fit job at the pay scale they want.

@@ -8,6 +8,7 @@ export interface SourceSnapshot {
   fetched: boolean;
   text: string;
   error?: string;
+  discoveredUrls?: string[];
 }
 
 export interface SourceAnalysisItem {
@@ -45,9 +46,28 @@ export function collectEvidenceUrls(intake: Partial<IntakeForm>, evidenceRespons
 
 export async function fetchSourceSnapshots(urls: string[]) {
   const snapshots: SourceSnapshot[] = [];
+  const seen = new Set<string>();
   for (const url of urls.slice(0, 12)) {
+    const cleaned = cleanUrl(url);
+    if (seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    snapshots.push(await fetchSourceSnapshot(cleaned));
+  }
+
+  const discovered = snapshots
+    .flatMap((snapshot) => snapshot.discoveredUrls ?? [])
+    .filter((url) => {
+      const cleaned = cleanUrl(url);
+      if (seen.has(cleaned)) return false;
+      seen.add(cleaned);
+      return true;
+    })
+    .slice(0, Math.max(0, 20 - snapshots.length));
+
+  for (const url of discovered) {
     snapshots.push(await fetchSourceSnapshot(url));
   }
+
   return snapshots;
 }
 
@@ -146,6 +166,7 @@ async function fetchSourceSnapshot(url: string): Promise<SourceSnapshot> {
       sourceType,
       fetched: true,
       text: excerpt(text, 12_000),
+      discoveredUrls: contentType.includes("html") ? extractSameSiteArticleLinks(body, url) : [],
     };
   } catch (error) {
     return {
@@ -157,6 +178,38 @@ async function fetchSourceSnapshot(url: string): Promise<SourceSnapshot> {
       error: error instanceof Error ? error.message : "Unknown fetch error",
     };
   }
+}
+
+function extractSameSiteArticleLinks(html: string, pageUrl: string) {
+  const links = new Set<string>();
+  let base: URL;
+
+  try {
+    base = new URL(pageUrl);
+  } catch {
+    return [];
+  }
+
+  for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
+    try {
+      const parsed = new URL(match[1], base);
+      if (parsed.hostname !== base.hostname) continue;
+      if (parsed.href === base.href) continue;
+      if (!looksLikeArticleLink(parsed)) continue;
+      links.add(cleanUrl(parsed.href));
+    } catch {
+      continue;
+    }
+  }
+
+  return [...links].slice(0, 15);
+}
+
+function looksLikeArticleLink(url: URL) {
+  const path = url.pathname.toLowerCase();
+  if (path.includes("/tag/") || path.includes("/category/") || path.includes("/author/")) return false;
+  if (path.endsWith("/articles/") || path.endsWith("/blog/") || path.endsWith("/news/")) return false;
+  return ["/articles/", "/article/", "/blog/", "/posts/", "/post/", "/news/", "/insights/"].some((segment) => path.includes(segment));
 }
 
 async function fetchVideoMetadata(url: string) {

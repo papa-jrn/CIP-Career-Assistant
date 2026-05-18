@@ -1,4 +1,5 @@
 import type { IntakeForm } from "@/lib/cip/intake";
+import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 
 export interface AdvisorAnalysis {
   mode: "ai" | "deterministic";
@@ -50,6 +51,7 @@ export interface AdvisorEvidenceResponse {
 export interface AdvisorAnalysisContext {
   evidenceRound?: number;
   sourceEvidenceCount?: number;
+  sufficiency?: EvidenceSufficiencyScore;
 }
 
 export async function buildAdvisorAnalysis(
@@ -79,7 +81,10 @@ async function tryBuildAiAnalysis(
   context: AdvisorAnalysisContext,
   openAiKey: string,
 ) {
-  const shouldPivotToOpportunityMapping = shouldMoveToOpportunityMapping(evidenceResponses, context);
+  const sufficiency = context.sufficiency ?? calculateEvidenceSufficiency(intake, evidenceResponses, context);
+  const shouldPivotToOpportunityMapping = shouldMoveToOpportunityMapping(sufficiency);
+  const shouldAskEnhancementQuestions = sufficiency.phase === "enhancement";
+  const isComplete = sufficiency.phase === "complete";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -98,7 +103,9 @@ async function tryBuildAiAnalysis(
           role: "user",
           content: JSON.stringify({
             task: shouldPivotToOpportunityMapping
-              ? "The user has completed multiple evidence rounds. Stop asking low-value proof questions unless a critical claim is unsupported. Produce a readiness-oriented re-analysis and make follow-up questions about opportunity mapping: target industries, geography/remote preferences, employer categories, network connections, LinkedIn/alumni data the user can provide, and next search strategy."
+              ? isComplete
+                ? "The evidence phase is complete. Do not ask for more proof. Produce a final evidence-phase analysis and make follow-up questions about opportunity mapping only: target roles, target industries, geography/remote preferences, employer categories, network data the user can provide, and next search strategy."
+                : "The evidence score is saturated. Produce one final enhancement-oriented re-analysis. Follow-up questions must ask whether the user can strengthen already-promising positioning angles; do not ask generic proof questions, tiny metrics, or repeated involvement questions."
               : evidenceResponses.length
               ? "Re-analyze this career intake using saved evidence responses and linked-source analysis. Retire stale proof gaps and follow-up questions that are already answered by the resume, evidence, or source analysis. Promote stronger claims when the evidence supports them. Keep only genuinely unresolved gaps as follow-up questions."
               : "Analyze this career intake and produce strategic follow-up questions, positioning, skill gaps, and role briefs.",
@@ -106,7 +113,9 @@ async function tryBuildAiAnalysis(
               summary: "One concise paragraph.",
               positioning: ["3-5 source-grounded positioning points."],
               followUpQuestions: shouldPivotToOpportunityMapping
-                ? ["4-6 opportunity-mapping questions about industries, geography/remote, target employer types, and network data. Do not ask for tiny metrics unless essential."]
+                ? shouldAskEnhancementQuestions
+                  ? ["3-5 final enhancement questions that ask whether anything would sharpen the strongest positioning angles before final analysis."]
+                  : ["4-6 opportunity-mapping questions about target roles, industries, geography/remote, target employer types, and network data. Do not ask for more proof."]
                 : ["4-6 questions that would improve analysis quality and are not already answered by supplied evidence."],
               skillGaps: shouldPivotToOpportunityMapping
                 ? ["3-5 remaining go-to-market gaps such as target industries, geography, employer list, networking map, or LinkedIn data access."]
@@ -141,6 +150,7 @@ async function tryBuildAiAnalysis(
             draft,
             evidenceResponses,
             analysisContext: context,
+            evidenceSufficiency: sufficiency,
             stale_question_guardrails: [
               "Do not ask the user to clarify involvement with an organization if the resume names a leadership role there and source evidence supports related work.",
               "Do not ask for industries to exclude if exclusions already appear in intake or saved evidence.",
@@ -148,6 +158,8 @@ async function tryBuildAiAnalysis(
               "For video/story production links, use metadata as evidence of a public artifact, but ask for transcript, role, audience, reach, or production responsibility if those are missing.",
               "After 3 evidence rounds or many saved evidence answers, do not keep asking increasingly narrow proof questions such as exact budgets or team sizes unless they are crucial to a target role.",
               "Late-stage questions should help the user move toward connections: target industries, target geography, remote/hybrid filters, likely employers, LinkedIn connections, alumni networks, and warm introductions.",
+              "When evidence sufficiency is saturated, follow-up questions must shift from 'prove this' to 'can anything strengthen this already useful positioning angle?'",
+              "When evidence sufficiency is complete, do not produce evidence-gathering questions. Produce opportunity-mapping next steps instead.",
             ],
           }),
         },
@@ -307,7 +319,8 @@ function buildDeterministicAnalysis(
 ): AdvisorAnalysis {
   const strongest = draft.strengths.slice(0, 4);
   const evidenceText = evidenceResponses.map((response) => `${response.question}\n${response.answer}\n${response.sourceNote}`).join("\n").toLowerCase();
-  const shouldPivot = shouldMoveToOpportunityMapping(evidenceResponses, context);
+  const sufficiency = context.sufficiency ?? calculateEvidenceSufficiency(intake, evidenceResponses, context);
+  const shouldPivot = shouldMoveToOpportunityMapping(sufficiency);
   const roleBriefs = draft.possibleRoles.slice(0, 5).map((role) => ({
     role,
     whyItFits: buildRoleRationale(role, strongest),
@@ -320,7 +333,9 @@ function buildDeterministicAnalysis(
     summary:
       evidenceResponses.length
         ? shouldPivot
-          ? `This profile now has enough saved evidence to shift from proof gathering into opportunity and connection mapping. The next useful work is choosing target industries, geography/remote constraints, employer categories, and network paths.`
+          ? sufficiency.phase === "enhancement"
+            ? `This profile has an evidence sufficiency score of ${sufficiency.score}. The evidence base is strong enough for one final enhancement pass focused on sharpening the best positioning angles before opportunity mapping.`
+            : `This profile has an evidence sufficiency score of ${sufficiency.score}. Standard proof gathering is now diminishing returns; the next useful work is opportunity and connection mapping.`
           : `This re-analysis includes ${evidenceResponses.length} saved evidence answer${evidenceResponses.length === 1 ? "" : "s"}. The strongest next move is to separate answers that are ready for public positioning from answers that still need metrics, sources, or narrower follow-up.`
         : "This draft points toward roles where leadership, operations, communication, and applied AI work can be framed as business value. The next analysis pass should verify proof, compensation fit, and which role families are strongest in the live market.",
     positioning: [
@@ -329,7 +344,9 @@ function buildDeterministicAnalysis(
       "Keep every public-facing claim tied to resume evidence, public links, or user-confirmed examples.",
     ],
     followUpQuestions: shouldPivot
-      ? buildOpportunityMappingQuestions(intake, evidenceText)
+      ? sufficiency.phase === "enhancement"
+        ? buildEnhancementQuestions(intake, evidenceText, strongest)
+        : buildOpportunityMappingQuestions(intake, evidenceText)
       : buildRemainingFollowUpQuestions(draft.nextQuestions, intake, evidenceText),
     skillGaps: shouldPivot
       ? buildOpportunityMappingGaps(intake, evidenceText)
@@ -346,10 +363,26 @@ function buildDeterministicAnalysis(
 }
 
 function shouldMoveToOpportunityMapping(
-  evidenceResponses: AdvisorEvidenceResponse[],
-  context: AdvisorAnalysisContext,
+  sufficiency: EvidenceSufficiencyScore,
 ) {
-  return (context.evidenceRound ?? 0) >= 3 || evidenceResponses.length >= 14 || (context.sourceEvidenceCount ?? 0) >= 8;
+  return sufficiency.phase === "enhancement" || sufficiency.phase === "complete";
+}
+
+function buildEnhancementQuestions(intake: IntakeForm, evidenceText: string, strongest: string[]) {
+  const lead = strongest.slice(0, 2).join(" and ") || intake.target_title || "your strongest career direction";
+  const questions = [
+    `Can you think of anything that would make the ${lead} positioning even stronger before final analysis?`,
+    "Is there one accomplishment, project, or result that the analysis has underweighted so far?",
+    "Which already-proven story should become the anchor for resume, LinkedIn, outreach, and interviews?",
+    "Is there a career direction, industry, or employer type the app should explicitly avoid before opportunity mapping?",
+    "Is there anything impressive but private that should influence strategy without being used in public career materials?",
+  ];
+
+  if (evidenceText.includes("github") || evidenceText.includes("ai")) {
+    questions.push("Among the AI, GitHub, or technical projects already supplied, which one best shows judgment, usefulness, or technical depth?");
+  }
+
+  return questions.slice(0, 6);
 }
 
 function buildOpportunityMappingQuestions(intake: IntakeForm, evidenceText: string) {
