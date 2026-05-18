@@ -142,6 +142,25 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         <p class="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>
       ) : null}
 
+      <section id="networking" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Search and networking strategy</p>
+        <h2 class="mt-1 text-2xl font-semibold">Decide where to look before scaling applications.</h2>
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+          <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h3 class="text-lg font-semibold">Bring in networking data</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Add LinkedIn connections exports, alumni lists, manually entered contacts, or public profile links supplied by the user. CIP should use this to map warm-introduction paths, not scrape private LinkedIn data.
+            </p>
+          </article>
+          <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+            <h3 class="text-lg font-semibold">Create job-board lanes</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Turn the analysis into LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches with target titles, exclusion terms, salary filters, work model, geography, and review rules.
+            </p>
+          </article>
+        </div>
+      </section>
+
       {rankedMatches.length ? (
         <div class="mt-6 grid gap-4">
           {rankedMatches.map((match) => match.opportunities ? (

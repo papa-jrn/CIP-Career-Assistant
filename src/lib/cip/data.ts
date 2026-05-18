@@ -2,10 +2,46 @@ export const navItems = [
   { href: "/", label: "Workbench" },
   { href: "/intake", label: "Intake" },
   { href: "/evidence", label: "Evidence" },
-  { href: "/employers", label: "Employers" },
-  { href: "/opportunities", label: "Opportunities" },
-  { href: "/assets", label: "Assets" },
-  { href: "/briefing", label: "Briefing" },
+  { href: "/#pathway", label: "Action plan" },
+];
+
+export const pathwaySteps = [
+  {
+    step: "01",
+    title: "Turn analysis into career assets",
+    outcome: "Update the resume, LinkedIn profile, portfolio notes, and interview stories from verified evidence.",
+    detail:
+      "Start here when the analysis is solid. The user needs usable public-facing language before outreach or applications scale up.",
+    href: "/assets",
+    cta: "Prepare assets",
+  },
+  {
+    step: "02",
+    title: "Bring in relationship data",
+    outcome: "Add LinkedIn connections, alumni lists, or manually entered contacts to identify warm-introduction paths.",
+    detail:
+      "This should be user-supplied data only. CIP can coach the export/paste workflow and map relationships without scraping private networks.",
+    href: "/opportunities#networking",
+    cta: "Map network",
+  },
+  {
+    step: "03",
+    title: "Find employers by geography",
+    outcome: "Search a target area for businesses, institutions, and regional anchors that match the opportunity criteria.",
+    detail:
+      "Employer discovery should follow the user's target role families, location preferences, compensation needs, and relationship paths.",
+    href: "/employers",
+    cta: "Find businesses",
+  },
+  {
+    step: "04",
+    title: "Choose job-board search lanes",
+    outcome: "Translate the profile into specific LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.",
+    detail:
+      "The goal is not one generic keyword search. The app should produce role families, filters, exclusion terms, and review rules.",
+    href: "/opportunities",
+    cta: "Research roles",
+  },
 ];
 
 export const intakeQuestions = [

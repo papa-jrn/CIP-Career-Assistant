@@ -1536,6 +1536,33 @@ LinkedIn coaching UI should include:
 
 The networking layer should make the user feel guided, not surveilled. The app's job is to help them see relationship paths they already have access to and turn those paths into respectful outreach.
 
+## Next-Step Pathway Product Decision
+
+The product should not expose the post-analysis phase as a flat top menu of disconnected feature pages such as Employers, Opportunities, Assets, and Briefing.
+
+Once the evidence analysis is complete, the user needs a guided sequence:
+
+1. **Turn analysis into career assets**
+   - Update the resume first, because it is the proof-backed base for LinkedIn, outreach, applications, and interviews.
+   - Generate LinkedIn/profile updates, portfolio positioning, and interview stories from verified evidence only.
+
+2. **Bring in networking data**
+   - Coach the user to download or paste LinkedIn connection data, alumni lists, manually entered contacts, and public profile links they are allowed to use.
+   - Use that data to build a warm-introduction map against target employers and industries.
+
+3. **Find businesses in a target geography**
+   - Ask for the geographic area, radius, sectors, work model, compensation constraints, and target employer categories.
+   - Use the completed profile to rank employers by fit, relationship potential, and likely role alignment.
+
+4. **Define job-board search lanes**
+   - Translate the analysis into specific LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.
+   - Produce role-family keywords, exclusion terms, filters, salary/work-mode requirements, and a rule for deciding whether a listing deserves deeper review.
+
+5. **Generate a weekly action cadence**
+   - The briefing should summarize what changed, which employers or roles deserve attention, which assets need revision, and what outreach should happen next.
+
+The Workbench should become the user's primary handoff surface after evidence completion. Employers, Opportunities, Assets, and Briefing can remain underlying workspaces, but the user should experience them as steps in an action plan rather than unrelated destinations.
+
 ---
 
 ## Geography Engine Fix
