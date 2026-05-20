@@ -1563,6 +1563,234 @@ Once the evidence analysis is complete, the user needs a guided sequence:
 
 The Workbench should become the user's primary handoff surface after evidence completion. Employers, Opportunities, Assets, and Briefing can remain underlying workspaces, but the user should experience them as steps in an action plan rather than unrelated destinations.
 
+## Career Asset Workflow Decision
+
+The first post-analysis asset should be a refreshed **master resume**.
+
+The app should explain this carefully. The user already provided a resume, but that original resume was source material for analysis. The new master resume is different: it is the first public-facing strategy artifact created from the completed evidence analysis.
+
+The master resume should incorporate:
+
+- Verified accomplishments from the original resume
+- Evidence Builder answers
+- Linked source analysis
+- User-approved positioning
+- Target role lanes
+- Claim safety notes
+- Missing metrics or proof gaps
+- Public-use boundaries
+
+The user should not be asked to write five different resumes immediately. The recommended first pass is:
+
+1. **Primary lane**
+   - The strongest current career direction with the best evidence, market plausibility, and compensation path.
+
+2. **Strong alternate**
+   - A credible adjacent direction that uses much of the same evidence but opens a different employer category or job-title family.
+
+3. **Research lane**
+   - A promising direction that needs job-board, employer, salary, or networking validation before it deserves a full resume variant.
+
+Three lanes are enough for the first asset pass. Five lanes may be useful later as parked research directions, but five active resume directions too early can dilute the user's positioning and make the resume feel generic. The product should let the user save additional lanes, but it should guide the first resume around a primary lane and one or two close variants.
+
+### Positioning Brief
+
+Before generating resume copy, CIP should create a positioning brief and ask the user to approve or adjust it.
+
+The positioning brief should include:
+
+- Primary target lane
+- Strong alternate lane
+- Research lane
+- Target compensation range
+- Geography and remote/hybrid preference
+- Employer categories to prioritize
+- Industries to pursue
+- Industries or work contexts to exclude
+- Core professional promise
+- Strongest proof-backed story
+- Top evidence items to feature
+- Claims that need user confirmation
+- Claims that should remain private or strategy-only
+- Hiring-manager concerns that the resume must answer
+
+The positioning brief is not a resume. It is the decision layer that prevents the app from producing polished but unfocused copy.
+
+### Master Resume Process
+
+Once the positioning brief is approved, the app should walk the user through:
+
+1. **Resume inventory**
+   - Show what the old resume already proves.
+   - Show what the new evidence adds.
+   - Show what should be removed, de-emphasized, or moved to LinkedIn/portfolio.
+
+2. **Narrative spine**
+   - Define the headline, summary, and top-of-resume story.
+   - Make sure the story matches the primary lane and does not overclaim.
+
+3. **Experience rewrite**
+   - Rewrite bullets around situation, action, scope, result, and proof.
+   - Preserve real details and user voice.
+   - Mark missing numbers or vague outcomes as follow-up questions.
+
+4. **Skills and keywords**
+   - Pull keywords from target lanes and real postings.
+   - Include only skills the evidence can support or the user explicitly confirms.
+
+5. **Human review**
+   - Ask the user to approve, soften, strengthen, or reject each major claim.
+   - Keep an audit trail from resume bullet back to supporting evidence.
+
+6. **Variant creation**
+   - After the master resume is approved, create targeted variants for the primary lane and close alternates.
+   - Do not create variants for research lanes until market validation supports them.
+
+### Interactive Resume Builder
+
+The Assets page should do the work, not merely describe it.
+
+The first implementation should provide an editable master resume draft that:
+
+- Defaults to the primary lane
+- Still shows the strong alternate and research lane for context
+- Lets the user switch the draft's target lane before editing
+- Prefills name, contact, headline, summary, skills, experience bullets, proof bank notes, and review notes from the latest saved intake/evidence analysis
+- Allows the user to edit every section directly
+- Exports the edited draft, not the original generated draft
+
+Initial export formats:
+
+- Word-compatible `.doc`
+- Rich text `.rtf`
+- Browser print/save-to-PDF flow
+
+Future export improvements:
+
+- True `.docx` generation
+- Server-side PDF rendering
+- Saved resume versions in Supabase
+- Per-lane resume variants
+- Claim-level approval states
+- Evidence links from each resume bullet back to the proof ledger
+
+The important product rule: the app can draft, but the user remains the editor and final approver.
+
+### Resume Builder Tuning Pause
+
+Current status:
+
+- The Assets page now has a functional editable resume builder.
+- The builder can export edited content as Word-compatible `.doc`, rich text `.rtf`, and browser print/save-to-PDF.
+- The first rough draft now excludes internal proof-bank and review-note scaffolding from the exported resume.
+- The exported resume uses more appropriate public sections: headline, summary, core skills, selected impact, professional experience, education, and additional credentials/projects.
+
+However, the resume output is **not yet strong enough** for a real senior job seeker.
+
+Known issues:
+
+- Professional experience formatting is still too raw.
+- Education formatting is too loose and can appear mixed with unrelated copied resume text.
+- The builder does not yet preserve or infer proper role blocks with employer, title, dates, location, and bullets.
+- The resume does not yet feel like a polished document for someone with 20+ years of experience.
+- The generated experience section can still read like extracted notes instead of a finished resume.
+- The app needs better parsing before it can responsibly rebuild a master resume.
+
+Next tuning direction:
+
+1. Parse the original resume into structured resume blocks:
+   - Name and contact
+   - Summary
+   - Skills
+   - Employer / title / date groups
+   - Bullets under each role
+   - Education
+   - Credentials, projects, awards, and public links
+
+2. Preserve senior-career structure:
+   - Do not flatten 20+ years of experience into a generic bullet pile.
+   - Keep career chronology readable.
+   - Let the user decide whether older roles should be compressed, grouped, or omitted.
+
+3. Improve education handling:
+   - Extract degree, institution, field, and graduation year when present.
+   - Keep Dartmouth / bachelor's degree information visible and formatted properly.
+   - Do not mix education with portfolio links or review notes.
+
+4. Add editing controls by section:
+   - Add role block
+   - Remove role block
+   - Add bullet
+   - Mark bullet as verified, needs metric, or do not use
+   - Move older experience into "Earlier Career"
+
+5. Separate internal strategy from public resume:
+   - Proof bank, claim safety notes, and review notes should remain visible to the user as guidance.
+   - They should never export as resume sections.
+
+6. Upgrade exports:
+   - Move from simple HTML `.doc` to true `.docx`.
+   - Add better print/PDF layout styles.
+   - Add saved resume versions before variant generation.
+
+Until this tuning is complete, the resume builder should be treated as a prototype workflow, not a finished resume product.
+
+### Avoiding Generic AI Resume Output
+
+CIP should assume the user is worried about AI-generated resume detection and recruiter skepticism.
+
+The product should not promise to "beat AI detectors." Instead, it should reduce the reasons a resume feels AI-generated:
+
+- Preserve the user's actual language where it is clear and strong.
+- Use specific evidence, names, contexts, tools, audiences, and outcomes.
+- Avoid inflated adjectives, generic transformation language, and repeated bullet structures.
+- Do not invent metrics.
+- Vary bullet rhythm and sentence construction.
+- Keep claims proportional to the evidence.
+- Separate verified facts from inferred strengths.
+- Require user approval before turning sensitive or private evidence into public copy.
+- Keep a proof ledger so the user can defend every major claim in an interview.
+
+The desired output is not "undetectable AI writing." The desired output is a truthful, specific, human-edited career asset that could only plausibly belong to this user.
+
+### Asset Sequence After Master Resume
+
+After the master resume is approved, the app should generate the remaining assets in this order:
+
+1. **LinkedIn/profile update**
+   - Headline
+   - About section
+   - Experience updates
+   - Featured links
+   - Skills and keyword alignment
+
+2. **Portfolio and proof bank**
+   - Project summaries
+   - Case-study outlines
+   - Public links to feature
+   - Claims safe for public use
+
+3. **Outreach assets**
+   - Recruiter messages
+   - Warm-introduction requests
+   - Alumni messages
+   - Employer-specific notes
+
+4. **Interview assets**
+   - STAR stories
+   - Career transition explanation
+   - Compensation narrative
+   - Risk/gap answers
+
+5. **Search assets**
+   - LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers search strings
+   - Target titles
+   - Exclusion keywords
+   - Salary and work-model filters
+   - Review rules for deciding whether a posting deserves deeper research
+
+The Assets page should therefore behave like a guided preparation sequence, not a static list of recommendations.
+
 ---
 
 ## Geography Engine Fix

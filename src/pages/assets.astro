@@ -1,33 +1,695 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems, recommendations } from "../lib/cip/data";
+import { navItems } from "../lib/cip/data";
+import type { AdvisorAnalysis } from "../lib/cip/advisor";
+import { createServer } from "../lib/supabase/server";
+
+type IntakeSource = {
+  intake?: Record<string, unknown>;
+  draft?: {
+    strengths?: string[];
+    possibleRoles?: string[];
+    evidenceChecklist?: string[];
+    nextQuestions?: string[];
+  };
+  advisor?: Partial<AdvisorAnalysis>;
+};
+
+let latestSource: IntakeSource | null = null;
+let latestAdvisor: Partial<AdvisorAnalysis> | null = null;
+let assetState: "ready" | "signin" | "empty" | "local" | "error" = "local";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: intakeData } = await supabase
+        .from("career_sources")
+        .select("extracted_text")
+        .eq("user_id", user.id)
+        .eq("source_type", "resume_intake")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: analysisData } = await supabase
+        .from("career_sources")
+        .select("extracted_text")
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_analysis")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      latestSource = parseIntakeSource(intakeData?.extracted_text ?? null);
+      latestAdvisor = parseAnalysisAdvisor(analysisData?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
+      assetState = latestSource || latestAdvisor ? "ready" : "empty";
+    } else {
+      assetState = "signin";
+    }
+  } catch {
+    assetState = "error";
+  }
+}
+
+const hasPersonalizedAssets = assetState === "ready" && Boolean(latestSource || latestAdvisor);
+const targetLanes = buildTargetLanes(latestSource, latestAdvisor);
+const positioningInputs = buildPositioningInputs(latestSource, latestAdvisor);
+const proofItems = buildProofItems(latestSource, latestAdvisor);
+const resumeDraft = buildResumeDraft(latestSource, latestAdvisor, targetLanes, positioningInputs, proofItems);
+const resumeGuardrails = [
+  "Use the user's actual phrasing where possible, then tighten for clarity instead of replacing everything with generic polished language.",
+  "Keep every public claim traceable to resume text, saved evidence, source analysis, or explicit user approval.",
+  "Do not invent metrics. If a number is missing, mark it as a follow-up question or write the bullet without a fake metric.",
+  "Vary sentence structure, action verbs, and bullet length so the resume reads like a specific human career, not a template.",
+  "Keep sensitive or private evidence in the strategy layer unless the user approves it for public use.",
+];
+
+function parseIntakeSource(value: string | null): IntakeSource | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as IntakeSource;
+  } catch {
+    return null;
+  }
+}
+
+function parseAnalysisAdvisor(value: string | null): Partial<AdvisorAnalysis> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.advisor ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildTargetLanes(source: IntakeSource | null, advisor: Partial<AdvisorAnalysis> | null) {
+  const briefs = Array.isArray(advisor?.roleBriefs) ? advisor.roleBriefs : [];
+  if (briefs.length) {
+    return briefs.slice(0, 3).map((brief, index) => ({
+      label: index === 0 ? "Primary lane" : index === 1 ? "Strong alternate" : "Research lane",
+      role: brief.role,
+      rationale: brief.whyItFits,
+      missing: brief.evidenceNeeded,
+    }));
+  }
+
+  const roles = source?.draft?.possibleRoles ?? [];
+  if (roles.length) {
+    return roles.slice(0, 3).map((role, index) => ({
+      label: index === 0 ? "Primary lane" : index === 1 ? "Strong alternate" : "Research lane",
+      role,
+      rationale: "Pulled from the saved intake draft. Run evidence analysis before turning this into final resume positioning.",
+      missing: "Needs proof, salary fit, target industry comparison, and real posting validation.",
+    }));
+  }
+
+  return [
+    {
+      label: "Primary lane",
+      role: "Best-supported target role",
+      rationale: "Choose the role family with the strongest evidence, clearest compensation path, and least narrative strain.",
+      missing: "Needs latest evidence analysis.",
+    },
+    {
+      label: "Strong alternate",
+      role: "Adjacent role family",
+      rationale: "Keep one credible adjacent direction so the user is not locked into a single search phrase.",
+      missing: "Needs posting comparison and proof check.",
+    },
+    {
+      label: "Research lane",
+      role: "Experimental direction",
+      rationale: "Use this as a market test before building a full resume variant.",
+      missing: "Needs employer and job-board validation.",
+    },
+  ];
+}
+
+function buildPositioningInputs(source: IntakeSource | null, advisor: Partial<AdvisorAnalysis> | null) {
+  const positioning = Array.isArray(advisor?.positioning) ? advisor.positioning : [];
+  const gaps = Array.isArray(advisor?.skillGaps) ? advisor.skillGaps : [];
+  const questions = Array.isArray(advisor?.followUpQuestions) ? advisor.followUpQuestions : [];
+  return [
+    {
+      label: "Core promise",
+      detail: positioning[0] ?? source?.draft?.strengths?.[0] ?? "What problem does this person reliably solve for an employer?",
+    },
+    {
+      label: "Proof to feature",
+      detail: positioning[1] ?? source?.draft?.evidenceChecklist?.[0] ?? "Which evidence-backed story should anchor the resume, LinkedIn, outreach, and interviews?",
+    },
+    {
+      label: "Risk to resolve",
+      detail: gaps[0] ?? questions[0] ?? "What question would a hiring manager still have after reading the current materials?",
+    },
+  ];
+}
+
+function buildProofItems(source: IntakeSource | null, advisor: Partial<AdvisorAnalysis> | null) {
+  const ledger = Array.isArray(advisor?.evidenceLedger) ? advisor.evidenceLedger : [];
+  const verified = ledger
+    .filter((item) => item.status === "verified_from_resume" || item.status === "stated_by_user")
+    .slice(0, 4)
+    .map((item) => ({
+      claim: item.claim,
+      evidence: item.evidence,
+    }));
+
+  if (verified.length) return verified;
+
+  return (source?.draft?.strengths ?? []).slice(0, 4).map((strength) => ({
+    claim: strength,
+    evidence: "Draft signal from intake. Verify before using as resume copy.",
+  }));
+}
+
+function buildResumeDraft(
+  source: IntakeSource | null,
+  advisor: Partial<AdvisorAnalysis> | null,
+  lanes: ReturnType<typeof buildTargetLanes>,
+  positioning: ReturnType<typeof buildPositioningInputs>,
+  proofs: ReturnType<typeof buildProofItems>,
+) {
+  const intake = source?.intake ?? {};
+  const fullName = textValue(intake.full_name) || "Your Name";
+  const email = textValue(intake.email);
+  const linkedin = textValue(intake.linkedin_url);
+  const targetTitle = textValue(intake.target_title) || lanes[0]?.role || "Target Role";
+  const workModes = Array.isArray(intake.work_modes) ? intake.work_modes.map(String).filter(Boolean).join(", ") : "";
+  const salary = intake.salary_target ? `$${Number(intake.salary_target).toLocaleString()} target` : "";
+  const constraints = textValue(intake.career_constraints);
+  const summaryParts = [
+    positioning[0]?.detail,
+    positioning[1]?.detail,
+    constraints ? `Search context: ${constraints}` : "",
+  ].filter(Boolean);
+  const strengths = [
+    ...(source?.draft?.strengths ?? []),
+    ...(Array.isArray(advisor?.positioning) ? advisor.positioning : []),
+  ];
+  const skills = uniqueWords(strengths.join(" "), [
+    "Leadership",
+    "Operations",
+    "AI adoption",
+    "Product strategy",
+    "Research",
+    "Communication",
+    "Automation",
+    "Program management",
+    "Stakeholder alignment",
+    "Market analysis",
+    "Portfolio storytelling",
+    "Process design",
+  ]);
+  const rawResume = textValue(intake.resume_text);
+  const experienceSection = extractResumeSection(rawResume, ["experience", "professional experience", "work experience", "employment", "career history"]);
+  const educationSection = extractResumeSection(rawResume, ["education", "academic background"]);
+  const selectedImpact = proofs.length
+    ? proofs.map((item) => `- ${item.claim}`)
+    : extractImpactLines(rawResume);
+  const gaps = [
+    ...(Array.isArray(advisor?.skillGaps) ? advisor.skillGaps : []),
+    ...(Array.isArray(advisor?.followUpQuestions) ? advisor.followUpQuestions : []),
+  ].slice(0, 4);
+
+  return {
+    fullName,
+    contact: [email, linkedin, workModes, salary].filter(Boolean).join(" | "),
+    targetTitle,
+    headline: `${targetTitle} | ${lanes[0]?.rationale ?? "Evidence-backed career positioning"}`,
+    summary: summaryParts.join("\n\n") || "Use the approved positioning brief to write a concise 3-4 line summary for the primary target lane.",
+    skills: skills.join(" | "),
+    selectedImpact: selectedImpact.length
+      ? selectedImpact.join("\n")
+      : "- Add 3-5 senior-level accomplishments that support the primary lane.",
+    experience: experienceSection || buildExperienceFallback(rawResume),
+    education: educationSection || inferEducation(rawResume) || "",
+    additional: buildAdditionalSection(intake),
+    internalNotes: gaps.length
+      ? gaps.map((item) => `- ${item}`).join("\n")
+      : "- Add missing metrics, private/public claim boundaries, and final human edits before sending.",
+  };
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function uniqueWords(source: string, fallbacks: string[]) {
+  const normalized = source.toLowerCase();
+  const matches = fallbacks.filter((item) => normalized.includes(item.toLowerCase().split(" ")[0]));
+  return [...new Set(matches.length ? matches : fallbacks.slice(0, 8))].slice(0, 10);
+}
+
+function extractResumeSection(text: string, headingOptions: string[]) {
+  if (!text.trim()) return "";
+  const lines = text.split(/\r?\n/);
+  const headings = [
+    "summary",
+    "profile",
+    "skills",
+    "core skills",
+    "experience",
+    "professional experience",
+    "work experience",
+    "employment",
+    "career history",
+    "education",
+    "academic background",
+    "certifications",
+    "credentials",
+    "projects",
+    "portfolio",
+    "awards",
+    "publications",
+  ];
+  const start = lines.findIndex((line) => headingOptions.includes(normalizeHeading(line)));
+  if (start < 0) return "";
+  const collected: string[] = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const normalized = normalizeHeading(line);
+    if (collected.length && headings.includes(normalized)) break;
+    if (line.trim()) collected.push(line.trim());
+  }
+  return collected.join("\n").trim();
+}
+
+function normalizeHeading(line: string) {
+  return line.trim().replace(/[:\-|]+$/g, "").toLowerCase();
+}
+
+function extractImpactLines(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^[-*]/.test(line) || /\b(led|built|managed|launched|created|directed|developed|founded|grew|improved|increased|reduced|secured|produced)\b/i.test(line))
+    .slice(0, 6)
+    .map((line) => `- ${line.replace(/^[-*]\s*/, "")}`);
+}
+
+function buildExperienceFallback(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 18)
+    .slice(0, 18)
+    .join("\n");
+}
+
+function inferEducation(text: string) {
+  const educationLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /\b(dartmouth|bachelor|b\.a\.|ba\b|b\.s\.|bs\b|master|m\.a\.|mba|university|college|degree)\b/i.test(line));
+  return educationLines.slice(0, 5).join("\n");
+}
+
+function buildAdditionalSection(intake: Record<string, unknown>) {
+  return [textValue(intake.portfolio_urls), textValue(intake.public_evidence)]
+    .filter(Boolean)
+    .join("\n");
+}
 ---
 
 <Layout title="CIP Career Assets">
-  <main class="mx-auto w-full max-w-5xl px-5 py-8">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
     <nav class="mb-8 flex flex-wrap gap-2">
       {navItems.map((item) => (
         <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
       ))}
     </nav>
+
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Asset Optimization</p>
-      <h1 class="mt-2 text-3xl font-semibold">Improve positioning without inventing claims.</h1>
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Asset Workbench</p>
+      <h1 class="mt-2 text-3xl font-semibold">Turn the analysis into materials a hiring market can understand.</h1>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        This is the first action step after the evidence analysis is complete: turn the proof-backed readout into resume sections, LinkedIn/profile updates, outreach stories, portfolio positioning, and interview talking points.
+        The first asset is a refreshed master resume. The resume you provided was the starting evidence; the new resume is the strategy document that incorporates verified accomplishments, target lanes, proof gaps, and the clearest positioning from the analysis.
       </p>
-      <div class="mt-6 grid gap-4">
-        {recommendations.map((item) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-xl font-semibold">{item.area}</h2>
-              <span class="rounded-md bg-[rgba(164,93,17,0.12)] px-2 py-1 text-xs font-semibold text-[var(--warning)]">Needs approval</span>
-            </div>
-            <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{item.action}</p>
-            <p class="mt-3 text-sm font-semibold text-[var(--warning)]">{item.guardrail}</p>
-          </article>
-        ))}
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <h2 class="text-lg font-semibold">Why start with a new master resume?</h2>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          LinkedIn, outreach, employer research, and interviews all borrow from the resume. If the resume does not reflect the stronger evidence gathered after intake, every later step repeats the old positioning problem.
+        </p>
       </div>
     </section>
+
+    <section class="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 1</p>
+            <h2 class="mt-1 text-2xl font-semibold">Positioning brief</h2>
+          </div>
+          <span class="rounded-md bg-[rgba(32,120,87,0.12)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+            3 lanes recommended
+          </span>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+          The positioning brief is the decision layer before rewriting anything. It tells the app which career story the resume should support, which role lanes matter now, and which evidence is safe to use publicly.
+        </p>
+        <div class="mt-5 grid gap-3">
+          {positioningInputs.map((item) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <h3 class="font-semibold">{item.label}</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{item.detail}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Target lanes</p>
+        <h2 class="mt-1 text-2xl font-semibold">Choose focus before generating variants.</h2>
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+          Three lanes are enough for the first asset pass: one primary, one strong alternate, and one research lane. Five lanes can be stored later, but the first resume should not try to be five different people at once.
+        </p>
+        <div class="mt-5 space-y-3">
+          {targetLanes.map((lane) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <p class="text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
+              <h3 class="mt-1 font-semibold">{lane.role}</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{lane.rationale}</p>
+              <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{lane.missing}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
+      <h2 class="mt-1 text-2xl font-semibold">Build the master resume from verified evidence.</h2>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">What goes into it</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>Target headline and summary tied to the primary lane.</li>
+            <li>Experience bullets rewritten around scope, action, result, and proof.</li>
+            <li>Skills grouped by the role language hiring teams actually use.</li>
+            <li>Selected projects, links, and evidence that support the target story.</li>
+            <li>Unresolved claims marked as follow-up questions instead of fake polish.</li>
+          </ul>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">Evidence available for resume stories</h3>
+          <div class="mt-3 space-y-3">
+            {proofItems.length ? proofItems.map((item) => (
+              <div class="border-l-4 border-[var(--accent)] pl-3">
+                <p class="text-sm font-semibold">{item.claim}</p>
+                <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{item.evidence}</p>
+              </div>
+            )) : (
+              <p class="text-sm leading-6 text-[var(--muted)]">No verified proof items are loaded yet. Run intake and evidence analysis first.</p>
+            )}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 3</p>
+      <h2 class="mt-1 text-2xl font-semibold">Keep the resume human, specific, and defensible.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        The app should not generate a glossy generic resume. It should produce a draft that sounds like the user, preserves true details, and shows where human approval is still needed.
+      </p>
+      <ol class="mt-5 grid gap-3 md:grid-cols-2">
+        {resumeGuardrails.map((item, index) => (
+          <li class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4 text-sm leading-6 text-[var(--muted)]">
+            <span class="mr-2 font-semibold text-[var(--foreground)]">{index + 1}.</span>{item}
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" id="resume-builder">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Interactive builder</p>
+          <h2 class="mt-1 text-2xl font-semibold">Edit the new master resume draft.</h2>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            This draft starts from the primary lane and the current evidence. Edit it until it sounds like the user, then export the current version as Word-compatible `.doc`, rich text `.rtf`, or print/save as PDF.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-export-doc><span>Export .doc</span></button>
+          <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-export-rtf><span>Export .rtf</span></button>
+          <button class="cip-fancy-button" type="button" data-export-pdf><span>Print / PDF</span></button>
+        </div>
+      </div>
+
+      <div class="mt-5 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+        <aside class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <label class="block text-sm font-semibold" for="resume-lane">Resume target lane</label>
+          <select id="resume-lane" class="mt-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" data-lane-select>
+            {targetLanes.map((lane, index) => (
+              <option value={lane.role} data-rationale={lane.rationale} selected={index === 0}>{lane.label}: {lane.role}</option>
+            ))}
+          </select>
+          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+            <p class="text-xs font-semibold uppercase text-[var(--muted)]">Current lane rationale</p>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]" data-lane-rationale>{targetLanes[0]?.rationale}</p>
+          </div>
+          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+            <p class="text-xs font-semibold uppercase text-[var(--muted)]">Human review checklist</p>
+            <ul class="mt-2 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              <li>Remove any claim the user would not defend in an interview.</li>
+              <li>Add missing numbers only when the user knows they are true.</li>
+              <li>Keep one master resume, then create variants later.</li>
+            </ul>
+          </div>
+        </aside>
+
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <div class="resume-editor rounded-md border border-[var(--line)] bg-[var(--panel)] p-5" data-resume-editor>
+            <label class="resume-field">
+              <span>Name</span>
+              <input data-resume-field="name" value={resumeDraft.fullName} class="resume-input text-2xl font-semibold" />
+            </label>
+            <label class="resume-field">
+              <span>Contact line</span>
+              <input data-resume-field="contact" value={resumeDraft.contact} class="resume-input" placeholder="Email | LinkedIn | Location | Work model" />
+            </label>
+            <label class="resume-field">
+              <span>Headline</span>
+              <textarea data-resume-field="headline" class="resume-textarea min-h-20">{resumeDraft.headline}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Summary</span>
+              <textarea data-resume-field="summary" class="resume-textarea min-h-32">{resumeDraft.summary}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Core skills</span>
+              <textarea data-resume-field="skills" class="resume-textarea min-h-20">{resumeDraft.skills}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Selected impact</span>
+              <textarea data-resume-field="impact" class="resume-textarea min-h-36">{resumeDraft.selectedImpact}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Professional experience</span>
+              <textarea data-resume-field="experience" class="resume-textarea min-h-56">{resumeDraft.experience}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Education</span>
+              <textarea data-resume-field="education" class="resume-textarea min-h-24">{resumeDraft.education}</textarea>
+            </label>
+            <label class="resume-field">
+              <span>Additional credentials, portfolio, or selected projects</span>
+              <textarea data-resume-field="additional" class="resume-textarea min-h-28">{resumeDraft.additional}</textarea>
+            </label>
+          </div>
+        </div>
+      </div>
+      <details class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <summary class="text-sm font-semibold text-[var(--foreground)]">Internal evidence notes, not exported</summary>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          These notes help the user improve the resume, but they are intentionally excluded from `.doc`, `.rtf`, and PDF output.
+        </p>
+        <textarea class="resume-textarea mt-3 min-h-28" readonly>{resumeDraft.internalNotes}</textarea>
+      </details>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next assets</p>
+      <h2 class="mt-1 text-2xl font-semibold">After the master resume, generate channel-specific assets.</h2>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">LinkedIn profile</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Rewrite headline, About, Featured items, and experience sections from approved resume positioning.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Outreach stories</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Turn the strongest proof-backed story into recruiter, alumni, and warm-introduction messages.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Search lanes</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Convert approved lanes into LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.</p>
+        </article>
+      </div>
+      {!hasPersonalizedAssets && (
+        <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Personal analysis not loaded</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            This page is showing the asset-building process. After intake and evidence analysis, it will use the user's saved role briefs, positioning, and evidence ledger.
+          </p>
+          <a class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/evidence">Review evidence</a>
+        </div>
+      )}
+    </section>
   </main>
+
+  <script>
+    const fieldMap = {
+      name: "Name",
+      contact: "Contact",
+      headline: "Headline",
+      summary: "Summary",
+      skills: "Core Skills",
+      impact: "Selected Impact",
+      experience: "Professional Experience",
+      education: "Education",
+      additional: "Additional Credentials, Portfolio, or Selected Projects",
+    };
+
+    const select = document.querySelector("[data-lane-select]");
+    const rationale = document.querySelector("[data-lane-rationale]");
+    const headline = document.querySelector('[data-resume-field="headline"]');
+
+    select?.addEventListener("change", () => {
+      const selected = select.options[select.selectedIndex];
+      const selectedRole = selected.value;
+      const selectedRationale = selected.dataset.rationale || "";
+      if (rationale) rationale.textContent = selectedRationale;
+      if (headline && !headline.dataset.userEdited) {
+        headline.value = `${selectedRole} | ${selectedRationale}`;
+      }
+    });
+
+    document.querySelectorAll("[data-resume-field]").forEach((field) => {
+      field.addEventListener("input", () => {
+        field.dataset.userEdited = "true";
+      });
+    });
+
+    document.querySelector("[data-export-doc]")?.addEventListener("click", () => {
+      const html = buildResumeHtml();
+      downloadFile("cip-master-resume.doc", `<!doctype html><html><head><meta charset="utf-8"><title>Resume</title></head><body>${html}</body></html>`, "application/msword");
+    });
+
+    document.querySelector("[data-export-rtf]")?.addEventListener("click", () => {
+      downloadFile("cip-master-resume.rtf", buildResumeRtf(), "application/rtf");
+    });
+
+    document.querySelector("[data-export-pdf]")?.addEventListener("click", () => {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      if (!printWindow) return;
+      printWindow.document.write(`<!doctype html><html><head><title>Resume</title><style>${printStyles()}</style></head><body>${buildResumeHtml()}</body></html>`);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    });
+
+    function getResumeData() {
+      const data = {};
+      document.querySelectorAll("[data-resume-field]").forEach((field) => {
+        data[field.dataset.resumeField] = field.value || "";
+      });
+      return data;
+    }
+
+    function buildResumeHtml() {
+      const data = getResumeData();
+      return `
+        <main class="resume-document">
+          <h1>${escapeHtml(data.name)}</h1>
+          <p class="contact">${escapeHtml(data.contact)}</p>
+          ${sectionHtml("Headline", data.headline)}
+          ${sectionHtml("Summary", data.summary)}
+          ${sectionHtml("Core Skills", data.skills)}
+          ${sectionHtml("Selected Impact", data.impact)}
+          ${sectionHtml("Professional Experience", data.experience)}
+          ${sectionHtml("Education", data.education)}
+          ${sectionHtml("Additional Credentials, Portfolio, or Selected Projects", data.additional)}
+        </main>
+      `;
+    }
+
+    function sectionHtml(title, value) {
+      if (!value.trim()) return "";
+      const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const hasBullets = lines.some((line) => line.startsWith("- "));
+      if (hasBullets) {
+        const items = lines.map((line) => {
+          const clean = line.replace(/^- /, "");
+          return line.startsWith("- ") ? `<li>${escapeHtml(clean)}</li>` : `<p>${escapeHtml(clean)}</p>`;
+        }).join("");
+        return `<section><h2>${escapeHtml(title)}</h2><ul>${items}</ul></section>`;
+      }
+      return `<section><h2>${escapeHtml(title)}</h2>${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</section>`;
+    }
+
+    function buildResumeRtf() {
+      const data = getResumeData();
+      const parts = [`{\\rtf1\\ansi\\deff0`, `\\b ${rtf(data.name)} \\b0\\par`, `${rtf(data.contact)}\\par\\par`];
+      Object.entries(fieldMap).forEach(([key, label]) => {
+        if (key === "name" || key === "contact") return;
+        const value = data[key] || "";
+        if (!value.trim()) return;
+        parts.push(`\\b ${rtf(label)} \\b0\\par`);
+        value.split(/\r?\n/).forEach((line) => {
+          if (line.trim()) parts.push(`${rtf(line)}\\par`);
+        });
+        parts.push("\\par");
+      });
+      parts.push("}");
+      return parts.join("\n");
+    }
+
+    function printStyles() {
+      return `
+        body { font-family: Arial, sans-serif; color: #111; margin: 0; padding: 32px; }
+        .resume-document { max-width: 760px; margin: 0 auto; }
+        h1 { font-size: 28px; margin: 0 0 4px; }
+        .contact { color: #444; margin: 0 0 22px; }
+        h2 { border-bottom: 1px solid #ccc; font-size: 14px; letter-spacing: 0.04em; margin: 22px 0 8px; padding-bottom: 4px; text-transform: uppercase; }
+        p, li { font-size: 11.5pt; line-height: 1.45; }
+        ul { margin: 0; padding-left: 20px; }
+      `;
+    }
+
+    function downloadFile(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function rtf(value) {
+      return String(value)
+        .replace(/\\/g, "\\\\")
+        .replace(/{/g, "\\{")
+        .replace(/}/g, "\\}")
+        .replace(/\n/g, "\\par ");
+    }
+  </script>
 </Layout>
