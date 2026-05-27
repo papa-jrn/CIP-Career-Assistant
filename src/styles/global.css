@@ -372,6 +372,61 @@ button:disabled,
   width: 42%;
 }
 
+.cip-route-loader[hidden] {
+  display: none;
+}
+
+.cip-route-loader {
+  align-items: center;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 86%, transparent), var(--background)),
+    rgba(0, 0, 0, 0.22);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1.25rem;
+  position: fixed;
+  z-index: 80;
+}
+
+.cip-route-loader-panel {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(126, 217, 87, 0.18), transparent 46%),
+    var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: 0 24px 80px rgba(18, 34, 15, 0.24);
+  display: flex;
+  gap: 1rem;
+  max-width: 38rem;
+  overflow: hidden;
+  padding: 1.1rem;
+  position: relative;
+  width: min(100%, 38rem);
+}
+
+.cip-route-loader-panel::before {
+  animation: cip-panel-sheen 2.4s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(126, 217, 87, 0.22), transparent);
+  content: "";
+  height: 100%;
+  left: -45%;
+  position: absolute;
+  top: 0;
+  transform: skewX(-18deg);
+  width: 35%;
+}
+
+.cip-route-loader-line {
+  color: var(--foreground);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.5;
+  margin-top: 0.35rem;
+  min-height: 1.5rem;
+}
+
 @keyframes cip-panel-sheen {
   0% {
     left: -45%;

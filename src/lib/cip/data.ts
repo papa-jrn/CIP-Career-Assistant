@@ -3,6 +3,7 @@ export const navItems = [
   { href: "/intake", label: "Intake" },
   { href: "/evidence", label: "Evidence" },
   { href: "/#pathway", label: "Action plan" },
+  { href: "/network", label: "Network" },
 ];
 
 export const pathwaySteps = [
@@ -21,7 +22,7 @@ export const pathwaySteps = [
     outcome: "Add LinkedIn connections, alumni lists, or manually entered contacts to identify warm-introduction paths.",
     detail:
       "This should be user-supplied data only. CIP can coach the export/paste workflow and map relationships without scraping private networks.",
-    href: "/opportunities#networking",
+    href: "/network",
     cta: "Map network",
   },
   {

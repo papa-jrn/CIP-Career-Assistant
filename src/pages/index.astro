@@ -262,7 +262,11 @@ function buildBriefingActions(source: IntakeSource | null, advisor: Partial<Advi
             <h3 class="mt-2 text-lg font-semibold">{item.title}</h3>
             <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{item.outcome}</p>
             <p class="mt-3 text-xs leading-5 text-[var(--muted)]">{item.detail}</p>
-            <a class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href={item.href}>
+            <a
+              class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+              href={item.href}
+              data-asset-loader={item.href === "/assets" ? "true" : undefined}
+            >
               {item.cta}
             </a>
           </article>

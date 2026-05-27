@@ -62,5 +62,46 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       </div>
     </div>
     <slot />
+    <div class="cip-route-loader" data-asset-route-loader hidden role="status" aria-live="polite" aria-label="Preparing career assets">
+      <div class="cip-route-loader-panel">
+        <div class="cip-thinking-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Preparing career assets</p>
+          <p class="cip-route-loader-line" data-asset-loader-line>Loading the latest career analysis...</p>
+          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      const assetLoaderMessages = [
+        "Loading the latest career analysis...",
+        "Pulling verified evidence and source notes...",
+        "Finding the strongest target lane...",
+        "Asking the career strategist to synthesize the resume...",
+        "Checking for duplicate claims and education entries...",
+        "Preparing the master resume editor...",
+      ];
+      const assetLoader = document.querySelector("[data-asset-route-loader]");
+      const assetLoaderLine = document.querySelector("[data-asset-loader-line]");
+      let assetLoaderTimer;
+
+      document.querySelectorAll("[data-asset-loader]").forEach((link) => {
+        link.addEventListener("click", () => {
+          if (!assetLoader || !assetLoaderLine) return;
+          let index = 0;
+          assetLoader.hidden = false;
+          assetLoaderLine.textContent = assetLoaderMessages[index];
+          clearInterval(assetLoaderTimer);
+          assetLoaderTimer = setInterval(() => {
+            index = (index + 1) % assetLoaderMessages.length;
+            assetLoaderLine.textContent = assetLoaderMessages[index];
+          }, 1900);
+        });
+      });
+    </script>
   </body>
 </html>

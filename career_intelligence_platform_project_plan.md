@@ -1536,6 +1536,53 @@ LinkedIn coaching UI should include:
 
 The networking layer should make the user feel guided, not surveilled. The app's job is to help them see relationship paths they already have access to and turn those paths into respectful outreach.
 
+## Network Intelligence Workflow Decision
+
+Network Intelligence should become the second post-analysis step after career assets. The purpose is not to collect social media data for its own sake. The purpose is to help the user turn legitimate relationship data into warm introductions, market intelligence, employer prioritization, and respectful outreach.
+
+CIP must handle this layer with a clear trust boundary:
+
+- Use user-supplied data only.
+- Do not scrape LinkedIn, bypass access controls, automate logged-in browsing, or imply access to private networks.
+- Explain that scraping can violate platform terms, create privacy risk, and produce brittle or misleading data.
+- Coach the user through LinkedIn's own export and profile-download options instead.
+- Let the user review imported data before CIP uses it for outreach recommendations.
+- Keep contact data separate from public resume/profile copy unless the user explicitly approves a use.
+
+The Network Intelligence page should walk the user through:
+
+1. **Why this work matters**
+   - Many strong opportunities are found through weak ties, alumni paths, former coworkers, community contacts, and people adjacent to target employers.
+   - Networking should not mean asking strangers for jobs. It should start with learning, reconnection, and context.
+   - The goal is to identify a small number of high-quality relationship moves each week, not blast messages.
+
+2. **What data the user can bring**
+   - LinkedIn connections export or larger data archive.
+   - LinkedIn profile PDF.
+   - Alumni lists, manually entered contacts, prior coworkers, community contacts, conference/event lists, professional groups, and personal notes.
+   - Target employer lists from the Employer Discovery page.
+
+3. **How to gather LinkedIn data**
+   - Connections/archive: LinkedIn desktop `Me > Settings & Privacy > Data privacy > Get a copy of your data`, then request the archive that includes connections.
+   - Profile PDF: LinkedIn desktop `Me > View profile > More/Resources > Save to PDF` when available.
+   - Explain limitations: emails may be missing, exports may take time, and LinkedIn features can vary by account/language.
+
+4. **What CIP should do with the data**
+   - Normalize contacts into name, company, title, public profile URL, email if present, connection date, source, and notes.
+   - Match contacts against target employers, industries, role lanes, geography, alumni/company overlap, and saved career evidence.
+   - Score contacts for warm-introduction potential, relevance, seniority/influence, relationship freshness, and confidence.
+   - Recommend weekly actions such as reconnecting, asking for market advice, requesting a specific warm intro, or commenting thoughtfully on a relevant post.
+   - Generate outreach only after the user approves the contact, target, and relationship context.
+
+5. **Action outputs**
+   - Warm-introduction map.
+   - Top 10 relationship moves for the week.
+   - Employer-contact overlap list.
+   - Outreach drafts by intent: reconnect, market read, informational interview, referral request, follow-up, and thank-you.
+   - Relationship notes and status tracking.
+
+This page should be calm and professional. The copy should reassure users that they are not being asked to spam people. CIP is helping them turn existing relationships into informed, respectful career conversations.
+
 ## Next-Step Pathway Product Decision
 
 The product should not expose the post-analysis phase as a flat top menu of disconnected feature pages such as Employers, Opportunities, Assets, and Briefing.

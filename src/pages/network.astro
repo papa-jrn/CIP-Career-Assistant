@@ -1,0 +1,211 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { navItems } from "../lib/cip/data";
+
+const linkedinSteps = [
+  {
+    title: "Download your LinkedIn connections archive",
+    steps: [
+      "Open LinkedIn on desktop.",
+      "Click Me, then Settings & Privacy.",
+      "Open Data privacy.",
+      "Under How LinkedIn uses your data, choose Get a copy of your data.",
+      "Request the larger archive that includes connections, contacts, account history, and inferred profile data.",
+      "Watch your primary email for LinkedIn's download link, then save the ZIP file.",
+    ],
+    note: "LinkedIn may take up to 24 hours to prepare the archive. The connection export can include names, company, position, profile URL, connection date, and sometimes email. Emails may be missing because contacts control whether their email is exportable.",
+  },
+  {
+    title: "Save your LinkedIn profile PDF",
+    steps: [
+      "Open LinkedIn on desktop.",
+      "Click Me, then View profile.",
+      "In the intro section, click More or Resources.",
+      "Choose Save to PDF if the option is available.",
+    ],
+    note: "LinkedIn says this is desktop-only and may depend on profile language and account availability. If the option is missing, paste your headline, About section, Experience, Featured links, and Skills manually.",
+  },
+];
+
+const dataTypes = [
+  {
+    label: "LinkedIn connections",
+    value: "Best for finding people at target employers, adjacent companies, alumni paths, and former coworker routes.",
+  },
+  {
+    label: "LinkedIn profile PDF",
+    value: "Best for comparing the public profile against the new master resume and identifying profile gaps.",
+  },
+  {
+    label: "Alumni and community lists",
+    value: "Best for warm context when the person is not a direct LinkedIn connection.",
+  },
+  {
+    label: "Manual relationship notes",
+    value: "Best for relationship strength, history, comfort level, and whether a request would feel appropriate.",
+  },
+];
+
+const networkOutputs = [
+  "Employer-contact overlap: who is connected to saved or target employers.",
+  "Warm-introduction paths: who could provide advice, context, or a respectful referral route.",
+  "Weekly relationship moves: a small prioritized list instead of a massive outreach chore.",
+  "Outreach drafts by intent: reconnect, market read, informational interview, referral request, follow-up, and thank-you.",
+  "Profile/content recommendations: what to update or post before reaching out.",
+  "Relationship status tracking: contacted, replied, intro offered, follow-up due, or not a fit.",
+];
+
+const relationshipSignals = [
+  "Current company or recent employer",
+  "Title and seniority",
+  "Target industry overlap",
+  "Role-lane relevance",
+  "Geography or remote-market relevance",
+  "Alumni, coworker, community, or event overlap",
+  "Connection date or relationship freshness",
+  "User-rated relationship strength",
+];
+---
+
+<Layout title="CIP Network Intelligence">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+    <nav class="mb-8 flex flex-wrap gap-2">
+      {navItems.map((item) => (
+        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
+
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Network Intelligence</p>
+      <h1 class="mt-2 max-w-4xl text-3xl font-semibold">Turn relationship data into warm, respectful career moves.</h1>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        The next step after career assets is not sending a flood of messages. It is finding the people who can help you understand a market, identify hidden opportunities, and approach the right employers with context.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h2 class="text-lg font-semibold">Why this matters</h2>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            Many strong opportunities move through weak ties: former coworkers, alumni, community contacts, and people adjacent to target employers.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h2 class="text-lg font-semibold">What good looks like</h2>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            A short weekly list of high-quality conversations: advice, market reads, warm introductions, and thoughtful follow-ups.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h2 class="text-lg font-semibold">What we avoid</h2>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            No scraping, no private-network surveillance, no spam. CIP uses information you provide and asks for approval before outreach.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Trust boundary</p>
+      <h2 class="mt-1 text-2xl font-semibold">Why CIP cannot just scrape LinkedIn</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Scraping logged-in LinkedIn pages can violate platform rules, create privacy risk, break without warning, and gather data people did not knowingly provide for this use. It can also damage user trust. CIP uses only data you provide directly: exported files, pasted notes, profile PDFs, and relationship context you choose to add. That boundary keeps the workflow professional, transparent, and reviewable.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Allowed inputs</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>LinkedIn data archive or connections CSV supplied by the user.</li>
+            <li>LinkedIn profile PDF or pasted profile sections.</li>
+            <li>Alumni, coworker, community, event, and personal contact lists the user chooses to provide.</li>
+            <li>Manual notes about relationship strength, history, and comfort level.</li>
+          </ul>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Not allowed</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>Automated scraping of private LinkedIn pages.</li>
+            <li>Bypassing access controls, rate limits, or login protections.</li>
+            <li>Implying CIP can inspect private connections directly.</li>
+            <li>Generating outreach without the user's contact-specific approval.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 1</p>
+        <h2 class="mt-1 text-2xl font-semibold">Gather LinkedIn data</h2>
+        <div class="mt-5 space-y-4">
+          {linkedinSteps.map((group) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <h3 class="font-semibold">{group.title}</h3>
+              <ol class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+                {group.steps.map((step) => <li>{step}</li>)}
+              </ol>
+              <p class="mt-3 text-xs leading-5 text-[var(--warning)]">{group.note}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
+        <h2 class="mt-1 text-2xl font-semibold">Bring the data into CIP</h2>
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+          This first pass captures the workflow and creates the import surface. The next implementation layer will parse ZIP, CSV, PDF, and pasted contact text into structured relationship records. Until that parser is active, this page is a guided preparation step rather than a working import.
+        </p>
+        <form class="mt-5 grid gap-4">
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">LinkedIn archive, connections CSV, or profile PDF</span>
+            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.pdf,.txt" multiple />
+          </label>
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
+            <textarea
+              class="min-h-44 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+              placeholder={`Example:\nName | Company | Title | LinkedIn URL | Relationship notes\nMorgan Lee | Dartmouth Health | Director of Product | https://linkedin.com/in/... | Former coworker, warm relationship`}
+            ></textarea>
+          </label>
+          <button class="cip-fancy-button" type="button" disabled>
+            <span>Import mapping coming next</span>
+          </button>
+          <p class="text-sm leading-6 text-[var(--muted)]">
+            Disabled for now: this page establishes the guided workflow. The next build will save imports as additive relationship records and show a review screen before analysis.
+          </p>
+        </form>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 3</p>
+      <h2 class="mt-1 text-2xl font-semibold">Convert contacts into useful strategy</h2>
+      <div class="mt-5 grid gap-4 lg:grid-cols-2">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">CIP will score relationship signals</h3>
+          <ul class="mt-3 grid gap-2 text-sm leading-6 text-[var(--muted)] sm:grid-cols-2">
+            {relationshipSignals.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">CIP will produce action outputs</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            {networkOutputs.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--accent-soft)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Professional networking posture</p>
+      <h2 class="mt-1 text-2xl font-semibold">The first ask is usually not a job.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        CIP coaches the user to reconnect, ask for advice, and learn how a market works before requesting a referral. The strongest outreach comes after the user has a clear resume story, a relevant reason for the conversation, and a respectful next step.
+      </p>
+      <div class="mt-5 grid gap-3 md:grid-cols-4">
+        {["Reconnect", "Ask for a market read", "Request a warm intro", "Follow up with gratitude"].map((item) => (
+          <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4 text-sm font-semibold text-[var(--foreground)]">{item}</div>
+        ))}
+      </div>
+    </section>
+  </main>
+</Layout>
