@@ -1559,7 +1559,7 @@ The Network Intelligence page should walk the user through:
 2. **What data the user can bring**
    - LinkedIn connections export or larger data archive.
    - LinkedIn profile PDF.
-   - Alumni lists, manually entered contacts, prior coworkers, community contacts, conference/event lists, professional groups, and personal notes.
+   - Alumni lists, alumni portal contacts, university club directories, career-office mentoring platform data, manually entered contacts, prior coworkers, community contacts, conference/event lists, professional groups, and personal notes.
    - Target employer lists from the Employer Discovery page.
 
 3. **How to gather LinkedIn data**
@@ -1567,14 +1567,22 @@ The Network Intelligence page should walk the user through:
    - Profile PDF: LinkedIn desktop `Me > View profile > More/Resources > Save to PDF` when available.
    - Explain limitations: emails may be missing, exports may take time, and LinkedIn features can vary by account/language.
 
-4. **What CIP should do with the data**
+4. **How to gather alumni and university relationship data**
+   - Ask the user which universities, bootcamps, certificate programs, fellowships, or professional schools should be part of the network map.
+   - Coach the user to use official alumni portals, alumni association directories, university career-center mentoring platforms, school-specific LinkedIn alumni search, regional alumni clubs, affinity groups, and public event/speaker lists.
+   - Accept only contacts the user is allowed to access, export, paste, or manually summarize.
+   - Do not scrape gated alumni databases, bypass member access controls, or imply CIP has direct access to university directories.
+   - Normalize alumni data into school, program/year when known, current company, title, location, public profile URL, relationship context, and source.
+   - Match alumni contacts against target employers, industries, geographies, and role lanes; alumni overlap should be treated as a warm-context signal, not automatic permission to ask for a referral.
+
+5. **What CIP should do with the data**
    - Normalize contacts into name, company, title, public profile URL, email if present, connection date, source, and notes.
    - Match contacts against target employers, industries, role lanes, geography, alumni/company overlap, and saved career evidence.
    - Score contacts for warm-introduction potential, relevance, seniority/influence, relationship freshness, and confidence.
    - Recommend weekly actions such as reconnecting, asking for market advice, requesting a specific warm intro, or commenting thoughtfully on a relevant post.
    - Generate outreach only after the user approves the contact, target, and relationship context.
 
-5. **Action outputs**
+6. **Action outputs**
    - Warm-introduction map.
    - Top 10 relationship moves for the week.
    - Employer-contact overlap list.

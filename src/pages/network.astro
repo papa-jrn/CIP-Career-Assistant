@@ -38,11 +38,38 @@ const dataTypes = [
   },
   {
     label: "Alumni and community lists",
-    value: "Best for warm context when the person is not a direct LinkedIn connection.",
+    value: "Best for warm context through alumni portals, career-office mentoring platforms, regional clubs, affinity groups, and public event lists.",
   },
   {
     label: "Manual relationship notes",
     value: "Best for relationship strength, history, comfort level, and whether a request would feel appropriate.",
+  },
+];
+
+const alumniSources = [
+  {
+    label: "Official alumni portals",
+    value: "Use directories or mentoring platforms only when the user has legitimate member access.",
+  },
+  {
+    label: "Career services platforms",
+    value: "Some schools provide alumni mentoring databases, career communities, or school-approved networking tools.",
+  },
+  {
+    label: "LinkedIn alumni search",
+    value: "University pages can expose alumni search filters for geography, employer, field, and graduation era.",
+  },
+  {
+    label: "Alumni clubs and affinity groups",
+    value: "Regional chapters, professional groups, and identity-based communities often create warmer context than cold outreach.",
+  },
+  {
+    label: "Public event and speaker lists",
+    value: "Conference pages, newsletters, panels, and public chapter events can reveal people already active in the community.",
+  },
+  {
+    label: "Manual notes",
+    value: "The user can add people they know personally, classmates, faculty contacts, or introductions they would feel comfortable asking for.",
   },
 ];
 
@@ -115,7 +142,7 @@ const relationshipSignals = [
           <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
             <li>LinkedIn data archive or connections CSV supplied by the user.</li>
             <li>LinkedIn profile PDF or pasted profile sections.</li>
-            <li>Alumni, coworker, community, event, and personal contact lists the user chooses to provide.</li>
+            <li>Alumni portal contacts, school mentoring data, alumni club lists, coworker, community, event, and personal contact lists the user chooses to provide.</li>
             <li>Manual notes about relationship strength, history, and comfort level.</li>
           </ul>
         </div>
@@ -123,11 +150,34 @@ const relationshipSignals = [
           <h3 class="font-semibold">Not allowed</h3>
           <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
             <li>Automated scraping of private LinkedIn pages.</li>
+            <li>Scraping or bypassing gated alumni directories, career-office portals, or member-only databases.</li>
             <li>Bypassing access controls, rate limits, or login protections.</li>
             <li>Implying CIP can inspect private connections directly.</li>
             <li>Generating outreach without the user's contact-specific approval.</li>
           </ul>
         </div>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
+      <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Alumni data can be valuable, but it follows the same rule as LinkedIn: CIP uses information the user is allowed to access, export, paste, or summarize. The goal is not to mine a university database. The goal is to find legitimate shared context for thoughtful conversations.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {alumniSources.map((item) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="font-semibold">{item.label}</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{item.value}</p>
+          </article>
+        ))}
+      </div>
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
+        <h3 class="font-semibold">How CIP uses alumni signals</h3>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          CIP treats shared school, program, region, club, or event history as a warm-context signal. It can help prioritize who to ask for market advice, employer context, or an introduction, but it does not turn an alumni connection into automatic permission to request a referral.
+        </p>
       </div>
     </section>
 
@@ -163,7 +213,7 @@ const relationshipSignals = [
             <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
             <textarea
               class="min-h-44 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
-              placeholder={`Example:\nName | Company | Title | LinkedIn URL | Relationship notes\nMorgan Lee | Dartmouth Health | Director of Product | https://linkedin.com/in/... | Former coworker, warm relationship`}
+              placeholder={`Example:\nName | Company | Title | LinkedIn URL | School/source | Relationship notes\nMorgan Lee | Dartmouth Health | Director of Product | https://linkedin.com/in/... | Dartmouth alumni portal | Former coworker, warm relationship`}
             ></textarea>
           </label>
           <button class="cip-fancy-button" type="button" disabled>
