@@ -1,0 +1,73 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout title="Confirm sign in - Career Intelligence Platform">
+  <div class="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-16">
+    <div class="w-full max-w-sm space-y-6 text-center">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Confirming sign in</h1>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Finishing the secure Supabase handoff...
+        </p>
+      </div>
+      <div id="auth-confirm-result" class="text-center text-sm text-zinc-500">
+        Please wait.
+      </div>
+      <p class="text-center text-sm text-zinc-500">
+        <a href="/login" class="font-medium text-foreground underline-offset-4 hover:underline">Back to sign in</a>
+      </p>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { createBrowser } from "../../lib/supabase/browser";
+
+  const result = document.querySelector<HTMLDivElement>("#auth-confirm-result");
+
+  function showError(message: string) {
+    if (!result) {
+      return;
+    }
+
+    result.className =
+      "rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200";
+    result.textContent = message;
+  }
+
+  function safeNextPath(value: string | null) {
+    if (!value || !value.startsWith("/") || value.startsWith("//")) {
+      return "/account";
+    }
+
+    try {
+      const url = new URL(value, window.location.origin);
+      return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+      return "/account";
+    }
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    const next = safeNextPath(url.searchParams.get("next"));
+
+    if (!code) {
+      showError("The auth link is missing a confirmation code. Request a new link and try again.");
+    } else {
+      const supabase = createBrowser();
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (error) {
+        showError(error.message);
+      } else {
+        window.location.href = next;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    showError("Supabase could not finish this sign-in link. Check the app configuration and try again.");
+  }
+</script>
