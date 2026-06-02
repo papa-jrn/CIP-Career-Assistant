@@ -51,6 +51,32 @@ We ARE building:
 
 ---
 
+## Product Interpretation: What CIP Is Really Trying To Do
+
+CIP is not meant to be "upload a resume, get a polished resume." That is too shallow for the user who is trying to figure out a next step instead of merely tailoring an application.
+
+The product should behave more like a thoughtful career coach who keeps widening and sharpening the picture until the user can see options they were too close to notice. It should combine:
+
+- Who the user is
+- What the user has actually proven
+- What the user wants and needs
+- Where the market is creating opportunity
+- Who the user already knows or can legitimately reach
+
+This makes CIP different from AI as a search engine and different from AI as a resume tailor. Search returns information. Resume tailoring returns packaging. CIP should return interpretation: a proof-backed understanding of the user's background, plausible career hypotheses, relationship paths, open questions, and next actions.
+
+The system should help the user notice:
+
+- Patterns in their experience they may be underselling
+- Career adjacencies that are plausible but need validation
+- Gaps or risks that should become questions instead of confident claims
+- Opportunities that match both evidence and constraints
+- Existing relationship paths they may not realize they already have
+
+The coaching posture matters. CIP should ask better questions, name uncertainty, show its evidence, and avoid locking the user into one story too early. The desired feeling is not "the AI generated an answer." The desired feeling is "this helped me understand my own career more clearly and gave me a respectful next move."
+
+---
+
 # 3. Core Product Goals
 
 ## Primary Goal
@@ -1474,6 +1500,20 @@ The Evidence page should therefore feel like a graduation point once enough mate
 Networking intelligence is a key next layer, but it must be handled honestly.
 
 The app should not pretend it can inspect private LinkedIn connections unless the user has explicitly provided accessible data.
+
+The LinkedIn data import is not merely a parser or contact manager. It is evidence for a deeper coaching question:
+
+> Given this person's background, goals, constraints, and existing network, what relationship paths already exist that could help them explore or reach better-fit opportunities?
+
+The network layer should help the user see paths they may not have recognized, such as:
+
+- Former coworkers connected to companies that match the user's evidence-backed direction
+- Alumni or community contacts who are better suited for market-read conversations than referral asks
+- Weak ties adjacent to industries, geographies, or role lanes that the opportunity analysis recommends
+- Contacts whose current employer overlaps with saved target employers or high-fit employer categories
+- Relationship paths that suggest a small respectful first step before a job ask
+
+The desired output is not "here are your contacts." The desired output is "here are relationship paths you may not have realized you already had, and here is how to use them respectfully while figuring out your next move."
 
 Acceptable inputs:
 

@@ -1,6 +1,69 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { navItems } from "../lib/cip/data";
+import type { NetworkAnalysis } from "../lib/cip/network-intelligence";
+import { createServer } from "../lib/supabase/server";
+
+let signedIn = false;
+let networkCounts = {
+  imports: 0,
+  analyses: 0,
+};
+let latestNetworkAnalysis: NetworkAnalysis | null = null;
+let latestNetworkAnalysisAt: string | null = null;
+let loadError = "";
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    signedIn = Boolean(user);
+
+    if (user) {
+      const [{ count: importCount }, { count: analysisCount }, { data: analysisRow }] = await Promise.all([
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "network_import"),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "network_analysis"),
+        supabase
+          .from("career_sources")
+          .select("extracted_text, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", "network_analysis")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      networkCounts = {
+        imports: importCount ?? 0,
+        analyses: analysisCount ?? 0,
+      };
+      latestNetworkAnalysis = parseNetworkAnalysis(analysisRow?.extracted_text ?? null);
+      latestNetworkAnalysisAt = analysisRow?.created_at ?? null;
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Unable to load network intelligence state.";
+  }
+}
+
+function parseNetworkAnalysis(value: string | null): NetworkAnalysis | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.analysis ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const linkedinSteps = [
   {
@@ -202,29 +265,123 @@ const relationshipSignals = [
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
         <h2 class="mt-1 text-2xl font-semibold">Bring the data into CIP</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          This first pass captures the workflow and creates the import surface. The next implementation layer will parse ZIP, CSV, PDF, and pasted contact text into structured relationship records. Until that parser is active, this page is a guided preparation step rather than a working import.
+          Upload the LinkedIn archive ZIP, Connections.csv, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
         </p>
-        <form class="mt-5 grid gap-4">
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved network imports</p>
+            <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{networkCounts.imports}</p>
+          </div>
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved analyses</p>
+            <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{networkCounts.analyses}</p>
+          </div>
+        </div>
+        {loadError ? (
+          <p class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{loadError}</p>
+        ) : null}
+        {!signedIn ? (
+          <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+            Sign in before importing network data so CIP can save the import and analysis.
+          </p>
+        ) : null}
+        <form class="mt-5 grid gap-4" enctype="multipart/form-data" hx-post="/api/network/import" hx-target="#network-import-result" hx-swap="innerHTML" hx-indicator="#network-import-loading">
           <label class="grid gap-2">
             <span class="text-sm font-semibold">LinkedIn archive, connections CSV, or profile PDF</span>
-            <input class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.pdf,.txt" multiple />
+            <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.pdf,.txt" multiple />
           </label>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
             <textarea
+              name="relationship_notes"
               class="min-h-44 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
               placeholder={`Example:\nName | Company | Title | LinkedIn URL | School/source | Relationship notes\nMorgan Lee | Dartmouth Health | Director of Product | https://linkedin.com/in/... | Dartmouth alumni portal | Former coworker, warm relationship`}
             ></textarea>
           </label>
-          <button class="cip-fancy-button" type="button" disabled>
-            <span>Import mapping coming next</span>
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Recommendation feedback or exclusions</span>
+            <textarea
+              name="network_feedback"
+              class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+              placeholder={`Examples:\nRemove Christof Daetwyler - deceased / sensitive.\nRotary - Claremont Sugar River is my current club; do not treat it as a reconnection.\nExclude BNI as a Dartmouth Health path unless tied to a named person.`}
+            ></textarea>
+          </label>
+          <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
+            <span>Import and analyze network</span>
           </button>
           <p class="text-sm leading-6 text-[var(--muted)]">
-            Disabled for now: this page establishes the guided workflow. The next build will save imports as additive relationship records and show a review screen before analysis.
+            The first pass parses CSV/TXT contact data, records supplied PDFs, and creates a reviewable warm-introduction analysis. Outreach still requires user approval and relationship review.
           </p>
         </form>
+        <div id="network-import-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
+          <div class="cip-thinking-orbit" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Network analysis in progress</p>
+            <div class="cip-thinking-lines" aria-hidden="true">
+              <span>Reading supplied LinkedIn and relationship data...</span>
+              <span>Parsing contacts into reviewable records...</span>
+              <span>Comparing companies against saved employer targets...</span>
+              <span>Looking for warm context and market-read paths...</span>
+              <span>Saving the network intelligence artifact...</span>
+            </div>
+            <p class="sr-only">Importing and analyzing supplied network data.</p>
+            <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+        <div id="network-import-result" class="mt-5" aria-live="polite"></div>
       </div>
     </section>
+
+    {latestNetworkAnalysis ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Latest saved network analysis</p>
+            <h2 class="mt-1 text-2xl font-semibold">Current warm-introduction readout</h2>
+          </div>
+          {latestNetworkAnalysisAt ? (
+            <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
+              {new Date(latestNetworkAnalysisAt).toLocaleString()}
+            </span>
+          ) : null}
+        </div>
+        <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{latestNetworkAnalysis.summary}</p>
+        {latestNetworkAnalysis.reconnectCandidates?.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Five reconnection candidates</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.reconnectCandidates.slice(0, 5).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+        ) : null}
+        {latestNetworkAnalysis.reconnectQuestions?.length ? (
+          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Questions to deepen these picks</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.reconnectQuestions.slice(0, 10).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+        ) : null}
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Warm paths</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.topPaths.slice(0, 6).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">This week's moves</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.weeklyMoves.slice(0, 6).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+    ) : null}
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 3</p>
