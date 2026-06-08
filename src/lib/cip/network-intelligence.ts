@@ -15,16 +15,18 @@ export interface NetworkContact {
 
 export interface NetworkImportSummary {
   fileName: string;
-  kind: "zip" | "csv" | "txt" | "pdf" | "unsupported";
+  kind: "zip" | "csv" | "xlsx" | "txt" | "pdf" | "unsupported";
   status: "parsed" | "recorded" | "skipped";
   detail: string;
   contactCount: number;
+  rowCount: number;
 }
 
 export interface NetworkContactMatch {
   contact: NetworkContact;
   score: number;
   confidence: "high" | "medium" | "low";
+  laneMatches: string[];
   matchReasons: string[];
   recommendedFirstAsk: string;
   outreachStory: string;
@@ -32,9 +34,30 @@ export interface NetworkContactMatch {
   clarifyingQuestions: string[];
 }
 
+export interface CareerLaneValidation {
+  lane: string;
+  status: "validated" | "promising" | "needs_research";
+  score: number;
+  namedPeople: string[];
+  signals: string[];
+  recommendedValidationAsk: string;
+  missingEvidence: string[];
+}
+
+export interface ContextPoolSignal {
+  label: string;
+  type: "community" | "alumni" | "former_employer" | "group" | "other";
+  reason: string;
+  namedPeople: string[];
+  nextStep: string;
+}
+
 export interface NetworkAnalysis {
   mode: "ai" | "deterministic";
   summary: string;
+  sourceInventory: string[];
+  laneValidations: CareerLaneValidation[];
+  contextPools: ContextPoolSignal[];
   reconnectCandidates: string[];
   reconnectQuestions: string[];
   topPaths: string[];
@@ -150,12 +173,14 @@ async function parseNetworkFile(file: File) {
         ? `Found ${entries.length} readable ZIP entries. Parsed CSV/TXT entries that looked like connection data.`
         : "Could not find readable CSV/TXT entries in this ZIP.",
       contactCount: 0,
+      rowCount: entries.length,
     }];
 
     for (const entry of entries) {
       const entryName = entry.name.toLowerCase();
       if (entryName.endsWith(".csv")) {
         const parsed = parseCsvContacts(entry.text, entry.name);
+        const rowCount = countContactRows(entry.text);
         contacts.push(...parsed);
         files.push({
           fileName: `${name} / ${entry.name}`,
@@ -163,6 +188,18 @@ async function parseNetworkFile(file: File) {
           status: parsed.length ? "parsed" : "recorded",
           detail: parsed.length ? "Parsed CSV contact rows from the archive." : "Read CSV but did not find LinkedIn-style contact rows.",
           contactCount: parsed.length,
+          rowCount,
+        });
+      } else if (entryName.endsWith(".xlsx")) {
+        const parsed = parseXlsxContacts(entry.bytes, entry.name);
+        contacts.push(...parsed.contacts);
+        files.push({
+          fileName: `${name} / ${entry.name}`,
+          kind: "xlsx",
+          status: parsed.contacts.length ? "parsed" : "recorded",
+          detail: parsed.contacts.length ? "Parsed Excel contact rows from the archive." : "Read Excel workbook but did not find contact-like rows.",
+          contactCount: parsed.contacts.length,
+          rowCount: parsed.rowCount,
         });
       } else if (entryName.endsWith(".txt")) {
         const parsed = parseContactText(entry.text, entry.name);
@@ -173,6 +210,7 @@ async function parseNetworkFile(file: File) {
           status: parsed.length ? "parsed" : "recorded",
           detail: parsed.length ? "Parsed text contact rows from the archive." : "Read text file but did not find contact-like rows.",
           contactCount: parsed.length,
+          rowCount: entry.text.split(/\r?\n/).filter((line) => line.trim()).length,
         });
       }
     }
@@ -192,6 +230,22 @@ async function parseNetworkFile(file: File) {
         status: contacts.length ? "parsed" as const : "recorded" as const,
         detail: contacts.length ? "Parsed CSV contact rows." : "Read CSV but did not find LinkedIn-style contact rows.",
         contactCount: contacts.length,
+        rowCount: countContactRows(text),
+      }],
+    };
+  }
+
+  if (lower.endsWith(".xlsx")) {
+    const parsed = parseXlsxContacts(bytes, name);
+    return {
+      contacts: parsed.contacts,
+      files: [{
+        fileName: name,
+        kind: "xlsx" as const,
+        status: parsed.contacts.length ? "parsed" as const : "recorded" as const,
+        detail: parsed.contacts.length ? "Parsed Excel contact rows." : "Read Excel workbook but did not find contact-like rows.",
+        contactCount: parsed.contacts.length,
+        rowCount: parsed.rowCount,
       }],
     };
   }
@@ -207,6 +261,7 @@ async function parseNetworkFile(file: File) {
         status: contacts.length ? "parsed" as const : "recorded" as const,
         detail: contacts.length ? "Parsed text contact rows." : "Read text but did not find contact-like rows.",
         contactCount: contacts.length,
+        rowCount: text.split(/\r?\n/).filter((line) => line.trim()).length,
       }],
     };
   }
@@ -220,6 +275,7 @@ async function parseNetworkFile(file: File) {
         status: "recorded" as const,
         detail: "Profile PDF received. Text extraction is not active in this first import pass, so this file is recorded as supplied context.",
         contactCount: 0,
+        rowCount: 0,
       }],
     };
   }
@@ -232,6 +288,7 @@ async function parseNetworkFile(file: File) {
       status: "skipped" as const,
       detail: "Unsupported file type.",
       contactCount: 0,
+      rowCount: 0,
     }],
   };
 }
@@ -240,16 +297,19 @@ function parseCsvContacts(text: string, source: string): NetworkContact[] {
   const rows = parseCsv(text);
   if (rows.length < 2) return [];
 
-  const header = rows[0].map((cell) => normalizeHeader(cell));
-  return rows.slice(1).map((row) => {
+  const headerIndex = findContactHeaderRow(rows);
+  if (headerIndex < 0) return [];
+
+  const header = rows[headerIndex].map((cell) => normalizeHeader(cell));
+  return rows.slice(headerIndex + 1).map((row) => {
     const record = Object.fromEntries(header.map((key, index) => [key, row[index]?.trim() ?? ""]));
     const firstName = pick(record, ["firstname", "firstname"]);
     const lastName = pick(record, ["lastname", "lastname"]);
     const fullName = pick(record, ["name", "fullname"]) || [firstName, lastName].filter(Boolean).join(" ");
     return cleanContact({
       name: fullName,
-      company: pick(record, ["company", "companyname", "organization"]),
-      title: pick(record, ["position", "title", "jobtitle", "occupation"]),
+      company: pick(record, ["company", "companyname", "companies", "organization", "organizationname", "employer"]),
+      title: pick(record, ["position", "positions", "title", "jobtitle", "occupation", "headline"]),
       profileUrl: pick(record, ["url", "profileurl", "linkedinurl", "publicprofileurl"]),
       email: pick(record, ["emailaddress", "email"]),
       connectedOn: pick(record, ["connectedon", "connecteddate", "date"]),
@@ -280,6 +340,67 @@ function parseContactText(text: string, source: string): NetworkContact[] {
     .filter(isUsefulContact);
 }
 
+function parseXlsxContacts(bytes: Buffer, source: string): { contacts: NetworkContact[]; rowCount: number } {
+  const entries = readZipEntries(bytes, /\.(xml)$/i);
+  if (!entries.length) return { contacts: [], rowCount: 0 };
+
+  const sharedStrings = parseSharedStrings(entries.find((entry) => entry.name === "xl/sharedStrings.xml")?.text ?? "");
+  const worksheets = entries.filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(entry.name));
+  let totalRows = 0;
+
+  for (const worksheet of worksheets) {
+    const rows = parseWorksheetRows(worksheet.text, sharedStrings);
+    totalRows += rows.length;
+    const contacts = parseRowsAsContacts(rows, source);
+    if (contacts.length) return { contacts, rowCount: Math.max(0, countContactRowsFromRows(rows)) };
+  }
+
+  return { contacts: [], rowCount: totalRows };
+}
+
+function parseRowsAsContacts(rows: string[][], source: string) {
+  const text = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  return parseCsvContacts(text, source);
+}
+
+function findContactHeaderRow(rows: string[][]) {
+  return rows.slice(0, 30).findIndex((row) => {
+    const header = row.map((cell) => normalizeHeader(cell));
+    const hasName = header.some((key) => ["name", "fullname", "firstname", "lastname"].includes(key));
+    const hasContactSignal = header.some((key) => [
+      "company",
+      "companyname",
+      "companies",
+      "organization",
+      "organizationname",
+      "position",
+      "positions",
+      "title",
+      "jobtitle",
+      "headline",
+      "url",
+      "profileurl",
+      "linkedinurl",
+      "publicprofileurl",
+      "email",
+      "emailaddress",
+      "connectedon",
+    ].includes(key));
+    return hasName && hasContactSignal;
+  });
+}
+
+function countContactRows(text: string) {
+  const rows = parseCsv(text);
+  return countContactRowsFromRows(rows);
+}
+
+function countContactRowsFromRows(rows: string[][]) {
+  const headerIndex = findContactHeaderRow(rows);
+  if (headerIndex < 0) return Math.max(0, rows.length - 1);
+  return rows.slice(headerIndex + 1).filter((row) => row.some((cell) => cell.trim())).length;
+}
+
 function buildDeterministicNetworkAnalysis({
   contacts,
   files,
@@ -295,38 +416,56 @@ function buildDeterministicNetworkAnalysis({
   employers: EmployerContext[];
   feedback: NetworkFeedback[];
 }): NetworkAnalysis {
+  const careerLanes = deriveCareerLanes(intake, latestAnalysis);
+  const sourceInventory = buildSourceInventory(contacts, files, employers);
   const matches = contacts
     .filter((contact) => isSpecificPerson(contact))
+    .filter((contact) => !isSelfContact(contact, intake))
     .filter((contact) => !isExcludedByFeedback(contact, feedback))
-    .map((contact) => scoreContact(contact, { intake, latestAnalysis, employers }))
-    .filter((match) => match.score >= 34)
+    .map((contact) => scoreContact(contact, { intake, latestAnalysis, employers, careerLanes }))
+    .filter((match) => match.score >= 34 && hasStrategicSignal(match))
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
+  const laneValidations = buildLaneValidations(careerLanes, matches);
+  const contextPools = buildContextPools(contacts, matches, feedback);
   const employerOverlaps = buildEmployerOverlaps(matches);
   const adjacentSignals = buildAdjacentSignals(matches);
   const reconnectCandidates = matches.slice(0, 5);
   const contactCount = contacts.length;
   const parsedFiles = files.filter((file) => file.status === "parsed").length;
+  const validatedLaneCount = laneValidations.filter((lane) => lane.status !== "needs_research").length;
 
   return {
     mode: "deterministic",
     summary: contactCount
-      ? `Imported ${contactCount} reviewable network contact${contactCount === 1 ? "" : "s"} from ${parsedFiles} parsed source${parsedFiles === 1 ? "" : "s"}. This first pass found ${matches.length} plausible warm-introduction or market-read path${matches.length === 1 ? "" : "s"} against saved employers, target-role language, and the latest career analysis.`
+      ? `Imported ${contactCount} reviewable network contact${contactCount === 1 ? "" : "s"} from ${parsedFiles} parsed source${parsedFiles === 1 ? "" : "s"}. This pass tested ${careerLanes.length} career lane${careerLanes.length === 1 ? "" : "s"} against named people, saved employers, and relationship notes. It found ${validatedLaneCount} lane${validatedLaneCount === 1 ? "" : "s"} with enough network signal to validate through conversations and ${matches.length} named contact match${matches.length === 1 ? "" : "es"} with strategic relevance.`
       : "The files were received, but no reviewable connection rows were parsed yet. Try adding the Connections.csv from the LinkedIn archive or paste rows with name, company, title, URL, and notes.",
+    sourceInventory,
+    laneValidations,
+    contextPools,
     reconnectCandidates: reconnectCandidates.map(renderReconnectCandidate),
     reconnectQuestions: reconnectCandidates.flatMap(renderReconnectQuestions).slice(0, 10),
-    topPaths: matches.slice(0, 6).map((match) => `${match.contact.name} at ${match.contact.company || "unknown company"}: ${match.matchReasons.slice(0, 2).join("; ")}.`),
+    topPaths: matches.slice(0, 6).map((match) => `${match.contact.name} at ${match.contact.company || "unknown company"}: ${renderMatchSummary(match)}.`),
     employerOverlaps,
     adjacentNetworkSignals: adjacentSignals,
-    weeklyMoves: matches.slice(0, 5).map((match) => `${match.contact.name}: ${match.recommendedFirstAsk}`),
+    weeklyMoves: [
+      ...laneValidations
+        .filter((lane) => lane.status !== "needs_research")
+        .slice(0, 2)
+        .map((lane) => `${lane.lane}: ${lane.recommendedValidationAsk}`),
+      ...matches.slice(0, 3).map((match) => `${match.contact.name}: ${match.recommendedFirstAsk}`),
+    ].slice(0, 5),
     followUpQuestions: [
+      "Which of these lane validations feel worth testing before building resume variants or applying heavily?",
       "Which of these contacts are people you would feel comfortable reconnecting with this month?",
       "Are any of the high-scoring contacts too cold, sensitive, or inappropriate for outreach?",
-      "Which schools, bootcamps, prior employers, or communities should be treated as warm-context signals?",
+      "Which schools, bootcamps, prior employers, or communities should remain context pools until tied to named people?",
       "Which target employers should this network map compare against next?",
     ],
     confidenceNotes: [
       "This pass uses user-supplied files and notes only; it does not scrape LinkedIn.",
+      "Warmth alone is not enough for a recommendation; named contacts need lane, employer, or role relevance.",
+      "Groups such as Rotary, BNI, alumni communities, and chambers are treated as context pools unless tied to a named person.",
       "Company/title matches are directional until the user reviews relationship strength and current accuracy.",
       "Referral asks should come after relationship review; many contacts are better first used for market reads or reconnection.",
       "Saved removals, deceased-contact notes, and current-involvement notes suppress inappropriate reconnection recommendations.",
@@ -341,6 +480,7 @@ function scoreContact(
     intake: Partial<IntakeForm> | null;
     latestAnalysis: Partial<AdvisorAnalysis> | null;
     employers: EmployerContext[];
+    careerLanes: string[];
   },
 ): NetworkContactMatch {
   const contactText = normalizeText([contact.company, contact.title, contact.notes].join(" "));
@@ -355,15 +495,16 @@ function scoreContact(
     context.latestAnalysis?.positioning?.join(" "),
     context.latestAnalysis?.explorationAreas?.map((area) => `${area.area} ${area.firstExperiment}`).join(" "),
   ].filter(Boolean).join(" "));
+  const laneMatches = matchContactToLanes(contactText, context.careerLanes);
   const reasons: string[] = [];
-  let score = 20;
+  let score = 18;
 
   const employer = context.employers.find((item) => {
     const employerName = normalizeText(item.name);
     return employerName && (employerText.includes(employerName) || employerName.includes(normalizeText(contact.company)));
   });
   if (employer) {
-    score += 36;
+    score += 34;
     reasons.push(`Company/title appears to overlap with saved target employer ${employer.name}`);
   } else {
     const mentionedEmployer = context.employers.find((item) => {
@@ -376,10 +517,15 @@ function scoreContact(
     }
   }
 
+  if (laneMatches.length) {
+    score += Math.min(30, laneMatches.length * 15);
+    reasons.push(`Lane validation signal: ${laneMatches.slice(0, 3).join(", ")}`);
+  }
+
   const roleTerms = ["product", "program", "operations", "communications", "marketing", "healthcare", "education", "technology", "it", "data", "research", "community", "customer", "success", "ai"];
   const hits = roleTerms.filter((term) => contactText.includes(term) && profileText.includes(term));
   if (hits.length) {
-    score += Math.min(28, hits.length * 7);
+    score += Math.min(22, hits.length * 6);
     reasons.push(`Role/industry overlap: ${hits.slice(0, 4).join(", ")}`);
   }
 
@@ -391,39 +537,40 @@ function scoreContact(
   if (contact.connectedOn) score += 5;
   const relationshipContext = extractRelationshipContext(contact.notes);
   if (/(alumni|classmate|coworker|worked|contractor|friend|mentor|school|teacher|partner|bootcamp|former|birthday|invited|wife|spouse|reconnected|discussing|best coder|top coder|bni)/i.test(contact.notes)) {
-    score += 18;
-    reasons.push("User notes suggest warm context");
+    score += 8;
+    reasons.push("User notes suggest warm context, but warmth is supporting evidence rather than a standalone recommendation");
   }
   if (/(reconnected|discussing|invited|birthday|partner|hired|worked with|contractor|best coder|top coder)/i.test(contact.notes)) {
-    score += 12;
+    score += 6;
     reasons.push("Relationship context suggests a stronger-than-ordinary reconnection path");
   }
   if (/(web developer|tv executive|world 2 systems|zapdot|guiding good|lyndon institute|codex|ai tools)/i.test(contact.notes)) {
-    score += 10;
+    score += 6;
     reasons.push("Notes identify a specific shared work story or conversation angle");
   }
   if (/\bbni\b|business networking international/i.test(contact.notes)) {
-    score += 4;
-    reasons.push("BNI context suggests small-business or entrepreneur network value, not automatic large-employer access");
+    reasons.push("BNI is treated as a context pool unless tied to a named person, company, and lane");
   }
   if (/\brotary\b|rotarian/i.test(contact.notes)) {
-    score += 8;
-    reasons.push("Rotary context may be useful for civic or larger-organization introductions when tied to a named person");
+    reasons.push("Rotary is treated as civic/community context unless tied to a named person, company, and lane");
   }
 
   if (!reasons.length && contact.company) reasons.push("Company can be checked against future employer targets");
   if (!reasons.length && contact.title) reasons.push("Title may be useful for a market-read conversation");
 
   const boundedScore = Math.max(20, Math.min(98, score));
-  const firstAsk = buildFirstAsk(contact, employer?.name, hits);
+  const firstAsk = buildFirstAsk(contact, employer?.name, hits, laneMatches);
   return {
     contact,
     score: boundedScore,
     confidence: boundedScore >= 70 ? "high" : boundedScore >= 50 ? "medium" : "low",
+    laneMatches,
     matchReasons: reasons,
     recommendedFirstAsk: firstAsk,
     outreachStory: employer
       ? `Reconnect around their perspective on ${employer.name} or similar ${employer.category ?? "employers"} before asking about roles.`
+      : laneMatches.length
+        ? `Ask for a market read on the ${laneMatches[0]} lane and what titles, expectations, or employers are worth understanding.`
       : hits.length
         ? `Ask for a market read on ${hits.slice(0, 2).join(" / ")} roles or organizations.`
         : "Use this as a light reconnection or context-gathering path before making any career ask.",
@@ -432,9 +579,12 @@ function scoreContact(
   };
 }
 
-function buildFirstAsk(contact: NetworkContact, employerName: string | undefined, hits: string[]) {
+function buildFirstAsk(contact: NetworkContact, employerName: string | undefined, hits: string[], laneMatches: string[]) {
   if (employerName) {
     return `Ask for a brief perspective on ${employerName} and what kinds of roles or teams are worth understanding there.`;
+  }
+  if (laneMatches.length) {
+    return `Ask for a 15-minute market read on the ${laneMatches[0]} lane before discussing referrals or applications.`;
   }
   if (hits.length) {
     return `Ask for a 15-minute market read on ${hits.slice(0, 2).join(" / ")} work before mentioning applications.`;
@@ -443,6 +593,188 @@ function buildFirstAsk(contact: NetworkContact, employerName: string | undefined
     return "Reconnect using the relationship context in your notes, then ask one low-pressure career-context question.";
   }
   return "Review the relationship first; if appropriate, start with a short reconnection rather than a referral ask.";
+}
+
+function hasStrategicSignal(match: NetworkContactMatch) {
+  return match.matchReasons.some((reason) =>
+    reason.startsWith("Company/title appears")
+    || reason.startsWith("Lane validation signal")
+    || reason.startsWith("Role/industry overlap"),
+  );
+}
+
+function buildSourceInventory(contacts: NetworkContact[], files: NetworkImportSummary[], employers: EmployerContext[]) {
+  const parsedFiles = files.filter((file) => file.status === "parsed");
+  const totalRows = files.reduce((sum, file) => sum + (file.rowCount || 0), 0);
+  const companies = [...new Set(contacts.map((contact) => contact.company).filter(Boolean))];
+  const formerCoworkerCount = contacts.filter((contact) => /former|coworker|worked with|colleague/i.test(contact.notes)).length;
+  const messageRows = files
+    .filter((file) => /message|conversation|inmail/i.test(file.fileName))
+    .reduce((sum, file) => sum + (file.rowCount || 0), 0);
+  const xlsxFiles = files.filter((file) => file.kind === "xlsx").length;
+  const csvFiles = files.filter((file) => file.kind === "csv").length;
+
+  return [
+    `Saw ${files.length} supplied file record${files.length === 1 ? "" : "s"} and parsed ${parsedFiles.length} source${parsedFiles.length === 1 ? "" : "s"}.`,
+    `Read ${totalRows} tabular row${totalRows === 1 ? "" : "s"} across CSV/XLSX/TXT sources.`,
+    `Normalized ${contacts.length} reviewable contact${contacts.length === 1 ? "" : "s"} from the supplied data.`,
+    `Detected ${companies.length} distinct compan${companies.length === 1 ? "y" : "ies"} or organizations from contact rows.`,
+    `Compared contacts against ${employers.length} saved employer target${employers.length === 1 ? "" : "s"}.`,
+    formerCoworkerCount ? `Found ${formerCoworkerCount} contact${formerCoworkerCount === 1 ? "" : "s"} with former-coworker or worked-with context in notes.` : "",
+    messageRows ? `Saw ${messageRows} message/conversation row${messageRows === 1 ? "" : "s"} as source context; message content is not yet deeply analyzed.` : "",
+    xlsxFiles || csvFiles ? `Parsed ${xlsxFiles} Excel workbook entr${xlsxFiles === 1 ? "y" : "ies"} and ${csvFiles} CSV entr${csvFiles === 1 ? "y" : "ies"}.` : "",
+  ].filter(Boolean);
+}
+
+function isSelfContact(contact: NetworkContact, intake: Partial<IntakeForm> | null) {
+  const contactName = normalizeText(contact.name);
+  const intakeName = normalizeText(intake?.full_name ?? "");
+  const intakeEmail = normalizeText(intake?.email ?? "");
+  const contactEmail = normalizeText(contact.email);
+  return Boolean(
+    (intakeName && contactName === intakeName)
+    || (intakeEmail && contactEmail && contactEmail === intakeEmail),
+  );
+}
+
+function renderMatchSummary(match: NetworkContactMatch) {
+  const strategicReasons = match.matchReasons.filter((reason) =>
+    reason.startsWith("Company/title appears")
+    || reason.startsWith("Lane validation signal")
+    || reason.startsWith("Role/industry overlap"),
+  );
+  return (strategicReasons.length ? strategicReasons : match.matchReasons).slice(0, 2).join("; ");
+}
+
+function deriveCareerLanes(intake: Partial<IntakeForm> | null, latestAnalysis: Partial<AdvisorAnalysis> | null) {
+  const lanes = [
+    intake?.target_title,
+    ...(latestAnalysis?.roleBriefs?.map((brief) => brief.role) ?? []),
+    ...(latestAnalysis?.explorationAreas?.map((area) => area.area) ?? []),
+  ]
+    .filter(Boolean)
+    .map((lane) => String(lane).trim())
+    .filter((lane) => lane.length > 2);
+
+  return [...new Set(lanes)].slice(0, 6).length
+    ? [...new Set(lanes)].slice(0, 6)
+    : [
+        "AI Operations Strategist",
+        "Product Enablement Lead",
+        "Career Technology Program Manager",
+      ];
+}
+
+function matchContactToLanes(contactText: string, lanes: string[]) {
+  return lanes.filter((lane) => {
+    const terms = laneTerms(lane);
+    const hits = terms.filter((term) => contactText.includes(term));
+    return hits.length >= Math.min(2, terms.length);
+  });
+}
+
+function laneTerms(lane: string) {
+  const normalized = normalizeText(lane);
+  const terms = normalized.split(/\s+/).filter((term) => term.length > 2);
+  const expanded = new Set(terms);
+  if (normalized.includes("ai") || normalized.includes("automation")) {
+    ["ai", "automation", "workflow", "operations", "technical", "technology"].forEach((term) => expanded.add(term));
+  }
+  if (normalized.includes("product") || normalized.includes("enablement")) {
+    ["product", "enablement", "adoption", "training", "customer", "success"].forEach((term) => expanded.add(term));
+  }
+  if (normalized.includes("career") || normalized.includes("workforce") || normalized.includes("education")) {
+    ["career", "workforce", "education", "program", "community", "training"].forEach((term) => expanded.add(term));
+  }
+  if (normalized.includes("research") || normalized.includes("market")) {
+    ["research", "market", "data", "analysis", "strategy"].forEach((term) => expanded.add(term));
+  }
+  if (normalized.includes("operations") || normalized.includes("program")) {
+    ["operations", "program", "project", "strategy", "systems"].forEach((term) => expanded.add(term));
+  }
+  return [...expanded].slice(0, 12);
+}
+
+function buildLaneValidations(lanes: string[], matches: NetworkContactMatch[]): CareerLaneValidation[] {
+  return lanes.map((lane) => {
+    const laneMatches = matches.filter((match) => match.laneMatches.includes(lane));
+    const namedPeople = laneMatches.slice(0, 5).map((match) => `${match.contact.name}${match.contact.company ? ` (${match.contact.company})` : ""}`);
+    const signals = [
+      ...laneMatches.flatMap((match) => match.matchReasons.filter((reason) => reason.startsWith("Lane validation") || reason.startsWith("Role/industry") || reason.startsWith("Company/title"))),
+    ];
+    const score = Math.min(100, laneMatches.reduce((sum, match) => sum + Math.max(10, Math.round(match.score / 4)), 0));
+    const status: CareerLaneValidation["status"] = score >= 55 && namedPeople.length >= 2
+      ? "validated"
+      : score >= 25 && namedPeople.length >= 1
+        ? "promising"
+        : "needs_research";
+
+    return {
+      lane,
+      status,
+      score,
+      namedPeople,
+      signals: [...new Set(signals)].slice(0, 5),
+      recommendedValidationAsk: namedPeople.length
+        ? `Ask ${namedPeople[0]} for a market read on whether ${lane} is a real, reachable direction and which titles or employers to study.`
+        : `Add named contacts, alumni leads, or employer targets related to ${lane} before treating this as outreach-ready.`,
+      missingEvidence: [
+        namedPeople.length ? "" : "No named contact currently validates this lane.",
+        signals.length ? "" : "No strong company/title/industry signal appears in the imported data yet.",
+        "Confirm whether this lane deserves resume positioning before generating targeted variants.",
+      ].filter(Boolean),
+    };
+  });
+}
+
+function buildContextPools(contacts: NetworkContact[], matches: NetworkContactMatch[], feedback: NetworkFeedback[]): ContextPoolSignal[] {
+  const activeNames = new Set(matches.map((match) => normalizeText(match.contact.name)));
+  const pools = [
+    {
+      label: "BNI",
+      type: "group" as const,
+      pattern: /\bbni\b|business networking international/i,
+      reason: "Small-business and referral-network context; useful only when tied to named people, companies, or lane-specific market questions.",
+    },
+    {
+      label: "Rotary",
+      type: "community" as const,
+      pattern: /\brotary\b|rotarian/i,
+      reason: "Civic/community context; potentially useful for local employer intelligence when tied to a named person and current role.",
+    },
+    {
+      label: "Alumni networks",
+      type: "alumni" as const,
+      pattern: /\balumni\b|dartmouth|college|university|school/i,
+      reason: "Warm-context pool for market reads and introductions, not automatic referral permission.",
+    },
+    {
+      label: "Former coworkers",
+      type: "former_employer" as const,
+      pattern: /former|coworker|worked with|colleague/i,
+      reason: "Relationship-strength signal that still needs lane, employer, or role relevance before becoming an outreach recommendation.",
+    },
+  ];
+
+  return pools.map((pool) => {
+    const namedPeople = contacts
+      .filter((contact) => isSpecificPerson(contact))
+      .filter((contact) => !isExcludedByFeedback(contact, feedback))
+      .filter((contact) => pool.pattern.test([contact.company, contact.title, contact.notes, contact.source].join(" ")))
+      .filter((contact) => !activeNames.has(normalizeText(contact.name)))
+      .map((contact) => `${contact.name}${contact.company ? ` (${contact.company})` : ""}`)
+      .slice(0, 5);
+
+    return {
+      label: pool.label,
+      type: pool.type,
+      reason: pool.reason,
+      namedPeople,
+      nextStep: namedPeople.length
+        ? `Review these named people for lane relevance before recommending outreach: ${namedPeople.slice(0, 3).join(", ")}.`
+        : "Keep this as context only until the user supplies named people with company, title, and relationship notes.",
+    };
+  }).filter((pool) => pool.namedPeople.length);
 }
 
 function buildEmployerOverlaps(matches: NetworkContactMatch[]) {
@@ -520,7 +852,7 @@ async function tryBuildAiNetworkAnalysis({
         {
           role: "system",
           content:
-            "You are a rigorous career coach analyzing user-supplied networking data. Do not scrape or imply access to private LinkedIn. Pick five specific named living people from the supplied contacts as reconnection candidates; never pick organizations, clubs, chapters, or generic channels such as BNI, Rotary, alumni groups, or chambers. If feedback says remove, deceased, or current involvement, do not recommend that contact or organization. Treat BNI as primarily small-business/referral-network context, not automatic access to large employers. Treat Rotary as civic/community context that may include larger-business members, but still require named-person evidence. Only claim employer overlap when the contact's company/title supports it; if an employer appears only in notes, ask a clarifying question. Avoid spammy referral advice. Name uncertainty and ask relationship-strength questions.",
+            "You are a rigorous career coach analyzing user-supplied networking data. Do not scrape or imply access to private LinkedIn. Validate career lanes before recommending outreach: test the user's role hypotheses against named people, companies, titles, relationship notes, saved employers, and market-read potential. Pick specific named living people only when they have lane, employer, or role relevance; warmth alone is not enough. Never recommend the user themself as a contact. Never pick organizations, clubs, chapters, or generic channels such as BNI, Rotary, alumni groups, or chambers as contacts. If feedback says remove, deceased, or current involvement, do not recommend that contact or organization. Treat BNI as primarily small-business/referral-network context, not automatic access to large employers. Treat Rotary as civic/community context that may include larger-business members, but still require named-person evidence. Prior coworkers are relationship-strength signals, not automatically strategic matches. Only claim employer overlap when the contact's company/title supports it; if an employer appears only in notes, ask a clarifying question. Avoid spammy referral advice. Prefer market-read and lane-validation asks before referral asks. Name uncertainty and ask relationship-strength questions.",
         },
         {
           role: "user",
@@ -533,6 +865,8 @@ async function tryBuildAiNetworkAnalysis({
             employers,
             feedback,
             deterministicContactMatches: deterministic.contactMatches.slice(0, 20),
+            deterministicLaneValidations: deterministic.laneValidations,
+            deterministicContextPools: deterministic.contextPools,
           }),
         },
       ],
@@ -544,15 +878,52 @@ async function tryBuildAiNetworkAnalysis({
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["summary", "reconnectCandidates", "reconnectQuestions", "topPaths", "employerOverlaps", "adjacentNetworkSignals", "weeklyMoves", "followUpQuestions", "confidenceNotes"],
+            required: ["summary", "sourceInventory", "laneValidations", "contextPools", "reconnectCandidates", "reconnectQuestions", "topPaths", "employerOverlaps", "adjacentNetworkSignals", "weeklyMoves", "followUpQuestions", "confidenceNotes"],
             properties: {
               summary: { type: "string" },
-              reconnectCandidates: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
-              reconnectQuestions: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 },
-              topPaths: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
-              employerOverlaps: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 },
-              adjacentNetworkSignals: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 },
-              weeklyMoves: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
+              sourceInventory: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
+              laneValidations: {
+                type: "array",
+                minItems: 0,
+                maxItems: 6,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["lane", "status", "score", "namedPeople", "signals", "recommendedValidationAsk", "missingEvidence"],
+                  properties: {
+                    lane: { type: "string" },
+                    status: { type: "string", enum: ["validated", "promising", "needs_research"] },
+                    score: { type: "number" },
+                    namedPeople: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 5 },
+                    signals: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 5 },
+                    recommendedValidationAsk: { type: "string" },
+                    missingEvidence: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 4 },
+                  },
+                },
+              },
+              contextPools: {
+                type: "array",
+                minItems: 0,
+                maxItems: 6,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["label", "type", "reason", "namedPeople", "nextStep"],
+                  properties: {
+                    label: { type: "string" },
+                    type: { type: "string", enum: ["community", "alumni", "former_employer", "group", "other"] },
+                    reason: { type: "string" },
+                    namedPeople: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 5 },
+                    nextStep: { type: "string" },
+                  },
+                },
+              },
+              reconnectCandidates: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 5 },
+              reconnectQuestions: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 10 },
+              topPaths: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 },
+              employerOverlaps: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 10 },
+              adjacentNetworkSignals: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 10 },
+              weeklyMoves: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 },
               followUpQuestions: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
               confidenceNotes: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
             },
@@ -579,11 +950,11 @@ async function tryBuildAiNetworkAnalysis({
   }
 }
 
-function readZipEntries(bytes: Buffer) {
-  const centralEntries = readZipEntriesFromCentralDirectory(bytes);
+function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)$/i) {
+  const centralEntries = readZipEntriesFromCentralDirectory(bytes, includePattern);
   if (centralEntries.length) return centralEntries;
 
-  const entries: Array<{ name: string; text: string }> = [];
+  const entries: Array<{ name: string; text: string; bytes: Buffer }> = [];
   let offset = 0;
   while (offset < bytes.length - 30) {
     if (bytes.readUInt32LE(offset) !== 0x04034b50) {
@@ -599,7 +970,7 @@ function readZipEntries(bytes: Buffer) {
     const name = bytes.subarray(offset + 30, offset + 30 + nameLength).toString("utf8");
     const dataStart = offset + 30 + nameLength + extraLength;
     const dataEnd = dataStart + compressedSize;
-    if (dataEnd > bytes.length || !/\.(csv|txt)$/i.test(name)) {
+    if (dataEnd > bytes.length || !includePattern.test(name)) {
       offset = Math.max(offset + 30, dataEnd);
       continue;
     }
@@ -607,8 +978,8 @@ function readZipEntries(bytes: Buffer) {
     try {
       const compressed = bytes.subarray(dataStart, dataEnd);
       const content = method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : null;
-      if (content && content.length <= Math.max(uncompressedSize || 0, 5_000_000)) {
-        entries.push({ name, text: content.toString("utf8") });
+      if (content && content.length <= Math.max(uncompressedSize || 0, 25_000_000)) {
+        entries.push({ name, text: content.toString("utf8"), bytes: Buffer.from(content) });
       }
     } catch {
       // Keep reading later entries; one bad ZIP entry should not block the import.
@@ -618,8 +989,8 @@ function readZipEntries(bytes: Buffer) {
   return entries.slice(0, 40);
 }
 
-function readZipEntriesFromCentralDirectory(bytes: Buffer) {
-  const entries: Array<{ name: string; text: string }> = [];
+function readZipEntriesFromCentralDirectory(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)$/i) {
+  const entries: Array<{ name: string; text: string; bytes: Buffer }> = [];
   const eocdOffset = findEndOfCentralDirectory(bytes);
   if (eocdOffset < 0) return entries;
 
@@ -640,7 +1011,7 @@ function readZipEntriesFromCentralDirectory(bytes: Buffer) {
     const localHeaderOffset = bytes.readUInt32LE(offset + 42);
     const name = bytes.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
 
-    if (/\.(csv|txt)$/i.test(name) && bytes.readUInt32LE(localHeaderOffset) === 0x04034b50) {
+    if (includePattern.test(name) && bytes.readUInt32LE(localHeaderOffset) === 0x04034b50) {
       const localNameLength = bytes.readUInt16LE(localHeaderOffset + 26);
       const localExtraLength = bytes.readUInt16LE(localHeaderOffset + 28);
       const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
@@ -649,8 +1020,8 @@ function readZipEntriesFromCentralDirectory(bytes: Buffer) {
       try {
         const compressed = bytes.subarray(dataStart, dataEnd);
         const content = method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : null;
-        if (content && content.length <= Math.max(uncompressedSize || 0, 5_000_000)) {
-          entries.push({ name, text: content.toString("utf8") });
+        if (content && content.length <= Math.max(uncompressedSize || 0, 25_000_000)) {
+          entries.push({ name, text: content.toString("utf8"), bytes: Buffer.from(content) });
         }
       } catch {
         // Keep reading later entries; one bad ZIP entry should not block the import.
@@ -706,6 +1077,55 @@ function parseCsv(text: string) {
 
 function parseCsvLine(line: string) {
   return parseCsv(line)[0] ?? [line];
+}
+
+function parseSharedStrings(xml: string) {
+  if (!xml) return [];
+  return [...xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((match) => {
+    const textParts = [...match[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((textMatch) => decodeXml(textMatch[1]));
+    return textParts.join("");
+  });
+}
+
+function parseWorksheetRows(xml: string, sharedStrings: string[]) {
+  const rows: string[][] = [];
+  for (const rowMatch of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    const cells: string[] = [];
+    for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const attrs = cellMatch[1];
+      const body = cellMatch[2];
+      const ref = attrs.match(/\br="([A-Z]+)\d+"/)?.[1];
+      const index = ref ? columnIndex(ref) : cells.length;
+      const type = attrs.match(/\bt="([^"]+)"/)?.[1] ?? "";
+      const rawValue = body.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] ?? "";
+      const inlineValue = body.match(/<t\b[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? "";
+      const value = type === "s"
+        ? sharedStrings[Number(rawValue)] ?? ""
+        : type === "inlineStr"
+          ? decodeXml(inlineValue)
+          : decodeXml(rawValue);
+      cells[index] = value.trim();
+    }
+    if (cells.some(Boolean)) rows.push(cells);
+  }
+  return rows;
+}
+
+function columnIndex(ref: string) {
+  return ref.split("").reduce((sum, char) => sum * 26 + char.charCodeAt(0) - 64, 0) - 1;
+}
+
+function decodeXml(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function csvEscape(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 function dedupeContacts(contacts: NetworkContact[]) {

@@ -37,7 +37,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-sm font-semibold text-red-700">No reviewable contacts were found.</p>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Try uploading the LinkedIn archive ZIP that contains Connections.csv, upload Connections.csv directly, or paste rows with name, company, title, URL, and relationship notes.</p>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Try uploading the LinkedIn archive ZIP that contains Connections.csv, upload Connections.csv or an Excel contact sheet directly, or paste rows with name, company, title, URL, and relationship notes.</p>
           ${renderImportSummary(parsedImport.files)}
         </div>
       `, 400);
@@ -279,32 +279,106 @@ function renderAnalysis(analysis: NetworkAnalysis, files: NetworkImportSummary[]
         </div>
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(analysis.summary)}</p>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export?format=html" target="_blank" rel="noreferrer">
+          <span>Open printable report</span>
+        </a>
+        <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export" download>
+          <span>Download latest network readout</span>
+        </a>
+      </div>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">To save a PDF, open the printable report, choose Print, then select Save as PDF.</p>
       ${renderImportSummary(files)}
-      <div class="mt-5">
-        ${renderList("Five reconnection candidates", analysis.reconnectCandidates)}
-      </div>
-      <div class="mt-4">
-        ${renderList("Questions to deepen these five picks", analysis.reconnectQuestions)}
-      </div>
+      ${renderList("What CIP saw in the supplied data", analysis.sourceInventory ?? [])}
+      ${renderLaneValidations(analysis.laneValidations ?? [])}
       <div class="mt-5 grid gap-4 lg:grid-cols-2">
+        ${renderList("Top relationship moves", analysis.weeklyMoves)}
+        ${renderList("Top named people to review", analysis.reconnectCandidates)}
+      </div>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        ${renderList("Why these picks need review", analysis.reconnectQuestions)}
         ${renderList("Warm-introduction paths", analysis.topPaths)}
-        ${renderList("Weekly relationship moves", analysis.weeklyMoves)}
       </div>
-      <div class="mt-4 grid gap-4 lg:grid-cols-2">
-        ${renderList("Employer overlap", analysis.employerOverlaps)}
-        ${renderList("Adjacent network signals", analysis.adjacentNetworkSignals)}
-      </div>
-      <div class="mt-4 grid gap-4 lg:grid-cols-2">
-        ${renderList("Questions before outreach", analysis.followUpQuestions)}
-        ${renderList("Confidence notes", analysis.confidenceNotes)}
-      </div>
-      <div class="mt-5">
-        <h3 class="text-sm font-semibold">Top contact matches for review</h3>
-        <div class="mt-3 grid gap-3">
+      ${renderDetails("More network evidence", `
+        <div class="grid gap-4 lg:grid-cols-2">
+          ${renderList("Employer overlap", analysis.employerOverlaps)}
+          ${renderList("Adjacent network signals", analysis.adjacentNetworkSignals)}
+          ${renderList("Questions before outreach", analysis.followUpQuestions)}
+          ${renderList("Confidence notes", analysis.confidenceNotes)}
+        </div>
+        ${renderContextPools(analysis.contextPools ?? [])}
+      `)}
+      ${renderDetails("Top contact matches for review", `
+        <div class="grid gap-3">
           ${analysis.contactMatches.slice(0, 10).map(renderContactMatch).join("")}
         </div>
-      </div>
+      `)}
     </section>
+  `;
+}
+
+function renderDetails(title: string, body: string) {
+  return `
+    <details class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+      <summary class="cursor-pointer text-sm font-semibold text-[var(--foreground)]">${escapeHtml(title)}</summary>
+      <div class="mt-4">${body}</div>
+    </details>
+  `;
+}
+
+function renderLaneValidations(lanes: NetworkAnalysis["laneValidations"]) {
+  if (!lanes.length) return "";
+  return `
+    <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+      <h3 class="text-sm font-semibold">Career lane validation</h3>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">These are not outreach targets by themselves. They show which career directions have named people or network signals worth testing through low-pressure conversations.</p>
+      <div class="mt-3 grid gap-3">
+        ${lanes.map((lane) => `
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 class="font-semibold">${escapeHtml(lane.lane)}</h4>
+                <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(lane.recommendedValidationAsk)}</p>
+              </div>
+              <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${lane.score}% ${escapeHtml(lane.status.replace("_", " "))}</span>
+            </div>
+            ${lane.namedPeople.length ? `
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]"><span class="font-semibold text-[var(--foreground)]">Named people:</span> ${escapeHtml(lane.namedPeople.join(", "))}</p>
+            ` : ""}
+            ${lane.signals.length ? `
+              <ul class="mt-3 space-y-1 text-sm leading-6 text-[var(--muted)]">
+                ${lane.signals.slice(0, 4).map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}
+              </ul>
+            ` : ""}
+            ${lane.missingEvidence.length ? `
+              <p class="mt-3 text-sm leading-6 text-[var(--warning)]">${escapeHtml(lane.missingEvidence[0])}</p>
+            ` : ""}
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderContextPools(pools: NetworkAnalysis["contextPools"]) {
+  if (!pools.length) return "";
+  return `
+    <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+      <h3 class="text-sm font-semibold">Context pools, not contacts</h3>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Groups and affiliations can create warm context, but CIP should not recommend them as people. These pools need named people, current roles, and lane relevance before outreach.</p>
+      <div class="mt-3 grid gap-3 lg:grid-cols-2">
+        ${pools.map((pool) => `
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <h4 class="font-semibold">${escapeHtml(pool.label)}</h4>
+              <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">${escapeHtml(pool.type.replace("_", " "))}</span>
+            </div>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(pool.reason)}</p>
+            <p class="mt-2 text-sm leading-6 text-[var(--accent-strong)]">${escapeHtml(pool.nextStep)}</p>
+          </article>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -317,7 +391,7 @@ function renderImportSummary(files: NetworkImportSummary[]) {
         ${files.map((file) => `
           <p class="text-sm leading-6 text-[var(--muted)]">
             <span class="font-semibold text-[var(--foreground)]">${escapeHtml(file.fileName)}</span>
-            - ${escapeHtml(file.status)} ${escapeHtml(file.kind)} - ${file.contactCount} contact${file.contactCount === 1 ? "" : "s"}.
+            - ${escapeHtml(file.status)} ${escapeHtml(file.kind)} - ${file.contactCount} contact${file.contactCount === 1 ? "" : "s"} / ${file.rowCount ?? 0} row${file.rowCount === 1 ? "" : "s"}.
             ${escapeHtml(file.detail)}
           </p>
         `).join("")}
@@ -339,6 +413,11 @@ function renderContactMatch(match: NetworkContactMatch) {
       <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
         ${match.matchReasons.slice(0, 4).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
       </ul>
+      ${match.laneMatches.length ? `
+        <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm leading-6 text-[var(--muted)]">
+          <span class="font-semibold text-[var(--foreground)]">Lane connection:</span> ${escapeHtml(match.laneMatches.join(", "))}
+        </p>
+      ` : ""}
       <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm leading-6 text-[var(--accent-strong)]">
         <span class="font-semibold">First ask:</span> ${escapeHtml(match.recommendedFirstAsk)}
       </p>

@@ -137,8 +137,10 @@ const alumniSources = [
 ];
 
 const networkOutputs = [
+  "Career lane validation: which proposed directions have named people, employer overlap, or useful weak ties.",
   "Employer-contact overlap: who is connected to saved or target employers.",
   "Warm-introduction paths: who could provide advice, context, or a respectful referral route.",
+  "Context pools: groups like Rotary, BNI, alumni networks, and former employers held as context until tied to named people.",
   "Weekly relationship moves: a small prioritized list instead of a massive outreach chore.",
   "Outreach drafts by intent: reconnect, market read, informational interview, referral request, follow-up, and thank-you.",
   "Profile/content recommendations: what to update or post before reaching out.",
@@ -146,12 +148,13 @@ const networkOutputs = [
 ];
 
 const relationshipSignals = [
+  "Career lane relevance",
   "Current company or recent employer",
   "Title and seniority",
   "Target industry overlap",
-  "Role-lane relevance",
   "Geography or remote-market relevance",
   "Alumni, coworker, community, or event overlap",
+  "Context pool vs named person",
   "Connection date or relationship freshness",
   "User-rated relationship strength",
 ];
@@ -223,6 +226,34 @@ const relationshipSignals = [
     </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Lane validation</p>
+      <h2 class="mt-1 text-2xl font-semibold">Test career directions before asking for referrals.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        CIP now treats networking data as a way to validate career lanes first. A former coworker, Rotary chapter, BNI group, or alumni affiliation can be useful context, but it is not a recommendation by itself. The app should identify named people who can help test whether a lane is real, reachable, and worth pursuing.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Career lane first</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            Start with the user's current role hypotheses, then ask which contacts can validate those directions through market reads or employer context.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Named people only</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            Groups and affiliations are context pools until they connect to a specific person, company, title, and respectful first ask.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Market read before referral</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            The safest early move is often a short conversation about titles, expectations, and employers before asking anyone for a job lead.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
       <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
@@ -265,7 +296,7 @@ const relationshipSignals = [
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
         <h2 class="mt-1 text-2xl font-semibold">Bring the data into CIP</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Upload the LinkedIn archive ZIP, Connections.csv, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
+          Upload the LinkedIn archive ZIP, Connections.csv, Excel contact sheet, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
         </p>
         <div class="mt-4 grid gap-3 md:grid-cols-2">
           <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -285,10 +316,19 @@ const relationshipSignals = [
             Sign in before importing network data so CIP can save the import and analysis.
           </p>
         ) : null}
-        <form class="mt-5 grid gap-4" enctype="multipart/form-data" hx-post="/api/network/import" hx-target="#network-import-result" hx-swap="innerHTML" hx-indicator="#network-import-loading">
+        <form
+          id="network-import-form"
+          class="mt-5 grid gap-4"
+          enctype="multipart/form-data"
+          hx-encoding="multipart/form-data"
+          hx-post="/api/network/import"
+          hx-target="#network-import-result"
+          hx-swap="innerHTML"
+          hx-indicator="#network-import-loading"
+        >
           <label class="grid gap-2">
-            <span class="text-sm font-semibold">LinkedIn archive, connections CSV, or profile PDF</span>
-            <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.pdf,.txt" multiple />
+            <span class="text-sm font-semibold">LinkedIn archive, connections CSV, Excel sheet, or profile PDF</span>
+            <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.xlsx,.pdf,.txt" multiple />
           </label>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
@@ -309,8 +349,11 @@ const relationshipSignals = [
           <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
             <span>Import and analyze network</span>
           </button>
+          <p id="network-import-status" class="text-sm font-semibold text-[var(--accent-strong)]" aria-live="polite">
+            Ready to import supplied relationship data.
+          </p>
           <p class="text-sm leading-6 text-[var(--muted)]">
-            The first pass parses CSV/TXT contact data, records supplied PDFs, and creates a reviewable warm-introduction analysis. Outreach still requires user approval and relationship review.
+            The first pass parses ZIP, CSV, XLSX, and TXT contact data, records supplied PDFs, and creates a reviewable warm-introduction analysis. Outreach still requires user approval and relationship review.
           </p>
         </form>
         <div id="network-import-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
@@ -332,8 +375,50 @@ const relationshipSignals = [
             <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
           </div>
         </div>
-        <div id="network-import-result" class="mt-5" aria-live="polite"></div>
+        <script>
+          const networkImportForm = document.querySelector("#network-import-form");
+          const networkImportStatus = document.querySelector("#network-import-status");
+          const networkImportLoading = document.querySelector("#network-import-loading");
+
+          if (networkImportForm && networkImportStatus) {
+            networkImportForm.addEventListener("submit", () => {
+              networkImportStatus.textContent = "Uploading and analyzing the supplied network data...";
+              if (networkImportLoading instanceof HTMLElement) {
+                networkImportLoading.style.display = "flex";
+              }
+            });
+            networkImportForm.addEventListener("htmx:beforeRequest", () => {
+              networkImportStatus.textContent = "Uploading and analyzing the supplied network data...";
+              if (networkImportLoading instanceof HTMLElement) {
+                networkImportLoading.style.display = "flex";
+              }
+            });
+            networkImportForm.addEventListener("htmx:afterRequest", (event) => {
+              networkImportStatus.textContent = event.detail?.successful
+                ? "Network analysis finished. Review the results below."
+                : "Network analysis did not complete. Review the message below or try the LinkedIn Connections.csv directly.";
+              if (networkImportLoading instanceof HTMLElement) {
+                networkImportLoading.style.display = "";
+              }
+            });
+            networkImportForm.addEventListener("htmx:sendError", () => {
+              networkImportStatus.textContent = "The browser could not send the import request. Check the file and try again.";
+              if (networkImportLoading instanceof HTMLElement) {
+                networkImportLoading.style.display = "";
+              }
+            });
+            networkImportForm.addEventListener("htmx:responseError", () => {
+              networkImportStatus.textContent = "The server returned an import error. Review the message below.";
+              if (networkImportLoading instanceof HTMLElement) {
+                networkImportLoading.style.display = "";
+              }
+            });
+          }
+        </script>
       </div>
+    </section>
+    <section class="mt-6" aria-live="polite">
+      <div id="network-import-result"></div>
     </section>
 
     {latestNetworkAnalysis ? (
@@ -341,7 +426,10 @@ const relationshipSignals = [
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Latest saved network analysis</p>
-            <h2 class="mt-1 text-2xl font-semibold">Current warm-introduction readout</h2>
+            <h2 class="mt-1 text-2xl font-semibold">Most recent saved readout</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              This section shows the newest analysis saved before this page loaded. After a fresh import, review the new full-width result above or reload the page to refresh this saved view.
+            </p>
           </div>
           {latestNetworkAnalysisAt ? (
             <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
@@ -350,6 +438,59 @@ const relationshipSignals = [
           ) : null}
         </div>
         <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{latestNetworkAnalysis.summary}</p>
+        {latestNetworkAnalysis.sourceInventory?.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">What CIP saw</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.sourceInventory.slice(0, 8).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+        ) : null}
+        {latestNetworkAnalysis.laneValidations?.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Career lane validation</h3>
+            <div class="mt-3 grid gap-3">
+              {latestNetworkAnalysis.laneValidations.slice(0, 6).map((lane) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{lane.lane}</h4>
+                      <p class="mt-1 text-sm leading-6 text-[var(--muted)]">{lane.recommendedValidationAsk}</p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {lane.score}% {lane.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  {lane.namedPeople.length ? (
+                    <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+                      <span class="font-semibold text-[var(--foreground)]">Named people:</span> {lane.namedPeople.join(", ")}
+                    </p>
+                  ) : null}
+                  {lane.missingEvidence.length ? (
+                    <p class="mt-2 text-sm leading-6 text-[var(--warning)]">{lane.missingEvidence[0]}</p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {latestNetworkAnalysis.contextPools?.length ? (
+          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Context pools, not contacts</h3>
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              {latestNetworkAnalysis.contextPools.slice(0, 6).map((pool) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h4 class="font-semibold">{pool.label}</h4>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{pool.type.replace("_", " ")}</span>
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{pool.reason}</p>
+                  <p class="mt-2 text-sm leading-6 text-[var(--accent-strong)]">{pool.nextStep}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {latestNetworkAnalysis.reconnectCandidates?.length ? (
           <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <h3 class="text-sm font-semibold">Five reconnection candidates</h3>
@@ -368,18 +509,27 @@ const relationshipSignals = [
         ) : null}
         <div class="mt-5 grid gap-4 lg:grid-cols-2">
           <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Top relationship moves</h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.weeklyMoves.slice(0, 6).map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <h3 class="text-sm font-semibold">Warm paths</h3>
             <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
               {latestNetworkAnalysis.topPaths.slice(0, 6).map((item) => <li>{item}</li>)}
             </ul>
           </div>
-          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <h3 class="text-sm font-semibold">This week's moves</h3>
-            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-              {latestNetworkAnalysis.weeklyMoves.slice(0, 6).map((item) => <li>{item}</li>)}
-            </ul>
-          </div>
         </div>
+        <div class="mt-5 flex flex-wrap gap-3">
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export?format=html" target="_blank" rel="noreferrer">
+            <span>Open printable report</span>
+          </a>
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export" download>
+            <span>Download latest network readout</span>
+          </a>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">To save a PDF, open the printable report, choose Print, then select Save as PDF.</p>
       </section>
     ) : null}
 

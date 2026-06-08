@@ -1631,6 +1631,64 @@ The Network Intelligence page should walk the user through:
 
 This page should be calm and professional. The copy should reassure users that they are not being asked to spam people. CIP is helping them turn existing relationships into informed, respectful career conversations.
 
+### Lane Validation Model
+
+The first network-analysis passes showed an important product risk: if CIP merely ranks contacts by warmth, it can recommend familiar but strategically weak paths. Prior coworkers, Rotary, BNI, alumni groups, and community affiliations are useful signals, but they are not automatically good recommendations. The app must distinguish relationship warmth from career-lane relevance.
+
+Lane validation means taking the user's current career hypotheses and testing them against the available relationship data before treating those lanes as active search directions.
+
+Examples of lanes:
+
+- AI operations or workflow strategy
+- Product enablement
+- Career technology or workforce technology
+- Customer success, implementation, or adoption strategy
+- Regional operations or business systems leadership
+- Education, healthcare, civic, or community-facing technology roles
+
+For each lane, CIP should ask:
+
+- Does the user's evidence support this lane?
+- Do any named contacts work in or near this lane?
+- Do contacts cluster around the industries, employers, titles, geographies, or communities that make the lane more plausible?
+- Is the best next step a market-read conversation, a warm introduction, or more research?
+- Which lanes look promising but socially unsupported and should remain research lanes for now?
+
+This changes the network output from "who should I contact?" to "which career directions can my existing network help me validate?"
+
+Important rules:
+
+- CIP should validate lanes before recommending employer outreach.
+- CIP should not recommend organizations, chapters, groups, or vague affiliations as contacts.
+- Rotary, BNI, alumni groups, chambers, and similar organizations should be treated as context pools unless tied to a named person with company/title/context.
+- Prior coworkers should be treated as relationship-strength signals, not automatically as strategic matches.
+- A contact should be recommended only when CIP can explain the named person, the lane connection, the relationship context, and the respectful first ask.
+- If a person is warm but not lane-relevant, CIP should label them as a general reconnection or park them until a better lane/employer connection exists.
+- The default first ask should usually be a market read or perspective request, not a referral.
+
+Network Intelligence should therefore produce separate outputs:
+
+1. **Lane validation signals**
+   - Which lanes have named people, employer overlap, industry overlap, or useful weak ties.
+   - Which lanes lack enough network support and need more research.
+
+2. **Named contact matches**
+   - Specific people who connect to a lane, employer, or market question.
+   - The reasoning behind the match.
+   - The relationship-strength questions the user should answer before outreach.
+
+3. **Context pools**
+   - Rotary, BNI, alumni groups, schools, civic organizations, former employers, and communities that may contain useful people but should not be recommended as contacts by themselves.
+
+4. **Weekly validation moves**
+   - A small number of low-pressure conversations that help test whether a lane is real, reachable, and worth pursuing.
+
+The desired user experience is:
+
+> "This lane looks plausible from your evidence. Your network has a few people adjacent to it. Before applying heavily, talk to these named people to test what titles, employers, expectations, and proof points are real."
+
+This is safer than premature referral-seeking and more useful than surface-level contact ranking.
+
 ## Next-Step Pathway Product Decision
 
 The product should not expose the post-analysis phase as a flat top menu of disconnected feature pages such as Employers, Opportunities, Assets, and Briefing.
