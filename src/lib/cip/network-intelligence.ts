@@ -66,6 +66,7 @@ export interface NetworkAnalysis {
   weeklyMoves: string[];
   followUpQuestions: string[];
   confidenceNotes: string[];
+  relationshipCoaching?: string[];
   contactMatches: NetworkContactMatch[];
 }
 
@@ -85,11 +86,23 @@ export interface NetworkFeedback {
   note: string;
 }
 
+export interface IdealWorkProfile {
+  targetRoles: string;
+  compensationFloor: string;
+  workModel: string;
+  geographyScope: string;
+  idealWorkplace: string;
+  stretchGoals: string;
+  dealbreakers: string;
+  localAnchorNotes: string;
+}
+
 export async function parseNetworkImport(form: FormData) {
   const contacts: NetworkContact[] = [];
   const files: NetworkImportSummary[] = [];
   const notes = getText(form, "relationship_notes");
   const feedbackNotes = getText(form, "network_feedback");
+  const idealWorkProfile = parseIdealWorkProfile(form);
   const noteHints = parseRelationshipHints([notes, feedbackNotes].filter(Boolean).join("\n"));
 
   for (const value of form.getAll("network_files")) {
@@ -121,6 +134,7 @@ export async function parseNetworkImport(form: FormData) {
     notes,
     feedbackNotes,
     noteHints,
+    idealWorkProfile,
   };
 }
 
@@ -131,6 +145,8 @@ export async function buildNetworkAnalysis({
   latestAnalysis,
   employers,
   feedback = [],
+  idealWorkProfile,
+  conversationNotes = [],
 }: {
   contacts: NetworkContact[];
   files: NetworkImportSummary[];
@@ -138,8 +154,16 @@ export async function buildNetworkAnalysis({
   latestAnalysis: Partial<AdvisorAnalysis> | null;
   employers: EmployerContext[];
   feedback?: NetworkFeedback[];
+  idealWorkProfile?: IdealWorkProfile;
+  conversationNotes?: string[];
 }): Promise<NetworkAnalysis> {
-  const deterministic = buildDeterministicNetworkAnalysis({ contacts, files, intake, latestAnalysis, employers, feedback });
+  const deterministic = buildDeterministicNetworkAnalysis({ contacts, files, intake, latestAnalysis, employers, feedback, idealWorkProfile });
+  if (conversationNotes.length) {
+    deterministic.sourceInventory = [
+      ...deterministic.sourceInventory,
+      `${conversationNotes.length} loop-back conversation note record(s) from prior advisor/market-read conversations.`,
+    ];
+  }
   const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (!openAiKey) return deterministic;
 
@@ -150,6 +174,8 @@ export async function buildNetworkAnalysis({
     latestAnalysis,
     employers: employers.slice(0, 80),
     feedback,
+    idealWorkProfile,
+    conversationNotes: conversationNotes.slice(0, 10).map((note) => note.slice(0, 4_000)),
     deterministic,
     openAiKey,
   });
@@ -408,6 +434,7 @@ function buildDeterministicNetworkAnalysis({
   latestAnalysis,
   employers,
   feedback,
+  idealWorkProfile,
 }: {
   contacts: NetworkContact[];
   files: NetworkImportSummary[];
@@ -415,14 +442,15 @@ function buildDeterministicNetworkAnalysis({
   latestAnalysis: Partial<AdvisorAnalysis> | null;
   employers: EmployerContext[];
   feedback: NetworkFeedback[];
+  idealWorkProfile?: IdealWorkProfile;
 }): NetworkAnalysis {
-  const careerLanes = deriveCareerLanes(intake, latestAnalysis);
-  const sourceInventory = buildSourceInventory(contacts, files, employers);
+  const careerLanes = deriveCareerLanes(intake, latestAnalysis, idealWorkProfile);
+  const sourceInventory = buildSourceInventory(contacts, files, employers, idealWorkProfile);
   const matches = contacts
     .filter((contact) => isSpecificPerson(contact))
     .filter((contact) => !isSelfContact(contact, intake))
     .filter((contact) => !isExcludedByFeedback(contact, feedback))
-    .map((contact) => scoreContact(contact, { intake, latestAnalysis, employers, careerLanes }))
+    .map((contact) => scoreContact(contact, { intake, latestAnalysis, employers, careerLanes, idealWorkProfile }))
     .filter((match) => match.score >= 34 && hasStrategicSignal(match))
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
@@ -431,6 +459,7 @@ function buildDeterministicNetworkAnalysis({
   const employerOverlaps = buildEmployerOverlaps(matches);
   const adjacentSignals = buildAdjacentSignals(matches);
   const reconnectCandidates = matches.slice(0, 5);
+  const relationshipCoaching = buildRelationshipCoaching(matches, contextPools, idealWorkProfile);
   const contactCount = contacts.length;
   const parsedFiles = files.filter((file) => file.status === "parsed").length;
   const validatedLaneCount = laneValidations.filter((lane) => lane.status !== "needs_research").length;
@@ -449,13 +478,18 @@ function buildDeterministicNetworkAnalysis({
     employerOverlaps,
     adjacentNetworkSignals: adjacentSignals,
     weeklyMoves: [
+      idealWorkProfile?.targetRoles || idealWorkProfile?.idealWorkplace
+        ? "Review whether each warm path supports the ideal work profile before using it for outreach."
+        : "",
       ...laneValidations
         .filter((lane) => lane.status !== "needs_research")
         .slice(0, 2)
         .map((lane) => `${lane.lane}: ${lane.recommendedValidationAsk}`),
       ...matches.slice(0, 3).map((match) => `${match.contact.name}: ${match.recommendedFirstAsk}`),
-    ].slice(0, 5),
+    ].filter(Boolean).slice(0, 5),
     followUpQuestions: [
+      "Which parts of the ideal work profile are hard requirements, and which are stretch preferences?",
+      "Should geography be local-only, regional, remote-first, national, or open until compensation and role fit are proven?",
       "Which of these lane validations feel worth testing before building resume variants or applying heavily?",
       "Which of these contacts are people you would feel comfortable reconnecting with this month?",
       "Are any of the high-scoring contacts too cold, sensitive, or inappropriate for outreach?",
@@ -465,11 +499,13 @@ function buildDeterministicNetworkAnalysis({
     confidenceNotes: [
       "This pass uses user-supplied files and notes only; it does not scrape LinkedIn.",
       "Warmth alone is not enough for a recommendation; named contacts need lane, employer, or role relevance.",
+      "Local anchors are not automatically good targets; compensation, seniority, culture, and remote/hybrid fit should be checked before prioritizing them.",
       "Groups such as Rotary, BNI, alumni communities, and chambers are treated as context pools unless tied to a named person.",
       "Company/title matches are directional until the user reviews relationship strength and current accuracy.",
       "Referral asks should come after relationship review; many contacts are better first used for market reads or reconnection.",
       "Saved removals, deceased-contact notes, and current-involvement notes suppress inappropriate reconnection recommendations.",
     ],
+    relationshipCoaching,
     contactMatches: matches,
   };
 }
@@ -481,6 +517,7 @@ function scoreContact(
     latestAnalysis: Partial<AdvisorAnalysis> | null;
     employers: EmployerContext[];
     careerLanes: string[];
+    idealWorkProfile?: IdealWorkProfile;
   },
 ): NetworkContactMatch {
   const contactText = normalizeText([contact.company, contact.title, contact.notes].join(" "));
@@ -494,6 +531,12 @@ function scoreContact(
     context.latestAnalysis?.summary,
     context.latestAnalysis?.positioning?.join(" "),
     context.latestAnalysis?.explorationAreas?.map((area) => `${area.area} ${area.firstExperiment}`).join(" "),
+    context.idealWorkProfile?.targetRoles,
+    context.idealWorkProfile?.idealWorkplace,
+    context.idealWorkProfile?.stretchGoals,
+    context.idealWorkProfile?.dealbreakers,
+    context.idealWorkProfile?.workModel,
+    context.idealWorkProfile?.geographyScope,
   ].filter(Boolean).join(" "));
   const laneMatches = matchContactToLanes(contactText, context.careerLanes);
   const reasons: string[] = [];
@@ -520,6 +563,20 @@ function scoreContact(
   if (laneMatches.length) {
     score += Math.min(30, laneMatches.length * 15);
     reasons.push(`Lane validation signal: ${laneMatches.slice(0, 3).join(", ")}`);
+  }
+
+  const idealWorkText = normalizeText([
+    context.idealWorkProfile?.targetRoles,
+    context.idealWorkProfile?.idealWorkplace,
+    context.idealWorkProfile?.stretchGoals,
+  ].filter(Boolean).join(" "));
+  const idealHits = idealWorkText
+    ? ["remote", "hybrid", "senior", "management", "strategy", "product", "operations", "ai", "automation", "enablement", "customer", "education", "healthcare", "workforce", "technology"]
+        .filter((term) => contactText.includes(term) && idealWorkText.includes(term))
+    : [];
+  if (idealHits.length) {
+    score += Math.min(18, idealHits.length * 6);
+    reasons.push(`Ideal-work overlap: ${idealHits.slice(0, 3).join(", ")}`);
   }
 
   const roleTerms = ["product", "program", "operations", "communications", "marketing", "healthcare", "education", "technology", "it", "data", "research", "community", "customer", "success", "ai"];
@@ -599,11 +656,12 @@ function hasStrategicSignal(match: NetworkContactMatch) {
   return match.matchReasons.some((reason) =>
     reason.startsWith("Company/title appears")
     || reason.startsWith("Lane validation signal")
-    || reason.startsWith("Role/industry overlap"),
+    || reason.startsWith("Role/industry overlap")
+    || reason.startsWith("Ideal-work overlap"),
   );
 }
 
-function buildSourceInventory(contacts: NetworkContact[], files: NetworkImportSummary[], employers: EmployerContext[]) {
+function buildSourceInventory(contacts: NetworkContact[], files: NetworkImportSummary[], employers: EmployerContext[], idealWorkProfile?: IdealWorkProfile) {
   const parsedFiles = files.filter((file) => file.status === "parsed");
   const totalRows = files.reduce((sum, file) => sum + (file.rowCount || 0), 0);
   const companies = [...new Set(contacts.map((contact) => contact.company).filter(Boolean))];
@@ -623,6 +681,9 @@ function buildSourceInventory(contacts: NetworkContact[], files: NetworkImportSu
     formerCoworkerCount ? `Found ${formerCoworkerCount} contact${formerCoworkerCount === 1 ? "" : "s"} with former-coworker or worked-with context in notes.` : "",
     messageRows ? `Saw ${messageRows} message/conversation row${messageRows === 1 ? "" : "s"} as source context; message content is not yet deeply analyzed.` : "",
     xlsxFiles || csvFiles ? `Parsed ${xlsxFiles} Excel workbook entr${xlsxFiles === 1 ? "y" : "ies"} and ${csvFiles} CSV entr${csvFiles === 1 ? "y" : "ies"}.` : "",
+    idealWorkProfile?.targetRoles || idealWorkProfile?.idealWorkplace || idealWorkProfile?.compensationFloor
+      ? "Captured an ideal work profile before analysis so contacts can be filtered through role fit, compensation, work model, geography, stretch goals, and dealbreakers."
+      : "",
   ].filter(Boolean);
 }
 
@@ -641,13 +702,15 @@ function renderMatchSummary(match: NetworkContactMatch) {
   const strategicReasons = match.matchReasons.filter((reason) =>
     reason.startsWith("Company/title appears")
     || reason.startsWith("Lane validation signal")
-    || reason.startsWith("Role/industry overlap"),
+    || reason.startsWith("Role/industry overlap")
+    || reason.startsWith("Ideal-work overlap"),
   );
   return (strategicReasons.length ? strategicReasons : match.matchReasons).slice(0, 2).join("; ");
 }
 
-function deriveCareerLanes(intake: Partial<IntakeForm> | null, latestAnalysis: Partial<AdvisorAnalysis> | null) {
+function deriveCareerLanes(intake: Partial<IntakeForm> | null, latestAnalysis: Partial<AdvisorAnalysis> | null, idealWorkProfile?: IdealWorkProfile) {
   const lanes = [
+    idealWorkProfile?.targetRoles,
     intake?.target_title,
     ...(latestAnalysis?.roleBriefs?.map((brief) => brief.role) ?? []),
     ...(latestAnalysis?.explorationAreas?.map((area) => area.area) ?? []),
@@ -786,9 +849,35 @@ function buildEmployerOverlaps(matches: NetworkContactMatch[]) {
 
 function buildAdjacentSignals(matches: NetworkContactMatch[]) {
   const signals = matches
-    .filter((match) => match.matchReasons.some((reason) => reason.includes("Role/industry overlap")))
-    .map((match) => `${match.contact.name}: ${match.matchReasons.find((reason) => reason.includes("Role/industry overlap"))}`);
+    .filter((match) => match.matchReasons.some((reason) => reason.includes("Role/industry overlap") || reason.includes("Ideal-work overlap")))
+    .map((match) => `${match.contact.name}: ${match.matchReasons.find((reason) => reason.includes("Role/industry overlap") || reason.includes("Ideal-work overlap"))}`);
   return [...new Set(signals)].slice(0, 10);
+}
+
+function buildRelationshipCoaching(matches: NetworkContactMatch[], contextPools: ContextPoolSignal[], idealWorkProfile?: IdealWorkProfile) {
+  const hasLocalAnchorCluster = matches.some((match) => /dartmouth|upper valley|hanover|lebanon/i.test([match.contact.company, match.contact.title, match.contact.notes].join(" ")))
+    || contextPools.some((pool) => /dartmouth|alumni/i.test([pool.label, pool.reason, pool.namedPeople.join(" ")].join(" ")));
+  const hasIdealFilter = Boolean(
+    idealWorkProfile?.targetRoles
+    || idealWorkProfile?.compensationFloor
+    || idealWorkProfile?.workModel
+    || idealWorkProfile?.geographyScope
+    || idealWorkProfile?.idealWorkplace,
+  );
+
+  return [
+    hasIdealFilter
+      ? "Sort the list against the ideal work profile first: use contacts who can answer role, compensation, work-model, culture, or seniority questions before chasing referrals."
+      : "Before using this list, define the ideal role, pay floor, work model, geography scope, and dealbreakers so warm contacts do not pull the search off strategy.",
+    "Start with market reads: ask for perspective on titles, pay bands, teams, hiring reality, work model, and proof points before asking anyone for an introduction.",
+    "Assign each person an intent before outreach: market read, reconnection, employer context, role translation, introduction later, referral later, or park.",
+    "Group people into three buckets: use now for a low-pressure conversation, research later because the fit is unclear, and park because warmth exists but strategy does not.",
+    "Limit each weekly batch to three to five people. Review relationship warmth, sensitivity, and the specific question before sending anything.",
+    hasLocalAnchorCluster
+      ? "If the list is Dartmouth-heavy, treat that as a real network-density signal, not a mandate. Use Dartmouth-affiliated contacts to learn about local hiring, compensation ceilings, and adjacent paths; prioritize Dartmouth roles only when pay, scope, and work model are credible."
+      : "If many contacts cluster around one familiar employer or community, use the cluster for labor-market intelligence but keep searching for better-fit remote, regional, or national paths.",
+    "After each conversation, record what changed: confirmed lane, rejected lane, salary evidence, remote/hybrid evidence, new employer lead, suggested person, or asset gap.",
+  ];
 }
 
 function renderReconnectCandidate(match: NetworkContactMatch) {
@@ -828,6 +917,8 @@ async function tryBuildAiNetworkAnalysis({
   latestAnalysis,
   employers,
   feedback,
+  idealWorkProfile,
+  conversationNotes = [],
   deterministic,
   openAiKey,
 }: {
@@ -837,6 +928,8 @@ async function tryBuildAiNetworkAnalysis({
   latestAnalysis: Partial<AdvisorAnalysis> | null;
   employers: EmployerContext[];
   feedback: NetworkFeedback[];
+  idealWorkProfile?: IdealWorkProfile;
+  conversationNotes?: string[];
   deterministic: NetworkAnalysis;
   openAiKey: string;
 }): Promise<NetworkAnalysis | null> {
@@ -852,7 +945,7 @@ async function tryBuildAiNetworkAnalysis({
         {
           role: "system",
           content:
-            "You are a rigorous career coach analyzing user-supplied networking data. Do not scrape or imply access to private LinkedIn. Validate career lanes before recommending outreach: test the user's role hypotheses against named people, companies, titles, relationship notes, saved employers, and market-read potential. Pick specific named living people only when they have lane, employer, or role relevance; warmth alone is not enough. Never recommend the user themself as a contact. Never pick organizations, clubs, chapters, or generic channels such as BNI, Rotary, alumni groups, or chambers as contacts. If feedback says remove, deceased, or current involvement, do not recommend that contact or organization. Treat BNI as primarily small-business/referral-network context, not automatic access to large employers. Treat Rotary as civic/community context that may include larger-business members, but still require named-person evidence. Prior coworkers are relationship-strength signals, not automatically strategic matches. Only claim employer overlap when the contact's company/title supports it; if an employer appears only in notes, ask a clarifying question. Avoid spammy referral advice. Prefer market-read and lane-validation asks before referral asks. Name uncertainty and ask relationship-strength questions.",
+            "You are a rigorous career coach analyzing user-supplied networking data. Do not scrape or imply access to private LinkedIn. First interpret the user's LinkedIn/profile data and contacts through the supplied ideal work profile: target roles, compensation floor, remote/hybrid/geography preferences, workplace traits, stretch goals, and dealbreakers. Validate career lanes before recommending outreach: test the user's role hypotheses against named people, companies, titles, relationship notes, saved employers, ideal-work fit, and market-read potential. Geography is a user-selected constraint, not a default cage; local anchor employers should not be prioritized unless compensation, seniority, work model, and culture fit are plausible. Pick specific named living people only when they have lane, employer, role, or ideal-work relevance; warmth alone is not enough. Never recommend the user themself as a contact. Never pick organizations, clubs, chapters, or generic channels such as BNI, Rotary, alumni groups, or chambers as contacts. If feedback says remove, deceased, or current involvement, do not recommend that contact or organization. Treat BNI as primarily small-business/referral-network context, not automatic access to large employers. Treat Rotary as civic/community context that may include larger-business members, but still require named-person evidence. Prior coworkers are relationship-strength signals, not automatically strategic matches. Only claim employer overlap when the contact's company/title supports it; if an employer appears only in notes, ask a clarifying question. Avoid spammy referral advice. Prefer market-read and lane-validation asks before referral asks. Name uncertainty and ask relationship-strength questions. loopBackConversationNotes contain the user's own reports of past advisor/market-read conversations: treat them as first-hand market evidence that can confirm or weaken lanes, employers, pay bands, and contacts, and update recommendations accordingly instead of repeating advice those conversations already answered.",
         },
         {
           role: "user",
@@ -864,6 +957,8 @@ async function tryBuildAiNetworkAnalysis({
             latestAnalysis,
             employers,
             feedback,
+            idealWorkProfile,
+            loopBackConversationNotes: conversationNotes,
             deterministicContactMatches: deterministic.contactMatches.slice(0, 20),
             deterministicLaneValidations: deterministic.laneValidations,
             deterministicContextPools: deterministic.contextPools,
@@ -878,7 +973,7 @@ async function tryBuildAiNetworkAnalysis({
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["summary", "sourceInventory", "laneValidations", "contextPools", "reconnectCandidates", "reconnectQuestions", "topPaths", "employerOverlaps", "adjacentNetworkSignals", "weeklyMoves", "followUpQuestions", "confidenceNotes"],
+            required: ["summary", "sourceInventory", "laneValidations", "contextPools", "reconnectCandidates", "reconnectQuestions", "topPaths", "employerOverlaps", "adjacentNetworkSignals", "weeklyMoves", "followUpQuestions", "confidenceNotes", "relationshipCoaching"],
             properties: {
               summary: { type: "string" },
               sourceInventory: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
@@ -926,6 +1021,7 @@ async function tryBuildAiNetworkAnalysis({
               weeklyMoves: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 },
               followUpQuestions: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
               confidenceNotes: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
+              relationshipCoaching: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
             },
           },
         },
@@ -950,7 +1046,7 @@ async function tryBuildAiNetworkAnalysis({
   }
 }
 
-function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)$/i) {
+export function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)$/i) {
   const centralEntries = readZipEntriesFromCentralDirectory(bytes, includePattern);
   if (centralEntries.length) return centralEntries;
 
@@ -1233,6 +1329,19 @@ function normalizeText(value: string) {
 function getText(form: FormData, key: string) {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parseIdealWorkProfile(form: FormData): IdealWorkProfile {
+  return {
+    targetRoles: getText(form, "ideal_target_roles"),
+    compensationFloor: getText(form, "ideal_compensation_floor"),
+    workModel: getText(form, "ideal_work_model"),
+    geographyScope: getText(form, "ideal_geography_scope"),
+    idealWorkplace: getText(form, "ideal_workplace"),
+    stretchGoals: getText(form, "ideal_stretch_goals"),
+    dealbreakers: getText(form, "ideal_dealbreakers"),
+    localAnchorNotes: getText(form, "ideal_local_anchor_notes"),
+  };
 }
 
 function extractResponseText(payload: unknown) {

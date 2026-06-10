@@ -89,6 +89,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         .limit(200),
     ]);
 
+    const { data: conversationRows } = await supabase
+      .from("career_sources")
+      .select("extracted_text, created_at")
+      .eq("user_id", user.id)
+      .eq("source_type", "conversation_outcome")
+      .order("created_at", { ascending: false })
+      .limit(12);
+
     if (intakeError) {
       return html(`<p class="text-sm font-semibold text-red-700">Could not load intake: ${escapeHtml(intakeError.message)}</p>`, 500);
     }
@@ -113,6 +121,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       ...(feedbackRows ?? []).map((row) => parseNetworkFeedback(row.extracted_text)).filter(Boolean) as NetworkFeedback[],
       ...inlineFeedback,
     ];
+    const conversationNotes = (conversationRows ?? [])
+      .map((row) => parseConversationNoteText(row.extracted_text))
+      .filter(Boolean) as string[];
     const analysis = await buildNetworkAnalysis({
       contacts: parsedImport.contacts,
       files: parsedImport.files,
@@ -120,6 +131,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       latestAnalysis,
       employers,
       feedback,
+      idealWorkProfile: parsedImport.idealWorkProfile,
+      conversationNotes,
     });
     const now = new Date().toISOString();
 
@@ -134,6 +147,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         contacts: parsedImport.contacts,
         notes: parsedImport.notes,
         feedback_notes: parsedImport.feedbackNotes,
+        ideal_work_profile: parsedImport.idealWorkProfile,
         created_at: now,
       }),
       trust_state: "user_supplied",
@@ -150,6 +164,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         employer_count: employers.length,
         feedback_count: feedback.length,
         contact_count: parsedImport.contacts.length,
+        ideal_work_profile: parsedImport.idealWorkProfile,
         files: parsedImport.files,
         analysis,
         created_at: now,
@@ -187,6 +202,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     );
   }
 };
+
+function parseConversationNoteText(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed?.text) return null;
+    const label = parsed.fileName ? `${parsed.fileName}: ` : "";
+    return `${label}${String(parsed.text)}`;
+  } catch {
+    return null;
+  }
+}
 
 function parseSavedIntake(value: string | null): IntakeForm | null {
   if (!value) return null;
@@ -290,6 +317,7 @@ function renderAnalysis(analysis: NetworkAnalysis, files: NetworkImportSummary[]
       <p class="mt-2 text-sm leading-6 text-[var(--muted)]">To save a PDF, open the printable report, choose Print, then select Save as PDF.</p>
       ${renderImportSummary(files)}
       ${renderList("What CIP saw in the supplied data", analysis.sourceInventory ?? [])}
+      ${renderCoaching(analysis.relationshipCoaching ?? [])}
       ${renderLaneValidations(analysis.laneValidations ?? [])}
       <div class="mt-5 grid gap-4 lg:grid-cols-2">
         ${renderList("Top relationship moves", analysis.weeklyMoves)}
@@ -323,6 +351,19 @@ function renderDetails(title: string, body: string) {
       <summary class="cursor-pointer text-sm font-semibold text-[var(--foreground)]">${escapeHtml(title)}</summary>
       <div class="mt-4">${body}</div>
     </details>
+  `;
+}
+
+function renderCoaching(items: string[]) {
+  if (!items.length) return "";
+  return `
+    <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+      <h3 class="text-sm font-semibold">How to use this list</h3>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Treat the network readout as a coaching queue, not a send list. The goal is to learn which paths are real before applying heavily, rewriting assets, or asking for referrals.</p>
+      <ol class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+        ${items.slice(0, 8).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ol>
+    </div>
   `;
 }
 

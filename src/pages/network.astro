@@ -1,6 +1,5 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems } from "../lib/cip/data";
 import type { NetworkAnalysis } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
 
@@ -12,6 +11,8 @@ let networkCounts = {
 let latestNetworkAnalysis: NetworkAnalysis | null = null;
 let latestNetworkAnalysisAt: string | null = null;
 let loadError = "";
+let recentConversationNotes: Array<{ title: string | null; created_at: string }> = [];
+let conversationNoteCount = 0;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -49,6 +50,23 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       };
       latestNetworkAnalysis = parseNetworkAnalysis(analysisRow?.extracted_text ?? null);
       latestNetworkAnalysisAt = analysisRow?.created_at ?? null;
+
+      const [{ count: noteCount }, { data: noteRows }] = await Promise.all([
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "conversation_outcome"),
+        supabase
+          .from("career_sources")
+          .select("title, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", "conversation_outcome")
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
+      conversationNoteCount = noteCount ?? 0;
+      recentConversationNotes = noteRows ?? [];
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load network intelligence state.";
@@ -147,6 +165,32 @@ const networkOutputs = [
   "Relationship status tracking: contacted, replied, intro offered, follow-up due, or not a fit.",
 ];
 
+const marketReadReasons = [
+  "Job titles mean different things across employers, so people can help translate what to search for.",
+  "Salary bands, remote policies, and management scope are often clearer in conversation than in postings.",
+  "A familiar local employer can be useful context without being the right target.",
+  "The user can test a lane before rewriting assets, applying heavily, or asking for a referral.",
+];
+
+const marketReadSteps = [
+  {
+    title: "Pick the weekly batch",
+    detail: "Choose three to five people from the list. Do not turn the whole network readout into an outreach chore.",
+  },
+  {
+    title: "Assign the intent",
+    detail: "Mark each person as market read, reconnection, employer context, role translation, intro later, referral later, or park.",
+  },
+  {
+    title: "Ask one useful question",
+    detail: "Start with titles, teams, pay reality, proof points, hiring process, or employers worth studying.",
+  },
+  {
+    title: "Record what changed",
+    detail: "After the conversation, capture confirmed lanes, rejected lanes, salary evidence, new people, new employers, and asset gaps.",
+  },
+];
+
 const relationshipSignals = [
   "Career lane relevance",
   "Current company or recent employer",
@@ -158,16 +202,61 @@ const relationshipSignals = [
   "Connection date or relationship freshness",
   "User-rated relationship strength",
 ];
+
+const idealWorkQuestions = [
+  {
+    id: "ideal_target_roles",
+    label: "Target roles or lanes",
+    placeholder: "Example: AI operations strategy, product enablement, customer education, workflow automation leadership",
+    type: "textarea",
+  },
+  {
+    id: "ideal_compensation_floor",
+    label: "Compensation floor and seniority",
+    placeholder: "Example: $120K+ base, senior IC or manager scope, no entry-level resets",
+    type: "input",
+  },
+  {
+    id: "ideal_work_model",
+    label: "Work model",
+    placeholder: "Example: remote-first preferred; hybrid possible for unusually strong fit",
+    type: "input",
+  },
+  {
+    id: "ideal_geography_scope",
+    label: "Geography scope",
+    placeholder: "Example: remote/national first, New England hybrid second, Upper Valley only if pay and scope are real",
+    type: "textarea",
+  },
+  {
+    id: "ideal_workplace",
+    label: "Ideal workplace traits",
+    placeholder: "Example: modern comp practices, clear decision-making, respectful of senior experience, practical AI adoption",
+    type: "textarea",
+  },
+  {
+    id: "ideal_stretch_goals",
+    label: "Stretch goals",
+    placeholder: "Example: grow into product strategy, lead AI adoption, move beyond local labor-market ceilings",
+    type: "textarea",
+  },
+  {
+    id: "ideal_dealbreakers",
+    label: "Dealbreakers and caution flags",
+    placeholder: "Example: low pay bands, vague management scope, mandatory onsite for work that can be remote, outdated tooling",
+    type: "textarea",
+  },
+  {
+    id: "ideal_local_anchor_notes",
+    label: "Local anchor notes",
+    placeholder: "Example: Dartmouth College is useful for market reads but should not be prioritized unless compensation and senior scope are proven.",
+    type: "textarea",
+  },
+];
 ---
 
 <Layout title="CIP Network Intelligence">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Network Intelligence</p>
       <h1 class="mt-2 max-w-4xl text-3xl font-semibold">Turn relationship data into warm, respectful career moves.</h1>
@@ -254,6 +343,28 @@ const relationshipSignals = [
     </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Ideal work filter</p>
+      <h2 class="mt-1 text-2xl font-semibold">Start with the work life worth aiming for.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Network data should not trap the user inside whoever is nearby or familiar. CIP should combine the LinkedIn profile, resume evidence, and these preferences before deciding which relationships are actually useful for advice, market reads, or introductions.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Fit before geography</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Remote, hybrid, national, regional, and local paths should all stay open until the user chooses a constraint.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Pay and scope matter</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Local anchors need evidence of compensation, seniority, and modern work practices before they become priority targets.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Network keeps expanding</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">The first import is a starting map. As better-fit businesses and roles appear, CIP should ask what new relationship data would make the map stronger.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
       <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
@@ -296,7 +407,7 @@ const relationshipSignals = [
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
         <h2 class="mt-1 text-2xl font-semibold">Bring the data into CIP</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Upload the LinkedIn archive ZIP, Connections.csv, Excel contact sheet, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
+          Answer the ideal-work questions, then upload the LinkedIn archive ZIP, Connections.csv, Excel contact sheet, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
         </p>
         <div class="mt-4 grid gap-3 md:grid-cols-2">
           <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -326,6 +437,33 @@ const relationshipSignals = [
           hx-swap="innerHTML"
           hx-indicator="#network-import-loading"
         >
+          <fieldset class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <legend class="px-1 text-sm font-semibold">Before CIP analyzes the network</legend>
+            <p class="text-sm leading-6 text-[var(--muted)]">
+              These answers tell CIP what a good opportunity looks like before it ranks contacts. Leave unknowns blank; uncertainty is useful signal too.
+            </p>
+            <div class="grid gap-4 md:grid-cols-2">
+              {idealWorkQuestions.map((question) => (
+                <label class="grid gap-2">
+                  <span class="text-sm font-semibold">{question.label}</span>
+                  {question.type === "textarea" ? (
+                    <textarea
+                      name={question.id}
+                      class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm"
+                      placeholder={question.placeholder}
+                    ></textarea>
+                  ) : (
+                    <input
+                      name={question.id}
+                      class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm"
+                      type="text"
+                      placeholder={question.placeholder}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">LinkedIn archive, connections CSV, Excel sheet, or profile PDF</span>
             <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.xlsx,.pdf,.txt" multiple />
@@ -365,9 +503,10 @@ const relationshipSignals = [
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Network analysis in progress</p>
             <div class="cip-thinking-lines" aria-hidden="true">
+              <span>Reading ideal work preferences and LinkedIn/profile evidence...</span>
               <span>Reading supplied LinkedIn and relationship data...</span>
               <span>Parsing contacts into reviewable records...</span>
-              <span>Comparing companies against saved employer targets...</span>
+              <span>Comparing contacts against fit, compensation, work model, and employer targets...</span>
               <span>Looking for warm context and market-read paths...</span>
               <span>Saving the network intelligence artifact...</span>
             </div>
@@ -419,6 +558,64 @@ const relationshipSignals = [
     </section>
     <section class="mt-6" aria-live="polite">
       <div id="network-import-result"></div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Loop back: conversation notes</p>
+      <h2 class="mt-1 text-2xl font-semibold">Bring back what your advisors told you</h2>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        After market-read conversations, save what you learned here. Things change week to week: new employers come up, pay-band reality gets clearer, and your geography or work-model preferences may shift. These notes are additive evidence; the next network analysis and the next evidence re-analysis both read them, so the cycle actually updates instead of repeating itself.
+      </p>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved conversation notes</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{conversationNoteCount}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Most recent</p>
+          {recentConversationNotes.length ? (
+            <ul class="mt-2 space-y-1 text-sm text-[var(--muted)]">
+              {recentConversationNotes.map((note) => (
+                <li>
+                  <span class="font-semibold text-[var(--foreground)]">{note.title ?? "Conversation notes"}</span>
+                  <span class="ml-1 text-xs">{new Date(note.created_at).toLocaleDateString()}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="mt-2 text-sm text-[var(--muted)]">No conversation notes saved yet.</p>
+          )}
+        </div>
+      </div>
+      <form
+        id="loopback-form"
+        class="mt-5 grid gap-4"
+        enctype="multipart/form-data"
+        hx-encoding="multipart/form-data"
+        hx-post="/api/network/loopback"
+        hx-target="#loopback-result"
+        hx-swap="innerHTML"
+      >
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Upload notes files (.txt, .md, .docx, .rtf, .json)</span>
+          <input name="note_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />
+        </label>
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Or paste conversation notes</span>
+          <textarea
+            name="conversation_notes"
+            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            placeholder={`Useful things to capture:\nWho you talked to, their company/role, and the date.\nWhat they confirmed or weakened about a career lane, employer, or pay band.\nNew employers, teams, titles, or people they mentioned.\nAnything that changes your targets: geography, remote/hybrid, compensation floor, dealbreakers.`}
+          ></textarea>
+        </label>
+        <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
+          <span>Save conversation notes</span>
+        </button>
+        <p class="text-sm leading-6 text-[var(--muted)]">
+          Notes are saved as additive records; nothing earlier is overwritten. After saving, re-run the network analysis above or the evidence re-analysis on the Evidence page to fold the learnings in.
+        </p>
+      </form>
+      <div id="loopback-result" class="mt-4" aria-live="polite"></div>
     </section>
 
     {latestNetworkAnalysis ? (
@@ -491,6 +688,17 @@ const relationshipSignals = [
             </div>
           </div>
         ) : null}
+        {latestNetworkAnalysis.relationshipCoaching?.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">How to use this list</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Treat the network readout as a coaching queue, not a send list. The goal is to learn which paths are real before applying heavily, rewriting assets, or asking for referrals.
+            </p>
+            <ol class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {latestNetworkAnalysis.relationshipCoaching.slice(0, 8).map((item) => <li>{item}</li>)}
+            </ol>
+          </div>
+        ) : null}
         {latestNetworkAnalysis.reconnectCandidates?.length ? (
           <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <h3 class="text-sm font-semibold">Five reconnection candidates</h3>
@@ -532,6 +740,39 @@ const relationshipSignals = [
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">To save a PDF, open the printable report, choose Print, then select Save as PDF.</p>
       </section>
     ) : null}
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Market-read coaching</p>
+      <h2 class="mt-1 text-2xl font-semibold">Use the five-person list to learn what is real.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        A market read is a short perspective conversation. The user is not asking for a job yet; they are asking someone with relevant proximity to help understand titles, teams, pay bands, hiring reality, work model, proof points, and better-fit employers.
+      </p>
+      <div class="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">Why this works</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            {marketReadReasons.map((item) => <li>{item}</li>)}
+          </ul>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h3 class="font-semibold">What happens next</h3>
+          <div class="mt-3 grid gap-3">
+            {marketReadSteps.map((item) => (
+              <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                <h4 class="text-sm font-semibold">{item.title}</h4>
+                <p class="mt-1 text-sm leading-6 text-[var(--muted)]">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
+        <h3 class="font-semibold">The question CIP is helping the user answer</h3>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          Given the user's ideal work profile and current network, which three to five people can help test whether a lane, employer type, or role title is worth pursuing before the user spends time applying or asking for referrals?
+        </p>
+      </div>
+    </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 3</p>

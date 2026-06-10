@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, type AdvisorAnalysis, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
+import { conversationNotesToEvidence } from "@/lib/cip/conversation-notes";
 import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-builder";
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
@@ -54,6 +55,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const [
       { data: evidenceRows, error: evidenceError },
       { data: sourceRows, error: sourceError },
+      { data: conversationRows },
       { count: analysisCount },
     ] = await Promise.all([
       supabase
@@ -70,6 +72,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         .eq("source_type", "source_analysis")
         .order("created_at", { ascending: false })
         .limit(5),
+      supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", "conversation_outcome")
+        .order("created_at", { ascending: false })
+        .limit(20),
       supabase
         .from("career_sources")
         .select("id", { count: "exact", head: true })
@@ -91,7 +100,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const sourceEvidence = sourceAnalysesToEvidence(
       (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
     );
-    const combinedEvidence = [...sourceEvidence, ...evidenceResponses];
+    const conversationEvidence = conversationNotesToEvidence(
+      (conversationRows ?? [])
+        .map((row) => parseConversationNote(row.extracted_text))
+        .filter(Boolean) as Array<{ fileName?: string; text?: string; captured_at?: string }>,
+    );
+    const combinedEvidence = [...sourceEvidence, ...evidenceResponses, ...conversationEvidence];
 
     if (!combinedEvidence.length) {
       return html('<p class="text-sm font-semibold text-red-700">Save evidence or analyze linked sources before running re-analysis.</p>', 400);
@@ -118,6 +132,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         intake_created_at: intakeRow?.created_at ?? null,
         evidence_count: evidenceResponses.length,
         source_evidence_count: sourceEvidence.length,
+        conversation_note_count: conversationEvidence.length,
         evidence_sufficiency: sufficiency,
         advisor,
         created_at: new Date().toISOString(),
@@ -150,6 +165,16 @@ function parseSavedIntake(value: string | null): IntakeForm | null {
     const parsed = JSON.parse(value) as IntakeSource;
     const intake = intakeFormSchema.safeParse(parsed.intake);
     return intake.success ? intake.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseConversationNote(value: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.text ? parsed : null;
   } catch {
     return null;
   }

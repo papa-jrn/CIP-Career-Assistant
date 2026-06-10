@@ -1534,6 +1534,119 @@ Network mapping should answer:
 
 LinkedIn/university networking should become a **warm-introduction map**, not a scraping feature.
 
+### Ideal Work Filter Before Network Analysis
+
+The network map should not begin by asking "who is nearby?" or "which familiar institution has the most contacts?" That can trap the user inside the labor market they are trying to outgrow.
+
+Before CIP analyzes LinkedIn/profile data, connection exports, alumni lists, or manually pasted relationship notes, the Map Network workflow should ask a short ideal-work question set:
+
+- Target role lanes or problem spaces the user wants to test.
+- Compensation floor and seniority level that would make a move worthwhile.
+- Remote, hybrid, onsite, relocation, travel, and time-zone preferences.
+- Geography scope: local-only, regional, remote-first, national, international, or open until evidence narrows it.
+- Ideal workplace traits: modern pay practices, strong management culture, tool maturity, mission fit, autonomy, learning environment, or pace.
+- Stretch goals: what kind of work would help the user grow beyond the current resume story.
+- Dealbreakers and caution flags: under-market pay, vague scope, mandatory onsite work that could be remote, stale tooling, unstable leadership, values conflicts, or industries to avoid.
+- Local anchor notes: whether nearby institutions are true targets, research-only employers, or compensation-risk employers.
+
+These answers should become part of the network analysis context. CIP should combine the user's LinkedIn/profile data, resume/evidence analysis, and ideal-work profile before ranking relationship paths.
+
+This changes the purpose of Map Network:
+
+> Given the user's desired work profile, which existing relationships can help test, understand, or reach opportunities that are actually worth pursuing?
+
+Warm introductions remain valuable, but they are a routing layer, not the strategy itself. A contact should rise only when the app can connect the person to at least one of:
+
+- A validated or promising career lane.
+- A current or likely target employer.
+- A role family, industry, or workplace trait the user wants.
+- A compensation, seniority, remote/hybrid, or culture question the user needs answered.
+- A respectful market-read conversation that helps decide whether a lane is real.
+
+Geography should be treated as a user-selected constraint, not the default worldview. The app may support local, regional, remote-first, national, and hybrid searches, but it should not confine users to nearby employers unless the user explicitly chooses that tradeoff.
+
+Local anchor employers require caution. A major nearby institution can be useful for market intelligence or warm context, but it should not be treated as a good target merely because it is familiar, large, or close. If the user's compensation floor, seniority needs, management scope, or remote/hybrid preferences conflict with that employer's public pay bands or hiring patterns, CIP should label the employer as research-only, compensation-risk, or low priority until better evidence exists.
+
+For example, a Dartmouth College contact may be useful for asking whether any roles have modern compensation, senior scope, or meaningful decision authority. That does not make Dartmouth College a recommended target by default. Dartmouth affiliation should remain a warm-context signal unless current role, target-lane relevance, compensation evidence, and workplace fit justify stronger action.
+
+The network should also evolve over time. The first LinkedIn/profile import gives CIP an initial map. As employer discovery and role research uncover better-fit companies, remote-first teams, or stretch opportunities, CIP should ask the user to add targeted relationship data for those new directions. This creates a loop:
+
+1. Define ideal work and constraints.
+2. Analyze current profile and relationship data.
+3. Identify promising lanes and weak spots.
+4. Research better-fit employers and roles.
+5. Bring back new relationship data for those employers, industries, or communities.
+6. Refine the map before outreach or referrals.
+
+### Coaching the User Through the Network List
+
+The Map Network result should not stop at "here are people." That is too close to a contact-ranking tool and does not create enough value. CIP should coach the user on how to use the list.
+
+The key behavior is the **market read**.
+
+A market read is a short, low-pressure conversation where the user is not asking for a job, referral, or favor yet. The user is asking someone with relevant proximity to help them understand the reality of a role lane, employer, pay band, hiring process, work model, team, or industry.
+
+This works because public career data is thin and distorted:
+
+- Job titles are inconsistent across employers.
+- Posted salary ranges may be missing, stale, misleading, or too broad.
+- Remote and hybrid expectations often differ from the posting.
+- The same role can mean strategy in one organization and task execution in another.
+- Local anchor employers may be visible and familiar without being strong compensation or seniority fits.
+- AI can infer plausible paths, but people can confirm what is actually happening inside teams and markets.
+
+The app should therefore teach the user that the first goal is not "get someone to help me get hired." The first goal is:
+
+> Learn what is real before spending time applying, rewriting assets, or asking for introductions.
+
+After producing named people, lane validations, context pools, and warm paths, CIP should explain:
+
+- The list is a coaching queue, not a send list.
+- Most first conversations should be market reads, not referral asks.
+- The user should sort people into three buckets:
+  - Use now: good fit for a low-pressure conversation this week.
+  - Research later: potentially useful, but the role, employer, or relationship context is unclear.
+  - Park: warm or familiar, but not currently strategy-relevant.
+- A weekly outreach batch should stay small, usually three to five people.
+- Every person needs a specific reason for contact and a specific question before outreach.
+- Dense clusters, such as many Dartmouth-affiliated contacts, should be interpreted as network-density evidence, not a mandate to pursue that institution.
+- Local or alumni-heavy contacts can be valuable for learning about pay bands, hiring reality, workplace culture, local labor-market ceilings, adjacent employers, and who else to speak with.
+- Referral asks should come only after the user has verified fit, relationship comfort, and a relevant open role or team.
+
+The coaching output should answer:
+
+- Why is this person on the list?
+- What should the user ask them first?
+- Is this a market-read, reconnection, introduction, referral, or park-for-later contact?
+- What uncertainty should be resolved before outreach?
+- What should be recorded after the conversation?
+
+For each recommended person, CIP should produce a **conversation plan**:
+
+- Intent: market read, reconnection, employer context, role translation, warm introduction, referral later, or park.
+- Why this person: the specific company, role, lane, community, or experience signal.
+- First question: the safest useful question to ask first.
+- Do-not-ask-yet warning: what would be premature or too transactional.
+- Learning goal: what the user hopes to understand after the conversation.
+- Follow-up rule: what should happen if the person replies, ignores the message, offers another contact, or shares useful evidence.
+
+The five-person list should become a weekly operating rhythm:
+
+1. Pick three to five people, not the whole list.
+2. Assign each person an intent.
+3. Generate a short message that asks for perspective, not a job.
+4. Send only messages the user approves.
+5. Record the conversation outcome.
+6. Update career lanes, employer priorities, resume gaps, and next relationship targets.
+
+CIP should also help the user learn from conversations. After each contact, the app should ask what changed:
+
+- Did this confirm or weaken a career lane?
+- Did it reveal salary, scope, culture, remote-work, or hiring-process evidence?
+- Did it identify a new employer, role title, team, or person?
+- Did it expose a resume/profile gap?
+- Should this contact remain active, move to follow-up, or be parked?
+
 ## Opportunities Coaching Plan
 
 The Opportunities page should be the user's guided transition from "we understand your background" to "here is where to look, why, and how to approach it."
@@ -1555,8 +1668,9 @@ The page should coach the user through:
 
 3. **Relationship mapping**
    - Ask whether the user wants to add relationship data before outreach planning.
+   - Collect or confirm the ideal-work profile before analyzing relationship data.
    - Accept uploaded or pasted LinkedIn connection data, alumni lists, manually entered contacts, and public profile links.
-   - Match contacts to saved employers and adjacent industries.
+   - Match contacts to saved employers, adjacent industries, role lanes, workplace preferences, compensation questions, remote/hybrid preferences, and stretch goals.
    - Generate warm-introduction paths and outreach angles.
 
 4. **Action plan**
@@ -1699,13 +1813,17 @@ Once the evidence analysis is complete, the user needs a guided sequence:
    - Update the resume first, because it is the proof-backed base for LinkedIn, outreach, applications, and interviews.
    - Generate LinkedIn/profile updates, portfolio positioning, and interview stories from verified evidence only.
 
-2. **Bring in networking data**
-   - Coach the user to download or paste LinkedIn connection data, alumni lists, manually entered contacts, and public profile links they are allowed to use.
-   - Use that data to build a warm-introduction map against target employers and industries.
+2. **Define ideal work, then bring in networking data**
+   - Coach the user to download or paste LinkedIn/profile data, LinkedIn connection data, alumni lists, manually entered contacts, and public profile links they are allowed to use.
+   - Confirm target roles, compensation floor, work model, geography scope, ideal workplace traits, stretch goals, dealbreakers, and local-anchor cautions before ranking contacts.
+   - Use that data to build a warm-introduction map against the user's ideal work profile, target employers, industries, and unresolved market questions.
+   - Treat nearby institutions as one evidence source, not the default search boundary.
 
-3. **Find businesses in a target geography**
-   - Ask for the geographic area, radius, sectors, work model, compensation constraints, and target employer categories.
-   - Use the completed profile to rank employers by fit, relationship potential, and likely role alignment.
+3. **Find employers by fit**
+   - Ask whether geography is local-only, regional, remote-first, national, hybrid, or open until evidence narrows it.
+   - Research local, regional, remote-first, national, and hybrid employers that fit the user's target lanes.
+   - Use the completed profile to rank employers by compensation fit, seniority fit, work model, relationship potential, and likely role alignment.
+   - Flag compensation-risk or seniority-risk employers before they become outreach priorities.
 
 4. **Define job-board search lanes**
    - Translate the analysis into specific LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.
@@ -1970,6 +2088,53 @@ Implemented first pass:
 Production note:
 
 The public Nominatim service has usage limits and requires a meaningful User-Agent, attribution, and caching for repeated queries. This is acceptable for prototype testing, but a paid/commercial version should use a proper geocoding provider or a self-hosted geocoding stack.
+
+---
+
+## Navigation and Weekly Cycle Decision
+
+The top navigation is now a single shared stepper rendered by the layout on every page, replacing the per-page link rows and the homepage-only header nav.
+
+The step order is:
+
+1. Intake
+2. Evidence
+3. Assets
+4. Network
+5. Employers
+6. Roles (opportunities/job-board research)
+7. Briefing
+
+Workbench remains the home surface outside the numbered sequence.
+
+Network comes before Employers deliberately. The product model is that steps 4-7 form a repeating weekly cycle, not a one-way pipeline:
+
+1. **Network**: reach out to potential advisors with market-read conversations.
+2. **Employers**: research employers informed by what advisors say.
+3. **Roles**: test role families and listings against advisor intelligence.
+4. **Briefing**: summarize what was learned and what changed.
+5. Feed conversation outcomes back into intake/evidence context and run the next pass.
+
+The cycle repeats until the user converges on the right position to actually apply for, rather than spraying applications. Advisor conversations are treated as a primary evidence source: each weekly pass should sharpen employer targeting, role definitions, compensation reality, and career assets.
+
+Implementation note: the nav stepper labels steps 4-7 as the repeating weekly cycle. A future improvement is marking step completion states in the nav from saved data (intake saved, evidence analysis complete, assets drafted, network imported).
+
+The cycle is a recommended rhythm, not a hard gate. Employers, Roles, and Briefing must keep working standalone. Things change over time: new employers can be added in a later week, and constraints like geography can loosen or shift (for example, becoming willing to relocate to another state). Each weekly pass should re-read current preferences instead of assuming the first answers are permanent.
+
+## Loop-Back Conversation Notes
+
+The missing piece of the weekly cycle was capturing what advisor conversations actually taught the user. This is now implemented as **loop-back conversation notes**:
+
+- The Network page has a "Loop back: conversation notes" section.
+- Users upload notes as `.txt`, `.md`, `.docx` (most likely format), `.rtf`, or `.json` files, or paste notes directly. Legacy binary `.doc` is rejected with guidance to save as `.docx`; HTML-based `.doc` files (like this app's own exports) are readable.
+- Each readable note is saved as an additive `conversation_outcome` record in `career_sources` (`trust_state: user_supplied`). Nothing is overwritten.
+- The next **network analysis** includes recent conversation notes as first-hand market evidence; the AI is instructed to let them confirm or weaken lanes, employers, and pay-band assumptions instead of repeating advice the conversations already answered.
+- The next **evidence re-analysis** converts conversation notes into advisor evidence items, so market-read learnings update the evidence ledger and sufficiency score.
+- Conversation notes are included in the evidence backup export.
+
+Parsing is dependency-free: `.docx` text is extracted from `word/document.xml` via the existing ZIP reader, RTF via control-word stripping, JSON via pretty-printing. Notes are capped (12 files per save, 60k characters per note) to keep records and prompts bounded.
+
+Future improvements: structured fields per conversation (contact, employer, lane affected, confirm/weaken verdict), and surfacing "what changed since last week" deltas in the Briefing.
 
 ---
 
