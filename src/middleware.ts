@@ -1,12 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { defineMiddleware } from "astro:middleware";
 
+// htmx is bundled locally and all page scripts are Astro-processed external
+// modules, so production needs no inline-script or CDN allowances. Dev keeps
+// 'unsafe-inline' because the Vite dev server injects inline scripts.
+// style-src keeps 'unsafe-inline' for Astro component <style> tags.
+const scriptSrc = import.meta.env.DEV ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'";
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline' https://unpkg.com",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",

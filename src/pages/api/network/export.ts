@@ -123,6 +123,7 @@ function renderHtmlReport(payload: {
       employerOverlaps?: string[];
       adjacentNetworkSignals?: string[];
       contextPools?: Array<{ label: string; type: string; reason: string; namedPeople: string[]; nextStep: string }>;
+      relationshipCoaching?: string[];
       confidenceNotes?: string[];
     };
   };
@@ -160,6 +161,7 @@ function renderHtmlReport(payload: {
       }
       @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .toolbar { align-items: flex-start; flex-direction: column; } }
     </style>
+    <script src="/report-print.js" defer></script>
   </head>
   <body>
     <div class="toolbar no-print">
@@ -167,7 +169,7 @@ function renderHtmlReport(payload: {
         <strong>CIP Network Intelligence Report</strong>
         <p class="muted" style="margin: 2px 0 0;">Use Print, then choose "Save as PDF" as the destination.</p>
       </div>
-      <button class="button" onclick="window.print()">Print or Save as PDF</button>
+      <button class="button" data-print>Print or Save as PDF</button>
     </div>
     <main>
       <h1>Network Intelligence Report</h1>
@@ -185,6 +187,7 @@ function renderHtmlReport(payload: {
       </p>
 
       ${sectionList("What CIP Saw", analysis.sourceInventory)}
+      ${sectionList("How To Use This List", analysis.relationshipCoaching)}
       ${renderLaneCards(analysis.laneValidations)}
       ${sectionList("Top Relationship Moves", analysis.weeklyMoves)}
       ${sectionList("Top Named People To Review", analysis.reconnectCandidates)}

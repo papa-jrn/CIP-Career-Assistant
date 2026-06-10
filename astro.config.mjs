@@ -17,6 +17,11 @@ export default defineConfig({
   },
   vite: {
     cacheDir: path.resolve(__dirname, ".vite"),
+    build: {
+      // Never inline small scripts into the HTML; the CSP only allows
+      // external same-origin scripts in production.
+      assetsInlineLimit: 0,
+    },
     optimizeDeps: {
       noDiscovery: true,
       include: [],

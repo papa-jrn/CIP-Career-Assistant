@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { ingestConfiguredSources, refreshOpportunityMatches } from "@/lib/cip/labor-market";
 import type { IntakeForm } from "@/lib/cip/intake";
 import { isSameOriginRequest } from "@/lib/security";
-import { createServer } from "@/lib/supabase/server";
+import { createAdmin, createServer } from "@/lib/supabase/server";
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
@@ -23,7 +23,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return html('<p class="text-sm text-red-700">Save an intake before running labor-market research.</p>', 400);
   }
 
-  const summaries = await ingestConfiguredSources(supabase, intake);
+  // The shared opportunities catalog is no longer writable by signed-in
+  // users via RLS; ingestion writes must run with the service role.
+  const admin = createAdmin();
+  if (!admin) {
+    return html('<p class="text-sm text-red-700">SUPABASE_SERVICE_ROLE_KEY is not configured, so labor-market ingestion cannot write to the shared opportunities catalog.</p>', 500);
+  }
+
+  const summaries = await ingestConfiguredSources(admin, intake);
   const matches = await refreshOpportunityMatches(supabase, user.id, intake);
 
   return html(renderSummary(summaries, matches.saved));
