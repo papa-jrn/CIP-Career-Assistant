@@ -1,7 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import {
-  navItems,
   pathwaySteps,
   profileSignals,
 } from "../lib/cip/data";
@@ -168,13 +167,6 @@ function buildBriefingActions(source: IntakeSource | null, advisor: Partial<Advi
   <header class="border-b border-[var(--line)] bg-[var(--panel)]">
     <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
       <a href="/" class="text-base font-semibold text-[var(--foreground)]">CIP</a>
-      <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
-        {navItems.map((item) => (
-          <a class="rounded-md px-3 py-2 text-sm font-medium text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)] dark:hover:bg-white/10" href={item.href}>
-            {item.label}
-          </a>
-        ))}
-      </nav>
       <div class="flex items-center gap-2">
         <a class="cip-fancy-button" href="/intake">
           <span>Start intake</span>
@@ -248,7 +240,7 @@ function buildBriefingActions(source: IntakeSource | null, advisor: Partial<Advi
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next-step pathway</p>
           <h2 class="mt-2 max-w-3xl text-3xl font-semibold">After the analysis is strong, move through action in order.</h2>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            The completed profile should become a guided job-search operating system: update assets, map relationships, find target employers, then define job-board searches with filters and review rules.
+            The completed profile should become a guided job-search operating system: update assets, define ideal work, map relationships, find fit-based employers, then define job-board searches with filters and review rules.
           </p>
         </div>
         <a class="cip-fancy-button" href="/evidence">

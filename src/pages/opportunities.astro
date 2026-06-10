@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems, opportunities as fallbackOpportunities } from "../lib/cip/data";
+import { opportunities as fallbackOpportunities } from "../lib/cip/data";
 import { configuredMarketSources } from "../lib/cip/labor-market";
 import { createServer } from "../lib/supabase/server";
 
@@ -90,12 +90,6 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
 
 <Layout title="CIP Opportunities">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>

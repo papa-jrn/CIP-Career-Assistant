@@ -1,6 +1,5 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems } from "../lib/cip/data";
 import { buildEvidenceCards, renderEvidenceCardsHtml, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
 import { calculateEvidenceSufficiency } from "../lib/cip/evidence-sufficiency";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "../lib/cip/source-analysis";
@@ -179,12 +178,6 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
 
 <Layout title="CIP Evidence Builder">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence Builder</p>
       <h1 class="mt-2 text-3xl font-semibold">Turn proof gaps into usable career evidence</h1>

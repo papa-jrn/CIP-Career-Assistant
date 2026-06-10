@@ -1,9 +1,23 @@
-export const navItems = [
+// Top navigation follows the step-by-step product journey. Steps 4-7 are the
+// repeating weekly cycle: talk to advisors (Network), research employers,
+// translate conversations into role research, then brief and feed what was
+// learned back into the next pass.
+export interface NavStep {
+  href: string;
+  label: string;
+  step?: number;
+  cycle?: boolean;
+}
+
+export const navItems: NavStep[] = [
   { href: "/", label: "Workbench" },
-  { href: "/intake", label: "Intake" },
-  { href: "/evidence", label: "Evidence" },
-  { href: "/#pathway", label: "Action plan" },
-  { href: "/network", label: "Network" },
+  { href: "/intake", label: "Intake", step: 1 },
+  { href: "/evidence", label: "Evidence", step: 2 },
+  { href: "/assets", label: "Assets", step: 3 },
+  { href: "/network", label: "Network", step: 4, cycle: true },
+  { href: "/employers", label: "Employers", step: 5, cycle: true },
+  { href: "/opportunities", label: "Roles", step: 6, cycle: true },
+  { href: "/briefing", label: "Briefing", step: 7, cycle: true },
 ];
 
 export const pathwaySteps = [
@@ -18,19 +32,19 @@ export const pathwaySteps = [
   },
   {
     step: "02",
-    title: "Bring in relationship data",
-    outcome: "Add LinkedIn connections, alumni lists, or manually entered contacts to identify warm-introduction paths.",
+    title: "Define ideal work, then map network",
+    outcome: "Combine LinkedIn/profile data with work preferences, compensation needs, and stretch goals before ranking warm paths.",
     detail:
-      "This should be user-supplied data only. CIP can coach the export/paste workflow and map relationships without scraping private networks.",
+      "Relationship data should be interpreted through the user's desired workplace, role, pay floor, remote/hybrid needs, dealbreakers, and learning goals.",
     href: "/network",
     cta: "Map network",
   },
   {
     step: "03",
-    title: "Find employers by geography",
-    outcome: "Search a target area for businesses, institutions, and regional anchors that match the opportunity criteria.",
+    title: "Find employers by fit",
+    outcome: "Search local, regional, remote-first, and national employers that match the ideal work profile.",
     detail:
-      "Employer discovery should follow the user's target role families, location preferences, compensation needs, and relationship paths.",
+      "Geography is a user-selected constraint, not the default cage. Local anchors need compensation and seniority evidence before becoming priorities.",
     href: "/employers",
     cta: "Find businesses",
   },

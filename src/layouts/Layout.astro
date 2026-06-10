@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import StepNav from "../components/StepNav.astro";
 import { createServer } from "../lib/supabase/server";
 
 interface Props {
@@ -61,6 +62,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         )}
       </div>
     </div>
+    <StepNav />
     <slot />
     <div class="cip-route-loader" data-asset-route-loader hidden role="status" aria-live="polite" aria-label="Preparing career assets">
       <div class="cip-route-loader-panel">

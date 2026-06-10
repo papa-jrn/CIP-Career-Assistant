@@ -1,7 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { intakeQuestionFields, type IntakeForm } from "../lib/cip/intake";
-import { navItems } from "../lib/cip/data";
 import { createServer } from "../lib/supabase/server";
 
 let savedIntake: Partial<IntakeForm> | null = null;
@@ -49,12 +48,6 @@ function fieldValue(name: keyof IntakeForm) {
 
 <Layout title="CIP Intake">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <div class="grid gap-6 lg:grid-cols-[0.9fr_0.55fr]">
       <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Identity Graph</p>

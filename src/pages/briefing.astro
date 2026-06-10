@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { briefingItems, navItems } from "../lib/cip/data";
+import { briefingItems } from "../lib/cip/data";
 import { formatRegion } from "../lib/cip/weekly-strategy";
 import { createServer } from "../lib/supabase/server";
 
@@ -47,11 +47,6 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 
 <Layout title="CIP Weekly Briefing">
   <main class="mx-auto w-full max-w-5xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>

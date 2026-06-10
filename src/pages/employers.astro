@@ -1,6 +1,5 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems } from "../lib/cip/data";
 import { canRunLiveBusinessSearch } from "../lib/cip/business-search-engine";
 import { createServer } from "../lib/supabase/server";
 
@@ -128,12 +127,6 @@ function normalizeEmployerName(name: string) {
 <Layout title="CIP Watched Employers">
   <main class="cip-page-shell min-h-screen">
   <div class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm font-semibold text-[var(--muted)] shadow-sm hover:border-[var(--accent)] hover:text-[var(--accent-strong)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <section class="cip-card rounded-lg p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -476,9 +469,9 @@ function normalizeEmployerName(name: string) {
       }
     }
   </style>
-  <script is:inline>
+  <script>
     document.addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-clear-candidates]");
+      const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-clear-candidates]");
       if (!button) return;
 
       const mode = button.getAttribute("data-clear-candidates") || "selected";

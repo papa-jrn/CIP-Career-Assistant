@@ -1,6 +1,5 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { navItems } from "../lib/cip/data";
 import type { AdvisorAnalysis } from "../lib/cip/advisor";
 import type { AdvisorEvidenceResponse } from "../lib/cip/advisor";
 import { buildMasterResumeDraft } from "../lib/cip/resume-assets";
@@ -268,12 +267,6 @@ function buildProofItems(source: IntakeSource | null, advisor: Partial<AdvisorAn
 
 <Layout title="CIP Career Assets">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
-    <nav class="mb-8 flex flex-wrap gap-2">
-      {navItems.map((item) => (
-        <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)]" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
-
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Asset Workbench</p>
       <h1 class="mt-2 text-3xl font-semibold">Turn the analysis into materials a hiring market can understand.</h1>
