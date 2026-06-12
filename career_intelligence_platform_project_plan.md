@@ -2180,6 +2180,33 @@ This pass is also the commercialization gate: per the working agreement, CIP sho
 
 Commercial positioning note (from the 2026-06-12 review): tryapt.ai validates that people pay ~$30/month for AI career guidance, but it is the opposite philosophy (10-minute personality quiz, confident mass-market claims). CIP's likely path is coaching-led or institutional (workforce boards, career centers, outplacement), not consumer-quiz volume. One funnel lesson worth borrowing honestly: reduce time-to-first-value with a lighter first-touch intake that produces an immediate, limited, honest readout before asking for the full resume — framed by the evidence-sufficiency score, not personality-test theater.
 
+## First Outreach Triage Learnings (2026-06-12)
+
+The founder triaged the first recommended contact list. The result is the most useful product feedback so far: roughly 10 of 12 recommendations were not actionable, for reasons only the user could know:
+
+- Three contacts retired years ago (LinkedIn exports keep stale titles/employers, so the engine cannot see retirement).
+- Two contacts the user does not remember at all.
+- One contact has known ethical concerns from past business dealings.
+- Several were warm-but-stale ties (no contact in 10-24 years, knew in passing, social-only friendships) including one with sensitive personal history.
+- One was a transactional connection from a past consulting engagement.
+
+Meanwhile the two strongest real candidates were not ranked at the top: one contact the user spoke with about AI tooling six weeks ago (a live, lane-relevant relationship), and one long-maintained friendship with a relevant technology executive who was not surfaced at all.
+
+What worked as designed:
+
+- The feedback loop is real: `network_feedback` records hard-exclude removed/deceased/current contacts from future matches and feed notes into the AI prompt.
+- Lane validation correctly framed contacts as "needs review," and the user's review caught every dud — the system asked for exactly this triage.
+
+What the triage cost reveals (queued improvements):
+
+1. **Relationship recency must outrank affiliation density.** Use the LinkedIn `Connected On` date and any user-supplied "last spoke" signal as first-class ranking inputs. A 24-year-stale tie is a cold contact wearing a warm label.
+2. **Add a fast triage sweep before conversation plans.** A quick per-contact pass (know them / don't remember / last spoke roughly when / park / use) costs the user seconds per name and would have filtered most of this list before any coaching copy was generated.
+3. **Add missing feedback types.** `park` (warm but not now — distinct from `remove`) and `active_relationship` (boost: live tie, rank higher) do not exist yet; `current_involvement` excludes a contact, which is wrong for live ties the user wants ranked.
+4. **Treat "I don't remember this person" as a hard signal**, both for exclusion and as evidence that connection-date/source context should be shown next to every recommendation.
+5. **Coach that market reads do not require sit-downs.** Remote contacts are reachable by video; distance is not the filter, relationship staleness is.
+
+Process decision: triage feedback gets saved through the existing feedback mechanisms first, then the LinkedIn analysis is rerun so exclusions and live-tie context shape the next list. Real conversations that predate the app (such as the recent AI-tooling conversation) should be written up as loop-back conversation notes — first-hand market evidence does not need to have been scheduled by CIP to count.
+
 ---
 
 ## Business Model Concern
