@@ -1023,16 +1023,20 @@ If a design is misleading, fix the design before extending it.
 
 ## Current Honest Capability Status
 
-- Intake: first real pass exists.
+Updated 2026-06-12.
+
+- Intake: first real pass exists; saved intake reload implemented.
 - Identity graph: first real pass exists.
-- AI advisor analysis: partially implemented; real only when `OPENAI_API_KEY` is active and the response succeeds.
-- Saved intake reload: implemented.
+- AI advisor analysis: real only when `OPENAI_API_KEY` is active and the response succeeds; deterministic fallback is labeled.
+- Evidence Builder, evidence re-analysis, strategic question review, linked-source analysis, evidence sufficiency score: implemented as additive `career_sources` records.
 - Authentication: implemented for test use.
-- Employer geography search: first live engine pass exists using server-side OpenAI Responses API web search when `OPENAI_API_KEY` is configured.
-- Watched employer/business discovery: partial. Live source and candidate discovery can run, but result quality needs repeated testing, source inspection, and regression checks.
-- Business search by geography: first implementation exists. It no longer returns hardcoded fixture employers as normal search results.
-- Employer adapters/job monitoring: not implemented yet.
-- Weekly strategy snapshot: scaffold based on saved employers and opportunity matches.
+- Career assets / resume builder: prototype workflow. Editable builder with `.doc`/`.rtf`/print exports works; AI master-resume synthesis now runs on demand via `/api/assets/resume-draft` and is cached as additive `resume_draft` records, so the Assets page renders instantly instead of blocking 15-20s on OpenAI. Output quality still needs the structured-parsing tuning pass before it is a finished resume product.
+- Network intelligence: implemented — LinkedIn/alumni/manual imports, ideal-work filter, lane validation, named-contact matches, context pools, conversation plans, and loop-back conversation notes feeding network re-analysis and the evidence ledger.
+- Employer geography search: first live engine pass exists (geocoded search area + OpenAI Responses web search). The Discovery QA loop (live-search validation against known anchors, source scoring, regression fixtures) has not been run yet, so result quality is unproven.
+- Employer adapters/job monitoring: not implemented. Saved/watched employers do not yet feed any monitoring or the Roles page.
+- Roles (opportunities) page: still the pre-cycle Greenhouse/Lever ingestion scorer with operator-configured sources. It does not yet consume validated lanes, ideal-work constraints, saved employers, or conversation intelligence. Empty state shows clearly labeled fixtures. Job-board search lanes: planned, not built.
+- Weekly briefing: scaffold that counts watched employers and matches. It does not yet compute week-over-week deltas or read conversation notes.
+- Nav stepper: shared across pages; step-completion states from saved data not yet implemented.
 
 The employer page must continue to label the map layer, adapters, and any unfinished monitoring features honestly.
 
@@ -2135,6 +2139,46 @@ The missing piece of the weekly cycle was capturing what advisor conversations a
 Parsing is dependency-free: `.docx` text is extracted from `word/document.xml` via the existing ZIP reader, RTF via control-word stripping, JSON via pretty-printing. Notes are capped (12 files per save, 60k characters per note) to keep records and prompts bounded.
 
 Future improvements: structured fields per conversation (contact, employer, lane affected, confirm/weaken verdict), and surfacing "what changed since last week" deltas in the Briefing.
+
+---
+
+## Assets Page Performance Fix (2026-06-12)
+
+The Assets page previously called OpenAI synchronously in the page frontmatter to synthesize the master resume draft, blocking every page load for 15-20 seconds.
+
+New pattern:
+
+- The page render never calls OpenAI. It loads the newest saved `resume_draft` record (additive `career_sources`, `trust_state: system_generated`) when one exists, otherwise the instant deterministic coaching worksheet.
+- A "Generate AI master resume" button calls `POST /api/assets/resume-draft`, which assembles the same context (intake, advisor analysis, evidence responses, source analysis, reviews), runs the AI synthesis, saves the result additively, and fills the builder.
+- The draft-mode label states honestly whether the editor is showing an AI synthesis (with saved timestamp) or the deterministic worksheet.
+- Regenerating warns before replacing unsaved manual edits.
+- Shared context loading moved to `resume-asset-context.ts` so the page and the API endpoint cannot drift apart.
+
+## Roles Page Honesty Fix (2026-06-12)
+
+The Opportunities (Roles) page no longer implies unbuilt capabilities:
+
+- The "bring in networking data" card now links to the real Network step instead of describing a feature that lives elsewhere.
+- The job-board search lanes card is labeled "Planned, not built yet."
+- The empty state explains that job-board sources are operator-configured and that employer-driven monitoring is planned, instead of telling users to edit `.env`; fixture example cards are labeled as fixtures.
+
+The known direction gap stands: the Roles page must eventually consume validated lanes, ideal-work constraints, saved employers, and conversation intelligence so steps 4-7 form a real cycle. That is the next major build, not a copy fix.
+
+## First Real Weekly Pass Decision (2026-06-12)
+
+The next round of work is user work, not development work. The cycle is built far enough that it must now be tested with real conversations before more engine investment.
+
+Decision: lead with advisor outreach, not with stronger geographic search. The product model already encodes the reason — Network sits before Employers because geographic and employer searching without market intelligence is searching blind. Geography preferences, pay-band assumptions, and lane priorities are exactly what market-read conversations are supposed to test, so search refinement before conversations would tune queries against unvalidated assumptions.
+
+This week's plan:
+
+1. **User (founder-as-user):** pick 3-5 "use now" contacts from the network lane-validation output. Market reads only — no referral asks. Assign each contact an intent and a first question, send only approved messages, and take notes after each conversation, even rough ones.
+2. **Development, in parallel while replies are pending:** run the queued employer Discovery QA loop — live searches for Sunapee NH, Lyndon VT, Burlington VT, and Boston MA, checking whether known anchors (New London Hospital, Colby-Sawyer College, Mount Sunapee, Lake Sunapee Region Chamber, etc.) are rediscovered without hardcoding. This is the "stronger geographic search" work, framed as validating the existing engine so it is trustworthy when advisor intelligence arrives.
+3. **After conversations:** upload notes through loop-back, run network and evidence re-analysis, and evaluate honestly whether lanes, employer priorities, or the evidence ledger actually moved. If they moved, the cycle works. If they did not, that is the most important bug report the product can get.
+
+This pass is also the commercialization gate: per the working agreement, CIP should not be sold before it is proven on user #1. Four to six real weekly passes that measurably change the founder's search are both the validation and the founding story. The trap to avoid is inverting the sequence — polishing discovery for geographies the conversations might rule out entirely.
+
+Commercial positioning note (from the 2026-06-12 review): tryapt.ai validates that people pay ~$30/month for AI career guidance, but it is the opposite philosophy (10-minute personality quiz, confident mass-market claims). CIP's likely path is coaching-led or institutional (workforce boards, career centers, outplacement), not consumer-quiz volume. One funnel lesson worth borrowing honestly: reduce time-to-first-value with a lighter first-touch intake that produces an immediate, limited, honest readout before asking for the full resume — framed by the evidence-sufficiency score, not personality-test theater.
 
 ---
 

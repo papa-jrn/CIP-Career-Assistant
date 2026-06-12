@@ -38,13 +38,22 @@ export interface ResumeAssetContext {
   analysisReviews?: string[];
 }
 
-export async function buildMasterResumeDraft(context: ResumeAssetContext): Promise<ResumeAssetDraft> {
+export function isAiResumeDraftAvailable(context: ResumeAssetContext): boolean {
   const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  if (openAiKey && context.intake.resume_text) {
-    const ai = await tryBuildAiMasterResume(context, openAiKey);
-    if (ai) return normalizeResumeDraft(ai);
-  }
+  return Boolean(openAiKey && context.intake.resume_text);
+}
 
+// AI synthesis is slow (an OpenAI Responses round trip), so it must only run
+// from the on-demand API endpoint, never during a page render. Returns null
+// when the key is missing, there is no resume text, or the call fails.
+export async function buildAiMasterResumeDraft(context: ResumeAssetContext): Promise<ResumeAssetDraft | null> {
+  const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!openAiKey || !context.intake.resume_text) return null;
+  const ai = await tryBuildAiMasterResume(context, openAiKey);
+  return ai ? normalizeResumeDraft(ai) : null;
+}
+
+export function buildDeterministicResumeDraft(context: ResumeAssetContext): ResumeAssetDraft {
   return normalizeResumeDraft(buildDeterministicCoachingDraft(context));
 }
 
@@ -158,7 +167,7 @@ function buildDeterministicCoachingDraft(context: ResumeAssetContext): ResumeAss
     summary: [
       context.positioning[0]?.detail ?? "Write a 3-4 line summary around the approved primary lane.",
       context.positioning[1]?.detail ?? "Anchor the summary in verified accomplishments, not broad traits.",
-      "Deterministic mode cannot safely rewrite the full resume. Add OPENAI_API_KEY to generate a synthesized master resume draft.",
+      "This worksheet cannot safely rewrite the full resume. Use the Generate AI master resume button to create a synthesized draft (requires OPENAI_API_KEY and saved resume text).",
     ].join("\n\n"),
     skills: buildSkills(context),
     selectedImpact: proofBullets,
@@ -167,7 +176,7 @@ function buildDeterministicCoachingDraft(context: ResumeAssetContext): ResumeAss
     additional: [textValue(intake.portfolio_urls), textValue(intake.public_evidence)].filter(Boolean).join("\n"),
     internalNotes: [
       "Resume generation is in deterministic coaching mode, so CIP is showing a rewrite worksheet instead of pretending it can synthesize a finished resume.",
-      "Configure OPENAI_API_KEY for the career-coach rewrite pass.",
+      "Run the Generate AI master resume button for the career-coach rewrite pass (requires OPENAI_API_KEY).",
       ...context.proofItems.map((item) => `Traceable claim: ${item.claim} | ${item.evidence}`),
     ].join("\n"),
   };
