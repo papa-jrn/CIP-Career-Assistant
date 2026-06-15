@@ -1,7 +1,7 @@
-// Top navigation follows the step-by-step product journey. Steps 4-7 are the
-// repeating weekly cycle: talk to advisors (Network), research employers,
-// translate conversations into role research, then brief and feed what was
-// learned back into the next pass.
+// Top navigation follows the step-by-step product journey. Steps 4-8 are the
+// repeating weekly cycle: map advisors (Network), work the relationship queue
+// (Follow Up), research employers, translate conversations into role research,
+// then brief and feed what was learned back into the next pass.
 export interface NavStep {
   href: string;
   label: string;
@@ -15,9 +15,10 @@ export const navItems: NavStep[] = [
   { href: "/evidence", label: "Evidence", step: 2 },
   { href: "/assets", label: "Assets", step: 3 },
   { href: "/network", label: "Network", step: 4, cycle: true },
-  { href: "/employers", label: "Employers", step: 5, cycle: true },
-  { href: "/opportunities", label: "Roles", step: 6, cycle: true },
-  { href: "/briefing", label: "Briefing", step: 7, cycle: true },
+  { href: "/follow-up", label: "Follow Up", step: 5, cycle: true },
+  { href: "/employers", label: "Employers", step: 6, cycle: true },
+  { href: "/opportunities", label: "Roles", step: 7, cycle: true },
+  { href: "/briefing", label: "Briefing", step: 8, cycle: true },
 ];
 
 export const pathwaySteps = [
@@ -41,6 +42,15 @@ export const pathwaySteps = [
   },
   {
     step: "03",
+    title: "Review and work warm introductions",
+    outcome: "Turn AI-suggested and user-added people into a human-reviewed follow-up queue.",
+    detail:
+      "Mark who to use now, park, remove, or revisit; capture conversation status, reasons, market signals, new leads, and next actions.",
+    href: "/follow-up",
+    cta: "Work follow-ups",
+  },
+  {
+    step: "04",
     title: "Find employers by fit",
     outcome: "Search local, regional, remote-first, and national employers that match the ideal work profile.",
     detail:
@@ -49,7 +59,7 @@ export const pathwaySteps = [
     cta: "Find businesses",
   },
   {
-    step: "04",
+    step: "05",
     title: "Choose job-board search lanes",
     outcome: "Translate the profile into specific LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.",
     detail:

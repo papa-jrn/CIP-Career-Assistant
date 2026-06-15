@@ -253,6 +253,15 @@ const idealWorkQuestions = [
     type: "textarea",
   },
 ];
+
+const conversationStatuses = [
+  "To contact",
+  "Scheduled",
+  "Met",
+  "Follow-up",
+  "Intro offered",
+  "Park for later",
+];
 ---
 
 <Layout title="CIP Network Intelligence">
@@ -468,6 +477,63 @@ const idealWorkQuestions = [
             <span class="text-sm font-semibold">LinkedIn archive, connections CSV, Excel sheet, or profile PDF</span>
             <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.xlsx,.pdf,.txt" multiple />
           </label>
+          <fieldset class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <legend class="px-1 text-sm font-semibold">Warm connections you know are relevant</legend>
+                <p class="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+                  Add people whose relationship history, trust, or recent conversation context is stronger than what a LinkedIn export can infer.
+                </p>
+              </div>
+              <button
+                id="add-warm-connection"
+                class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+                type="button"
+              >
+                Add warm connection
+              </button>
+            </div>
+            <div id="warm-connections" class="grid gap-3">
+              <article class="warm-connection-row rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                <div class="grid gap-3 md:grid-cols-2">
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Name</span>
+                    <input class="warm-name rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Person's name" />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Company or role</span>
+                    <input class="warm-company rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Company, role, or helpful context" />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Title</span>
+                    <input class="warm-title rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Title if known" />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Link</span>
+                    <input class="warm-link rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="url" placeholder="LinkedIn, GitHub, or personal website" />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market research angle</span>
+                    <input class="warm-angle rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Titles, pay reality, employer context, lane validation" />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation status</span>
+                    <select class="warm-status rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                      {conversationStatuses.map((status) => <option value={status}>{status}</option>)}
+                    </select>
+                  </label>
+                  <label class="grid gap-1 md:col-span-2">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Relationship context and notes</span>
+                    <textarea
+                      class="warm-notes min-h-20 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm"
+                      placeholder="How you know them, why they may respond, notes from prior discussion, and who they suggested next"
+                    ></textarea>
+                  </label>
+                </div>
+              </article>
+            </div>
+            <textarea name="warm_connection_notes" id="warm-connection-notes" class="hidden" aria-hidden="true"></textarea>
+          </fieldset>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
             <textarea
@@ -518,15 +584,102 @@ const idealWorkQuestions = [
           const networkImportForm = document.querySelector("#network-import-form");
           const networkImportStatus = document.querySelector("#network-import-status");
           const networkImportLoading = document.querySelector("#network-import-loading");
+          const warmConnections = document.querySelector("#warm-connections");
+          const addWarmConnection = document.querySelector("#add-warm-connection");
+          const warmConnectionNotes = document.querySelector("#warm-connection-notes");
+
+          function serializeWarmConnections() {
+            if (!(warmConnections instanceof HTMLElement) || !(warmConnectionNotes instanceof HTMLTextAreaElement)) return;
+
+            const rows = [...warmConnections.querySelectorAll(".warm-connection-row")]
+              .map((row) => {
+                if (!(row instanceof HTMLElement)) return "";
+
+                const value = (selector) => {
+                  const field = row.querySelector(selector);
+                  return field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement
+                    ? field.value.replace(/\s+/g, " ").trim()
+                    : "";
+                };
+                const name = value(".warm-name");
+                const company = value(".warm-company");
+                const title = value(".warm-title");
+                const link = value(".warm-link");
+                const angle = value(".warm-angle");
+                const status = value(".warm-status");
+                const notes = value(".warm-notes");
+
+                if (!name && !company && !title && !link && !angle && !notes) return "";
+
+                return [
+                  name,
+                  company,
+                  title,
+                  link,
+                  [
+                    "User-added warm connection",
+                    status ? `Conversation status: ${status}` : "",
+                    angle ? `Market research angle: ${angle}` : "",
+                    notes,
+                  ].filter(Boolean).join("; "),
+                ].join(" | ");
+              })
+              .filter(Boolean);
+
+            warmConnectionNotes.value = rows.join("\n");
+          }
+
+          if (addWarmConnection instanceof HTMLButtonElement && warmConnections instanceof HTMLElement) {
+            addWarmConnection.addEventListener("click", () => {
+              const firstRow = warmConnections.querySelector(".warm-connection-row");
+              if (!(firstRow instanceof HTMLElement)) return;
+
+              const nextRow = firstRow.cloneNode(true);
+              if (!(nextRow instanceof HTMLElement)) return;
+
+              nextRow.querySelectorAll("input, textarea").forEach((field) => {
+                if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+                  field.value = "";
+                }
+              });
+              nextRow.querySelectorAll("select").forEach((field) => {
+                if (field instanceof HTMLSelectElement) {
+                  field.selectedIndex = 0;
+                }
+              });
+              warmConnections.append(nextRow);
+              serializeWarmConnections();
+            });
+          }
+
+          if (warmConnections instanceof HTMLElement) {
+            warmConnections.addEventListener("input", serializeWarmConnections);
+            warmConnections.addEventListener("change", serializeWarmConnections);
+            serializeWarmConnections();
+          }
 
           if (networkImportForm && networkImportStatus) {
+            networkImportForm.addEventListener("formdata", (event) => {
+              serializeWarmConnections();
+              if (warmConnectionNotes instanceof HTMLTextAreaElement) {
+                event.formData.set("warm_connection_notes", warmConnectionNotes.value);
+              }
+            });
             networkImportForm.addEventListener("submit", () => {
+              serializeWarmConnections();
               networkImportStatus.textContent = "Uploading and analyzing the supplied network data...";
               if (networkImportLoading instanceof HTMLElement) {
                 networkImportLoading.style.display = "flex";
               }
             });
+            networkImportForm.addEventListener("htmx:configRequest", (event) => {
+              serializeWarmConnections();
+              if (warmConnectionNotes instanceof HTMLTextAreaElement && event.detail?.parameters) {
+                event.detail.parameters.warm_connection_notes = warmConnectionNotes.value;
+              }
+            });
             networkImportForm.addEventListener("htmx:beforeRequest", () => {
+              serializeWarmConnections();
               networkImportStatus.textContent = "Uploading and analyzing the supplied network data...";
               if (networkImportLoading instanceof HTMLElement) {
                 networkImportLoading.style.display = "flex";
@@ -730,6 +883,9 @@ const idealWorkQuestions = [
           </div>
         </div>
         <div class="mt-5 flex flex-wrap gap-3">
+          <a class="cip-fancy-button" href="/follow-up">
+            <span>Review follow-up queue</span>
+          </a>
           <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export?format=html" target="_blank" rel="noreferrer">
             <span>Open printable report</span>
           </a>

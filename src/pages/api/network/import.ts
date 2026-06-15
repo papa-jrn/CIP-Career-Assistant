@@ -146,6 +146,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         contact_count: parsedImport.contacts.length,
         contacts: parsedImport.contacts,
         notes: parsedImport.notes,
+        warm_connection_notes: parsedImport.warmConnectionNotes,
         feedback_notes: parsedImport.feedbackNotes,
         ideal_work_profile: parsedImport.idealWorkProfile,
         created_at: now,
@@ -307,6 +308,9 @@ function renderAnalysis(analysis: NetworkAnalysis, files: NetworkImportSummary[]
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(analysis.summary)}</p>
       <div class="mt-4 flex flex-wrap gap-3">
+        <a class="cip-fancy-button" href="/follow-up">
+          <span>Review follow-up queue</span>
+        </a>
         <a class="cip-fancy-button cip-fancy-button-secondary" href="/api/network/export?format=html" target="_blank" rel="noreferrer">
           <span>Open printable report</span>
         </a>

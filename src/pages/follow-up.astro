@@ -1,0 +1,444 @@
+---
+import Layout from "../layouts/Layout.astro";
+import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
+import { createServer } from "../lib/supabase/server";
+
+type QueuePerson = {
+  contact: NetworkContact;
+  match?: NetworkContactMatch;
+  latestFeedback?: SavedFeedback;
+};
+
+type SavedFeedback = {
+  contactName: string;
+  feedbackType: string;
+  note: string;
+  conversationStatus?: string;
+  followUpDate?: string;
+  followUpIntent?: string;
+  decisionReason?: string;
+  marketSignals?: string;
+  newLeads?: string;
+  laneImpact?: string;
+  createdAt: string;
+};
+
+const decisionOptions = [
+  { value: "use_now", label: "Use now" },
+  { value: "follow_up", label: "Follow up" },
+  { value: "park", label: "Park for now" },
+  { value: "active_relationship", label: "Active relationship" },
+  { value: "too_cold", label: "Too cold" },
+  { value: "no_memory", label: "Do not remember" },
+  { value: "retired", label: "Retired / stale" },
+  { value: "ethical_concern", label: "Sensitive / concern" },
+  { value: "remove", label: "Remove" },
+  { value: "context", label: "Context only" },
+];
+
+const conversationStatuses = [
+  "To contact",
+  "Scheduled",
+  "Met",
+  "Follow-up",
+  "Intro offered",
+  "Parked",
+  "Removed",
+];
+
+const followUpIntents = [
+  "Market read",
+  "Role translation",
+  "Employer context",
+  "Warm intro",
+  "Reconnection",
+  "Referral later",
+  "Thank-you",
+  "Research later",
+];
+
+let signedIn = false;
+let loadError = "";
+let queue: QueuePerson[] = [];
+let latestAnalysisAt: string | null = null;
+let latestImportAt: string | null = null;
+let importedContactCount = 0;
+let analysisContactCount = 0;
+let feedbackCount = 0;
+let conversationNoteCount = 0;
+
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const supabase = createServer(Astro.cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    signedIn = Boolean(user);
+
+    if (user) {
+      const [
+        { data: analysisRows, error: analysisError },
+        { data: importRows, error: importError },
+        { data: feedbackRows, error: feedbackError },
+        { count: notesCount },
+      ] = await Promise.all([
+        supabase
+          .from("career_sources")
+          .select("extracted_text, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", "network_analysis")
+          .order("created_at", { ascending: false })
+          .limit(12),
+        supabase
+          .from("career_sources")
+          .select("extracted_text, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", "network_import")
+          .order("created_at", { ascending: false })
+          .limit(12),
+        supabase
+          .from("career_sources")
+          .select("extracted_text, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", "network_feedback")
+          .order("created_at", { ascending: false })
+          .limit(300),
+        supabase
+          .from("career_sources")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("source_type", "conversation_outcome"),
+      ]);
+
+      if (analysisError) loadError = analysisError.message;
+      if (importError) loadError = importError.message;
+      if (feedbackError) loadError = feedbackError.message;
+
+      const analyses = (analysisRows ?? [])
+        .map((row) => parseNetworkAnalysis(row.extracted_text ?? null))
+        .filter(Boolean) as NetworkAnalysis[];
+      const importedContacts = (importRows ?? []).flatMap((row) => parseNetworkImportContacts(row.extracted_text ?? null));
+      const feedback = (feedbackRows ?? [])
+        .map((row) => parseSavedFeedback(row.extracted_text, row.created_at))
+        .filter(Boolean) as SavedFeedback[];
+
+      latestAnalysisAt = analysisRows?.[0]?.created_at ?? null;
+      latestImportAt = importRows?.[0]?.created_at ?? null;
+      importedContactCount = dedupeContacts(importedContacts.filter(isFollowUpImportContact)).length;
+      analysisContactCount = dedupeContacts(analyses.flatMap((analysis) => analysis.contactMatches.map((match) => match.contact))).length;
+      feedbackCount = feedback.length;
+      conversationNoteCount = notesCount ?? 0;
+      queue = buildQueue(importedContacts, analyses, feedback);
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Unable to load follow-up queue.";
+  }
+}
+
+function parseNetworkAnalysis(value: string | null): NetworkAnalysis | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.analysis ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseNetworkImportContacts(value: string | null): NetworkContact[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed?.contacts) ? parsed.contacts : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseSavedFeedback(value: string | null, createdAt: string): SavedFeedback | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    const feedback = parsed?.feedback;
+    if (!feedback?.contactName) return null;
+    return {
+      contactName: String(feedback.contactName),
+      feedbackType: String(feedback.feedbackType || "context"),
+      note: String(feedback.note || ""),
+      conversationStatus: stringOrUndefined(feedback.conversationStatus),
+      followUpDate: stringOrUndefined(feedback.followUpDate),
+      followUpIntent: stringOrUndefined(feedback.followUpIntent),
+      decisionReason: stringOrUndefined(feedback.decisionReason),
+      marketSignals: stringOrUndefined(feedback.marketSignals),
+      newLeads: stringOrUndefined(feedback.newLeads),
+      laneImpact: stringOrUndefined(feedback.laneImpact),
+      createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stringOrUndefined(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function buildQueue(contacts: NetworkContact[], analyses: NetworkAnalysis[], feedback: SavedFeedback[]) {
+  const feedbackByName = new Map(feedback.map((item) => [normalize(item.contactName), item]));
+  const matches = analyses.flatMap((analysis) => analysis.contactMatches ?? []);
+  const matchByName = new Map<string, NetworkContactMatch>();
+  const byName = new Map<string, QueuePerson>();
+
+  for (const match of matches) {
+    const key = normalize(match.contact.name);
+    if (!key || matchByName.has(key) || !isLikelyPersonName(match.contact.name)) continue;
+    matchByName.set(key, match);
+    byName.set(key, {
+      contact: match.contact,
+      match,
+      latestFeedback: feedbackByName.get(key),
+    });
+  }
+
+  for (const contact of contacts.filter(isFollowUpImportContact)) {
+    const key = normalize(contact.name);
+    if (!key || byName.has(key) || !isLikelyPersonName(contact.name)) continue;
+    byName.set(key, {
+      contact,
+      match: matchByName.get(key),
+      latestFeedback: feedbackByName.get(key),
+    });
+  }
+
+  return [...byName.values()]
+    .filter((person) => isLikelyPersonName(person.contact.name))
+    .sort((a, b) => {
+      const scoreDelta = (b.match?.score ?? 0) - (a.match?.score ?? 0);
+      if (scoreDelta) return scoreDelta;
+      return a.contact.name.localeCompare(b.contact.name);
+    })
+    .slice(0, 80);
+}
+
+function isFollowUpImportContact(contact: NetworkContact) {
+  return contact.source === "Structured warm connections";
+}
+
+function isLikelyPersonName(value: string) {
+  const name = value.trim();
+  if (!name || name.length > 80) return false;
+  if (/[.!?;:|()[\]{}]/.test(name)) return false;
+  if (/^(the|what|but|and|or|if|when|where|why|how|this|that|these|those|there|you|i)\b/i.test(name)) return false;
+
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 5) return false;
+  return words.every((word) => /^[A-Z][A-Za-z'.-]*$/.test(word) || /^[A-Z]\.$/.test(word));
+}
+
+function dedupeContacts(contacts: NetworkContact[]) {
+  const byName = new Map<string, NetworkContact>();
+  for (const contact of contacts) {
+    const key = normalize(contact.name);
+    if (!key || byName.has(key)) continue;
+    byName.set(key, contact);
+  }
+  return [...byName.values()];
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function slug(value: string) {
+  return normalize(value).replace(/\s+/g, "-") || "contact";
+}
+
+function selected(value: string | undefined, option: string) {
+  return value === option;
+}
+---
+
+<Layout title="CIP Follow Up">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Follow Up</p>
+      <h1 class="mt-2 max-w-4xl text-3xl font-semibold">Turn the network list into reviewed relationship intelligence.</h1>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Use this page after Network analysis. Review each suggested or user-added person, decide whether to use, park, remove, or follow up, and capture what the conversation taught you before moving to Employers, Roles, and Briefing.
+      </p>
+      <div class="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">People in queue</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{queue.length}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Imported people</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{importedContactCount}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Analysis matches</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{analysisContactCount}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved reviews</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{feedbackCount}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{conversationNoteCount}</p>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Latest source</p>
+          <p class="mt-2 text-sm font-semibold text-[var(--foreground)]">
+            {latestAnalysisAt ? new Date(latestAnalysisAt).toLocaleDateString() : latestImportAt ? new Date(latestImportAt).toLocaleDateString() : "No network run yet"}
+          </p>
+        </div>
+      </div>
+      {!signedIn ? (
+        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+          Sign in before saving follow-up reviews.
+        </p>
+      ) : null}
+      {loadError ? (
+        <p class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{loadError}</p>
+      ) : null}
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Weekly relationship queue</p>
+          <h2 class="mt-1 text-2xl font-semibold">Review, update, and capture what changed.</h2>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/network"><span>Back to Network</span></a>
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/employers"><span>Next: Employers</span></a>
+        </div>
+      </div>
+
+      {queue.length ? (
+        <div class="mt-5 grid gap-4">
+          {queue.map((person) => {
+            const id = slug(person.contact.name);
+            const saved = person.latestFeedback;
+            return (
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-lg font-semibold">{person.contact.name}</h3>
+                    <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+                      {[person.contact.title, person.contact.company].filter(Boolean).join(" at ") || "Company/title needs review"}
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      {person.match ? (
+                        <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                          {person.match.score}% {person.match.confidence}
+                        </span>
+                      ) : null}
+                      {person.contact.source ? (
+                        <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{person.contact.source}</span>
+                      ) : null}
+                      {saved ? (
+                        <span class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                          Last saved: {saved.feedbackType.replace("_", " ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {person.contact.profileUrl ? (
+                    <a class="text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={person.contact.profileUrl} target="_blank" rel="noreferrer">
+                      Open link
+                    </a>
+                  ) : null}
+                </div>
+
+                {person.match?.recommendedFirstAsk ? (
+                  <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm leading-6 text-[var(--muted)]">
+                    <span class="font-semibold text-[var(--foreground)]">Suggested first ask:</span> {person.match.recommendedFirstAsk}
+                  </p>
+                ) : null}
+                {person.contact.notes || person.match?.matchReasons?.length ? (
+                  <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                    {person.contact.notes ? (
+                      <p class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm leading-6 text-[var(--muted)]">
+                        <span class="font-semibold text-[var(--foreground)]">Known context:</span> {person.contact.notes}
+                      </p>
+                    ) : null}
+                    {person.match?.matchReasons?.length ? (
+                      <ul class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm leading-6 text-[var(--muted)]">
+                        {person.match.matchReasons.slice(0, 3).map((reason) => <li>{reason}</li>)}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <form class="mt-4 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4" hx-post="/api/network/feedback" hx-target={`#follow-up-result-${id}`} hx-swap="innerHTML">
+                  <input type="hidden" name="contact_name" value={person.contact.name} />
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Decision</span>
+                      <select name="feedback_type" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                        {decisionOptions.map((option) => <option value={option.value} selected={selected(saved?.feedbackType, option.value)}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation status</span>
+                      <select name="conversation_status" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                        {conversationStatuses.map((status) => <option value={status} selected={selected(saved?.conversationStatus, status)}>{status}</option>)}
+                      </select>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Intent</span>
+                      <select name="follow_up_intent" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                        {followUpIntents.map((intent) => <option value={intent} selected={selected(saved?.followUpIntent, intent)}>{intent}</option>)}
+                      </select>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up date</span>
+                      <input name="follow_up_date" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="date" value={saved?.followUpDate ?? ""} />
+                    </label>
+                    <label class="grid gap-1 md:col-span-2">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Reason for decision</span>
+                      <input name="decision_reason" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" value={saved?.decisionReason ?? ""} placeholder="Why use, park, remove, or revisit this person?" />
+                    </label>
+                  </div>
+                  <div class="grid gap-3 lg:grid-cols-2">
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
+                      <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points">{saved?.marketSignals ?? ""}</textarea>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
+                      <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned">{saved?.newLeads ?? ""}</textarea>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact</span>
+                      <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects">{saved?.laneImpact ?? ""}</textarea>
+                    </label>
+                    <label class="grid gap-1">
+                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up notes</span>
+                      <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Message sent, reply details, next step, or why this should wait">{saved?.note ?? ""}</textarea>
+                    </label>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>
+                      Save follow-up review
+                    </button>
+                    <div id={`follow-up-result-${id}`} class="text-sm" aria-live="polite"></div>
+                  </div>
+                </form>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <p class="text-sm leading-6 text-[var(--muted)]">
+            No relationship queue is available yet. Run Network analysis or add warm connections first, then return here to triage and work the follow-up list.
+          </p>
+          <a class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/network">Open Network</a>
+        </div>
+      )}
+    </section>
+  </main>
+</Layout>

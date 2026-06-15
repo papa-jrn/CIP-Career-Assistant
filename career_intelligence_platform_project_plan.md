@@ -2105,23 +2105,62 @@ The step order is:
 2. Evidence
 3. Assets
 4. Network
-5. Employers
-6. Roles (opportunities/job-board research)
-7. Briefing
+5. Follow Up
+6. Employers
+7. Roles (opportunities/job-board research)
+8. Briefing
 
 Workbench remains the home surface outside the numbered sequence.
 
-Network comes before Employers deliberately. The product model is that steps 4-7 form a repeating weekly cycle, not a one-way pipeline:
+Network comes before Employers deliberately. The product model is that steps 4-8 form a repeating weekly cycle, not a one-way pipeline:
 
-1. **Network**: reach out to potential advisors with market-read conversations.
-2. **Employers**: research employers informed by what advisors say.
-3. **Roles**: test role families and listings against advisor intelligence.
-4. **Briefing**: summarize what was learned and what changed.
-5. Feed conversation outcomes back into intake/evidence context and run the next pass.
+1. **Network**: gather relationship data, add warm connections, and generate a reviewable candidate list.
+2. **Follow Up**: human-review the list, mark people as use now / follow up / park / remove, capture conversation status, record reasons, and save market-read outcomes.
+3. **Employers**: research employers informed by what advisors say.
+4. **Roles**: test role families and listings against advisor intelligence.
+5. **Briefing**: summarize what was learned and what changed.
+6. Feed conversation outcomes back into intake/evidence context and run the next pass.
 
 The cycle repeats until the user converges on the right position to actually apply for, rather than spraying applications. Advisor conversations are treated as a primary evidence source: each weekly pass should sharpen employer targeting, role definitions, compensation reality, and career assets.
 
-Implementation note: the nav stepper labels steps 4-7 as the repeating weekly cycle. A future improvement is marking step completion states in the nav from saved data (intake saved, evidence analysis complete, assets drafted, network imported).
+## Follow Up Page Decision
+
+Network analysis should not also be the relationship-management surface. The Network page is for gathering sources and generating an initial map; the Follow Up page is for working the human-reviewed queue.
+
+This separation is necessary because the user has relationship context that AI cannot infer from LinkedIn or imported profile data:
+
+- Some AI-suggested names need to be parked, not deleted.
+- Some people should be removed, with a specific reason, so the system does not recommend them again.
+- Some warm relationships that the user enters manually may be more valuable than the initial analysis list.
+- Conversation status is operational data, not just analysis text.
+- Market-read notes should become structured signal for Employers, Roles, Briefing, and the next Network pass.
+
+The Follow Up page should let the user update each person with:
+
+- Conversation status: to contact, scheduled, met, follow-up, intro offered, parked, removed.
+- Decision: use now, follow up, park, active relationship, too cold, do not remember, retired/stale, sensitive/concern, remove, context only.
+- Reason for decision, especially for parking and removing.
+- Follow-up date or timing.
+- Follow-up intent: market read, role translation, employer context, warm intro, reconnection, referral later, thank-you, research later.
+- Market signals captured: salary, remote/hybrid reality, role titles, proof points, hiring process, caution flags.
+- New leads: employers, roles, people, teams, communities, or sources mentioned by the contact.
+- Lane impact: whether the conversation strengthened, weakened, or redirected a career direction.
+- Follow-up notes and next action.
+
+Implementation direction:
+
+- Use additive `career_sources` records rather than overwriting prior state.
+- Save structured follow-up reviews through the same feedback channel that already feeds later Network analysis.
+- Treat `remove`, `deceased`, `no_memory`, `retired`, and `ethical_concern` as hard exclusion signals.
+- Treat `park` as "not now" rather than a hard delete.
+- Treat `active_relationship` as a positive signal that should eventually boost priority.
+- Move the loop-back conversation capture off Network in a later cleanup, or mirror it on Follow Up, so the relationship workflow lives where the user is already reviewing people.
+
+This creates the intended weekly loop:
+
+Network finds candidates and warm paths. Follow Up turns those candidates into user-reviewed relationship intelligence. Employers and Roles use that intelligence to search smarter. Briefing summarizes what changed and activates the next weekly pass.
+
+Implementation note: the nav stepper labels steps 4-8 as the repeating weekly cycle. A future improvement is marking step completion states in the nav from saved data (intake saved, evidence analysis complete, assets drafted, network imported, follow-up queue reviewed).
 
 The cycle is a recommended rhythm, not a hard gate. Employers, Roles, and Briefing must keep working standalone. Things change over time: new employers can be added in a later week, and constraints like geography can loosen or shift (for example, becoming willing to relocate to another state). Each weekly pass should re-read current preferences instead of assuming the first answers are permanent.
 
@@ -2162,7 +2201,7 @@ The Opportunities (Roles) page no longer implies unbuilt capabilities:
 - The job-board search lanes card is labeled "Planned, not built yet."
 - The empty state explains that job-board sources are operator-configured and that employer-driven monitoring is planned, instead of telling users to edit `.env`; fixture example cards are labeled as fixtures.
 
-The known direction gap stands: the Roles page must eventually consume validated lanes, ideal-work constraints, saved employers, and conversation intelligence so steps 4-7 form a real cycle. That is the next major build, not a copy fix.
+The known direction gap stands: the Roles page must eventually consume validated lanes, ideal-work constraints, saved employers, and conversation intelligence so steps 4-8 form a real cycle. That is the next major build, not a copy fix.
 
 ## First Real Weekly Pass Decision (2026-06-12)
 

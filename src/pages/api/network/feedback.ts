@@ -18,6 +18,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const contactName = getText(form, "contact_name");
   const feedbackType = getText(form, "feedback_type") || "remove";
   const note = getText(form, "feedback_note");
+  const conversationStatus = getText(form, "conversation_status");
+  const followUpDate = getText(form, "follow_up_date");
+  const followUpIntent = getText(form, "follow_up_intent");
+  const decisionReason = getText(form, "decision_reason");
+  const marketSignals = getText(form, "market_signals");
+  const newLeads = getText(form, "new_leads");
+  const laneImpact = getText(form, "lane_impact");
 
   if (!contactName) {
     return html('<p class="text-sm font-semibold text-red-700">Missing contact name.</p>', 400);
@@ -43,6 +50,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           contactName,
           feedbackType,
           note,
+          conversationStatus,
+          followUpDate,
+          followUpIntent,
+          decisionReason,
+          marketSignals,
+          newLeads,
+          laneImpact,
         },
         created_at: new Date().toISOString(),
       }),
@@ -55,8 +69,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     return html(`
       <div class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3">
-        <p class="text-sm font-semibold text-[var(--accent-strong)]">Saved feedback for ${escapeHtml(contactName)}.</p>
-        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">Future network analyses will use this context.</p>
+        <p class="text-sm font-semibold text-[var(--accent-strong)]">Saved follow-up context for ${escapeHtml(contactName)}.</p>
+        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">Future network analyses will use this relationship context.</p>
       </div>
     `);
   } catch (error) {

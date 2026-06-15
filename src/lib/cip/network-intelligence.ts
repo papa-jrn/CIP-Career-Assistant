@@ -82,7 +82,19 @@ export interface EmployerContext {
 
 export interface NetworkFeedback {
   contactName: string;
-  feedbackType: "remove" | "deceased" | "current_involvement" | "context";
+  feedbackType:
+    | "remove"
+    | "deceased"
+    | "current_involvement"
+    | "context"
+    | "park"
+    | "use_now"
+    | "follow_up"
+    | "active_relationship"
+    | "no_memory"
+    | "retired"
+    | "too_cold"
+    | "ethical_concern";
   note: string;
 }
 
@@ -101,9 +113,10 @@ export async function parseNetworkImport(form: FormData) {
   const contacts: NetworkContact[] = [];
   const files: NetworkImportSummary[] = [];
   const notes = getText(form, "relationship_notes");
+  const warmConnectionNotes = getAllText(form, "warm_connection_notes");
   const feedbackNotes = getText(form, "network_feedback");
   const idealWorkProfile = parseIdealWorkProfile(form);
-  const noteHints = parseRelationshipHints([notes, feedbackNotes].filter(Boolean).join("\n"));
+  const noteHints = parseRelationshipHints([notes, warmConnectionNotes, feedbackNotes].filter(Boolean).join("\n"));
 
   for (const value of form.getAll("network_files")) {
     if (!(value instanceof File) || !value.name) continue;
@@ -126,12 +139,27 @@ export async function parseNetworkImport(form: FormData) {
     });
   }
 
+  if (warmConnectionNotes) {
+    const parsedWarmConnections = parseStructuredWarmConnectionText(warmConnectionNotes);
+    contacts.push(...parsedWarmConnections);
+    files.push({
+      fileName: "Structured warm connections",
+      kind: "txt",
+      status: parsedWarmConnections.length ? "parsed" : "recorded",
+      detail: parsedWarmConnections.length
+        ? "Parsed user-added warm connections with links, relationship context, and conversation status."
+        : "Captured warm connection rows but did not find reviewable people.",
+      contactCount: parsedWarmConnections.length,
+    });
+  }
+
   const enrichedContacts = enrichContactsWithNarrativeNotes(dedupeContacts(contacts), noteHints);
 
   return {
     contacts: enrichedContacts.slice(0, 500),
     files,
     notes,
+    warmConnectionNotes,
     feedbackNotes,
     noteHints,
     idealWorkProfile,
@@ -364,6 +392,27 @@ function parseContactText(text: string, source: string): NetworkContact[] {
       });
     })
     .filter(isUsefulContact);
+}
+
+function parseStructuredWarmConnectionText(text: string): NetworkContact[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && line.split("|").length >= 4)
+    .map((line) => {
+      const parts = line.split("|").map((part) => part.replace(/\s+/g, " ").trim());
+      return cleanContact({
+        name: parts[0] ?? "",
+        company: parts[1] ?? "",
+        title: parts[2] ?? "",
+        profileUrl: parts.find((part) => /^https?:\/\//i.test(part)) ?? "",
+        email: parts.find((part) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(part)) ?? "",
+        connectedOn: "",
+        source: "Structured warm connections",
+        notes: parts.slice(3).filter((part) => !/^https?:\/\//i.test(part)).join(" | "),
+      });
+    })
+    .filter((contact) => isUsefulContact(contact) && isSpecificPerson(contact));
 }
 
 function parseXlsxContacts(bytes: Buffer, source: string): { contacts: NetworkContact[]; rowCount: number } {
@@ -1247,7 +1296,7 @@ function isExcludedByFeedback(contact: NetworkContact, feedback: NetworkFeedback
   const contactName = normalizeText(contact.name);
   const contactCompany = normalizeText(contact.company);
   return feedback.some((item) => {
-    if (!["remove", "deceased", "current_involvement"].includes(item.feedbackType)) return false;
+    if (!["remove", "deceased", "current_involvement", "no_memory", "retired", "ethical_concern"].includes(item.feedbackType)) return false;
     const feedbackName = normalizeText(item.contactName);
     if (!feedbackName) return false;
     return contactName.includes(feedbackName) || feedbackName.includes(contactName) || (contactCompany && feedbackName.includes(contactCompany));
@@ -1329,6 +1378,15 @@ function normalizeText(value: string) {
 function getText(form: FormData, key: string) {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getAllText(form: FormData, key: string) {
+  return form
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 function parseIdealWorkProfile(form: FormData): IdealWorkProfile {
