@@ -2385,3 +2385,51 @@ Any paid version must make the value concrete:
 
 The app should not charge people for vague encouragement, fake job discovery, or generic AI resume advice.
 
+---
+
+## Next Session Roadmap (set 2026-06-16)
+
+The app now "kind of works" end to end: intake → evidence → assets → network → follow-up → employers → remote + geographic job search, with lane-targeting. Paused here. The next session should work in this order: (1) cleanup, (2) resume-optional intake redesign, (3) UI polish. All three should dovetail with the advisors/Follow-Up loop as more user information arrives.
+
+### Carry-over builds (from this session)
+
+1. **Employer-direct ATS adapters** — per-employer adapters hitting known ATS JSON endpoints (Workday, Greenhouse, Lever, iCIMS, SmartRecruiters, Ashby, Workable) for saved employers. Highest-trust, lowest-ghost source; completes discover→watch→monitor. Verify Dartmouth/DHMC platforms against real endpoints first. Do NOT scrape legacy HTML (e.g. `searchjobs.dartmouth.edu`).
+2. **"Not interested" employer filter** — one-click "former employer / not interested" on a job result that persists and down-ranks/hides that employer in future geographic + remote searches. Same pattern as network `remove` (Simbex case).
+
+### 1. Cleanup pass
+
+A consolidation/polish sweep before new surface area. Candidate items (enumerate fully next session):
+- Reconcile any remaining stale capability claims and labels across pages.
+- Wire nav stepper step-completion states from saved data (long-queued).
+- Make the Roles page's older "Run market research" ingest path coherent with the new live remote/geographic searches (one clear story, not two engines).
+- Feed per-contact Follow-Up conversation fields into the network analysis prompt as typed inputs (currently free text via conversation_outcome).
+- Briefing week-over-week deltas.
+
+### 2. Resume-optional intake redesign
+
+Problem: requiring a resume up front is onerous and likely deters users from starting. Reframe the resume from a **gate** to an **enrichment** step.
+
+Direction:
+- Open with a short, low-friction set of introductory questions that produce an immediate, honest, limited first read (ties to the evidence-sufficiency model: start low, rise with input; and the tryapt.ai funnel lesson — fast time-to-first-value without quiz theater).
+- Then invite the resume: "To sharpen this, add your resume when you're ready." Resume becomes optional context that raises the analysis, not a precondition to begin.
+
+Draft introductory question set (refine next session):
+- What brings you here? (exploring options / actively searching / unhappy in current role / re-entering workforce / new to the workforce)
+- What do you do now, or most recently? (role + industry, free text, low pressure)
+- What are you known for — what do people rely on you for? (strengths in the user's own words)
+- What would make a move worth it? (better pay / culture / remote flexibility / growth / mission / less stress — multi-select)
+- Work model preference and location (remote / hybrid / onsite; open to relocation?)
+- Compensation hope or floor (optional range)
+- Timeline / urgency
+- What energizes vs. drains you in your current or last role?
+
+After these, show a preliminary read and the optional resume upload to go deeper.
+
+### 3. UI polish pass
+
+Goal: make the app feel slick, warm, human, and trustworthy — so the user *wants* to share information because they believe the app will do right by them. This comes AFTER cleanup and the intake redesign.
+
+- Aesthetic direction: warm, human, "career-coach" feel (reference vibe: iStock career-coach imagery — warm, supportive, real people). Trust-building, not corporate-cold.
+- **Imagery licensing note (integrity):** iStock images are licensed stock. If used, they must be properly purchased/licensed for the use; do not hotlink or scrape. Acceptable alternatives: properly licensed stock, owned photography, or rights-clear/AI-generated imagery. Record provenance.
+- Apply to the highest-trust-impact surfaces first: the new intake first-touch, the Workbench/home, and the empty states.
+
