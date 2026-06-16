@@ -38,6 +38,7 @@ const decisionOptions = [
 
 const conversationStatuses = [
   "To contact",
+  "Awaiting reply",
   "Scheduled",
   "Met",
   "Follow-up",
@@ -45,6 +46,16 @@ const conversationStatuses = [
   "Parked",
   "Removed",
 ];
+
+// A follow-up date that has passed and the person is not yet met or shelved
+// means the user owes them a nudge.
+const TODAY = new Date().toISOString().slice(0, 10);
+const NUDGE_DONE = new Set(["Met", "Parked", "Removed"]);
+function needsNudge(saved?: SavedFeedback) {
+  if (!saved?.followUpDate) return false;
+  if (NUDGE_DONE.has(saved.conversationStatus ?? "")) return false;
+  return saved.followUpDate < TODAY;
+}
 
 const followUpIntents = [
   "Market read",
@@ -335,6 +346,9 @@ function selected(value: string | undefined, option: string) {
                   <tr class="border-t border-[var(--line)] align-middle">
                     <td class="px-4 py-3">
                       <a class="font-semibold text-[var(--accent-strong)] hover:underline" href={`#follow-up-${id}`}>{person.contact.name}</a>
+                      {needsNudge(saved) ? (
+                        <span class="ml-2 rounded-md bg-[var(--warning)] px-1.5 py-0.5 text-xs font-semibold text-white">Nudge due</span>
+                      ) : null}
                       <p class="mt-0.5 text-xs text-[var(--muted)]">{[person.contact.title, person.contact.company].filter(Boolean).join(" at ") || "Needs review"}</p>
                     </td>
                     <td class="px-4 py-3 text-xs text-[var(--muted)]">
@@ -381,6 +395,11 @@ function selected(value: string | undefined, option: string) {
                       {saved ? (
                         <span class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
                           Last saved: {saved.feedbackType.replace("_", " ")}
+                        </span>
+                      ) : null}
+                      {needsNudge(saved) ? (
+                        <span class="rounded-md bg-[var(--warning)] px-2 py-1 text-xs font-semibold text-white">
+                          Nudge due since {saved?.followUpDate}
                         </span>
                       ) : null}
                     </div>
