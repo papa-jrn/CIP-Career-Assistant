@@ -159,6 +159,38 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         </div>
       </section>
 
+      <section id="geographic-search" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Geographic job search</p>
+        <h2 class="mt-1 text-2xl font-semibold">Search real listings near a place.</h2>
+        <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          Live results from Adzuna by location, radius, and salary floor. When you are signed in with a saved intake, listings are scored for fit. This is a live read — nothing is cached or invented. Jobs by Adzuna.
+        </p>
+        <form class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" hx-post="/api/jobs/geographic" hx-target="#geo-results" hx-swap="innerHTML" hx-indicator="#geo-loading">
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Role or keyword</span>
+            <input name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations manager" />
+          </label>
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Location</span>
+            <input name="where" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. Lebanon, NH" />
+          </label>
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Radius (miles)</span>
+            <input name="radius" type="number" min="0" max="200" value="25" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" />
+          </label>
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Min salary (optional)</span>
+            <input name="salary_min" type="number" min="0" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. 90000" />
+          </label>
+          <input type="hidden" name="country" value="us" />
+          <div class="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
+            <button class="cip-fancy-button" type="submit"><span>Search by location</span></button>
+            <span id="geo-loading" class="htmx-indicator text-sm font-semibold text-[var(--accent-strong)]">Searching Adzuna...</span>
+          </div>
+        </form>
+        <div id="geo-results" class="mt-5"></div>
+      </section>
+
       <section id="remote-search" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Live remote job search</p>
         <h2 class="mt-1 text-2xl font-semibold">Search real remote listings right now.</h2>

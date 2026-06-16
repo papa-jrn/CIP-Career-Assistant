@@ -2323,6 +2323,15 @@ Commercialization stance: use Adzuna (and ATS feeds, USAJobs, remote APIs) as a 
 
 **Launch-time obligation (do not overlook):** the free research tier prohibits commercial/production use and requires "Jobs by Adzuna" attribution. Before CIP has any paying user, a proper commercial agreement with Adzuna is required (and the right application type then is likely "Other" + a partnerships conversation, since a curated career-intelligence product is neither "publishing ad listings" nor "Jobsworth").
 
+### Geographic Job Search Implemented (2026-06-16)
+
+- `adzuna-jobs.ts` calls the Adzuna search API by country/keyword/location/radius (miles→km) and optional salary floor. Missing keys or a failed call return an honest `not_configured`/`error` mode; nothing is fabricated.
+- `POST /api/jobs/geographic` runs the search live (no persistence) and scores listings against saved intake via `scoreOpportunity`.
+- The Roles page has a "Geographic job search" section (keyword, location, radius, min salary) above the remote search. Results carry the required "Jobs by Adzuna" attribution and link to the original posting.
+- Verified end-to-end with the live keys: a Lebanon, NH / 40-mile / "operations manager" search returned 551 real listings (Hanover, Barre, etc.).
+
+Still queued on this track: feed the user's validated lanes into both searches as suggested keywords (turns "jobs near me" into "the right jobs near me"); USAJobs for government roles; per-employer ATS monitoring for saved employers.
+
 ## Business Model Concern
 
 CIP may eventually be sellable, but monetization must be handled carefully.
