@@ -2330,7 +2330,24 @@ Commercialization stance: use Adzuna (and ATS feeds, USAJobs, remote APIs) as a 
 - The Roles page has a "Geographic job search" section (keyword, location, radius, min salary) above the remote search. Results carry the required "Jobs by Adzuna" attribution and link to the original posting.
 - Verified end-to-end with the live keys: a Lebanon, NH / 40-mile / "operations manager" search returned 551 real listings (Hanover, Barre, etc.).
 
-Still queued on this track: feed the user's validated lanes into both searches as suggested keywords (turns "jobs near me" into "the right jobs near me"); USAJobs for government roles; per-employer ATS monitoring for saved employers.
+Still queued on this track: USAJobs for government roles; per-employer ATS monitoring for saved employers.
+
+### Lane-Targeted Search Implemented (2026-06-16)
+
+The Roles page now loads the user's validated lanes (advisor `roleBriefs` + intake `target_title`/`possibleRoles`, reusing `buildTargetLanes`) and renders them as clickable "Search your validated lanes" chips above the two job searches. Clicking a chip loads that term into both the geographic and remote keyword inputs. Chips only appear when real lanes exist (not the placeholder fallback). This turns the search from a blank box into "start from the work that fits you," tying the job engine back to the evidence analysis — the thing that makes CIP different from hitting Adzuna directly.
+
+### Employer-Direct (ATS) Path Decision (2026-06-16)
+
+Agreed direction: employer-owned career sites are the highest-trust, lowest-ghost job source (the employer themselves posting). The product principle: widen intake from real sources, stay disciplined on the front (fit-scoring, dedup, exclude filters keep "more" from becoming spam). The honest technical fork:
+
+- **Do**: hit known ATS JSON endpoints — Workday (e.g. DHMC's `careers.dartmouth-health.org` is almost certainly Workday), Greenhouse, Lever, iCIMS, SmartRecruiters, Ashby, Workable. Stable, ToS-safe.
+- **Don't**: scrape arbitrary HTML career pages (e.g. legacy `searchjobs.dartmouth.edu`). Brittle, ToS-risky, and the LLM-on-a-page approach is what produced earlier hallucinations.
+
+Architecture: per-employer adapters that detect/store which ATS an employer uses + its board token, then pull real reqs for saved employers. Employers with no clean feed are marked "manual review" with a link, not faked. This is the "employer adapters / job monitoring" payoff of the discover→watch model. Next build after lane-targeting; verify Dartmouth/DHMC ATS platforms against real endpoints first.
+
+### "Not Interested" Employer Filter (queued)
+
+Surfaced by a live search returning a former employer (Simbex, near Hanover). Same pattern as network `remove`: the engine finds a real, relevant employer but cannot know the user's private "no." A one-click "not interested / former employer" on a job result should persist and down-rank or hide that employer in future geographic and remote searches. Small follow-on to lane-targeting.
 
 ## Business Model Concern
 

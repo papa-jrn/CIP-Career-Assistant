@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import { opportunities as fallbackOpportunities } from "../lib/cip/data";
 import { configuredMarketSources } from "../lib/cip/labor-market";
+import { buildTargetLanes, parseAnalysisAdvisor, parseIntakeSource } from "../lib/cip/resume-asset-context";
 import { createServer } from "../lib/supabase/server";
 
 type OpportunityRow = {
@@ -29,6 +30,7 @@ type OpportunityRow = {
 let signedIn = false;
 let rankedMatches: OpportunityRow[] = [];
 let loadError = "";
+let suggestedTerms: string[] = [];
 const sources = configuredMarketSources();
 const sourceCount = sources.greenhouse.length + sources.lever.length;
 
@@ -74,6 +76,34 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       } else {
         rankedMatches = (data ?? []) as OpportunityRow[];
       }
+
+      // Suggested search terms from the user's validated lanes, so the search
+      // starts from "the work that fits you" instead of a blank box.
+      const [{ data: intakeRow }, { data: analysisRow }] = await Promise.all([
+        supabase
+          .from("career_sources")
+          .select("extracted_text")
+          .eq("user_id", user.id)
+          .eq("source_type", "resume_intake")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("career_sources")
+          .select("extracted_text")
+          .eq("user_id", user.id)
+          .eq("source_type", "evidence_analysis")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
+      const latestAdvisor = parseAnalysisAdvisor(analysisRow?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
+      const hasRealLanes = Boolean(latestAdvisor?.roleBriefs?.length || latestSource?.draft?.possibleRoles?.length);
+      const targetTitle = typeof latestSource?.intake?.target_title === "string" ? latestSource.intake.target_title : "";
+      const laneRoles = hasRealLanes ? buildTargetLanes(latestSource, latestAdvisor).map((lane) => lane.role) : [];
+      suggestedTerms = [...new Set([targetTitle, ...laneRoles].map((term) => term.trim()).filter(Boolean))].slice(0, 6);
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load opportunities.";
@@ -159,6 +189,18 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         </div>
       </section>
 
+      {suggestedTerms.length ? (
+        <section class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-sm font-semibold">Search your validated lanes</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pulled from your evidence analysis. Click one to load it into both searches below, then set a location.</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            {suggestedTerms.map((term) => (
+              <button type="button" class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" data-lane-term={term}>{term}</button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section id="geographic-search" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Geographic job search</p>
         <h2 class="mt-1 text-2xl font-semibold">Search real listings near a place.</h2>
@@ -168,7 +210,7 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         <form class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" hx-post="/api/jobs/geographic" hx-target="#geo-results" hx-swap="innerHTML" hx-indicator="#geo-loading">
           <label class="grid gap-1">
             <span class="text-xs font-semibold uppercase text-[var(--muted)]">Role or keyword</span>
-            <input name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations manager" />
+            <input id="geo-q" name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations manager" />
           </label>
           <label class="grid gap-1">
             <span class="text-xs font-semibold uppercase text-[var(--muted)]">Location</span>
@@ -200,7 +242,7 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         <form class="mt-4 flex flex-wrap items-end gap-2" hx-post="/api/jobs/remote" hx-target="#remote-results" hx-swap="innerHTML" hx-indicator="#remote-loading">
           <label class="grid gap-1">
             <span class="text-xs font-semibold uppercase text-[var(--muted)]">Role or keyword</span>
-            <input name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations, AI, product, customer success" required />
+            <input id="remote-q" name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations, AI, product, customer success" required />
           </label>
           <label class="grid gap-1">
             <span class="text-xs font-semibold uppercase text-[var(--muted)]">Region filter (optional)</span>
@@ -280,4 +322,19 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
       )}
     </section>
   </main>
+
+  <script>
+    // Clicking a validated-lane chip loads that term into both job searches.
+    document.querySelectorAll("[data-lane-term]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const term = chip.getAttribute("data-lane-term") || "";
+        const geo = document.getElementById("geo-q");
+        const remote = document.getElementById("remote-q");
+        if (geo) (geo as HTMLInputElement).value = term;
+        if (remote) (remote as HTMLInputElement).value = term;
+        document.getElementById("geographic-search")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        (geo as HTMLInputElement | null)?.focus();
+      });
+    });
+  </script>
 </Layout>
