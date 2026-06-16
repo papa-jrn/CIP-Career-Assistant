@@ -2309,6 +2309,20 @@ Legitimately accessible, real APIs:
 
 Next on this track: Adzuna + GeoCodio for geographic/radius search (needs a free Adzuna key), then per-employer ATS monitoring for saved employers.
 
+### Adzuna Tier and Ad-Model Decision (2026-06-16)
+
+Registered for the Adzuna API under the **Personal or academic research** application tier (org: Bee Balm Productions, industry: Career Services, market: North America). This is accurate for the current state: CIP is a single-user prototype, not monetized. Keys go in `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`.
+
+On the Adzuna application-type options, the recommendation is:
+
+- **Personal or academic research** — correct now.
+- **Publishing Adzuna ad listings** — declined, and not just for tier reasons. Becoming an ad republisher that monetizes sponsored-listing clicks conflicts directly with CIP's thesis: it reintroduces the ghost/sponsored/low-quality listings the product exists to cut through (Section 4), and click revenue creates a volume incentive that fights the "optimize for outcomes, not application volume" principle (Section 16). For a financially vulnerable user base this would be a dark pattern.
+- **Publishing Jobsworth salary estimates** — not applicable; CIP is not republishing Adzuna's salary product.
+
+Commercialization stance: use Adzuna (and ATS feeds, USAJobs, remote APIs) as a **curated intelligence input** behind fit-scored, de-duplicated, honestly-labeled recommendations. Monetize via coaching-led / no-dark-pattern subscription / B2B-institutional models — charging for interpretation and targeting, not ad impressions. Be a consumer of the data, not a republisher of the ads.
+
+**Launch-time obligation (do not overlook):** the free research tier prohibits commercial/production use and requires "Jobs by Adzuna" attribution. Before CIP has any paying user, a proper commercial agreement with Adzuna is required (and the right application type then is likely "Other" + a partnerships conversation, since a curated career-intelligence product is neither "publishing ad listings" nor "Jobsworth").
+
 ## Business Model Concern
 
 CIP may eventually be sellable, but monetization must be handled carefully.
