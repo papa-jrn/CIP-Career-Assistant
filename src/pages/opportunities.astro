@@ -159,6 +159,27 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
         </div>
       </section>
 
+      <section id="remote-search" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Live remote job search</p>
+        <h2 class="mt-1 text-2xl font-semibold">Search real remote listings right now.</h2>
+        <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          Pulls live from open remote-job APIs (Remotive, RemoteOK, We Work Remotely). Results link to the original posting. When you are signed in with a saved intake, listings are scored for fit. This is a live read — nothing is cached or invented.
+        </p>
+        <form class="mt-4 flex flex-wrap items-end gap-2" hx-post="/api/jobs/remote" hx-target="#remote-results" hx-swap="innerHTML" hx-indicator="#remote-loading">
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Role or keyword</span>
+            <input name="q" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. operations, AI, product, customer success" required />
+          </label>
+          <label class="grid gap-1">
+            <span class="text-xs font-semibold uppercase text-[var(--muted)]">Region filter (optional)</span>
+            <input name="region" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. USA" />
+          </label>
+          <button class="cip-fancy-button" type="submit"><span>Search remote jobs</span></button>
+          <span id="remote-loading" class="htmx-indicator text-sm font-semibold text-[var(--accent-strong)]">Searching live sources...</span>
+        </form>
+        <div id="remote-results" class="mt-5"></div>
+      </section>
+
       {rankedMatches.length ? (
         <div class="mt-6 grid gap-4">
           {rankedMatches.map((match) => match.opportunities ? (

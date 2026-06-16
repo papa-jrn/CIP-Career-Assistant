@@ -2282,6 +2282,33 @@ Process decision: triage feedback gets saved through the existing feedback mecha
 
 ---
 
+## Job-Board Data Sources Decision (2026-06-16)
+
+Earlier attempts to "pull jobs from Indeed/Glassdoor/etc." produced hallucinated listings. Root cause: asking an LLM to search a board it cannot actually reach makes it fabricate. The employer-discovery pass avoids this because it uses OpenAI's hosted `web_search` tool (real browsing) and constrains output to source-backed employers. Job listings, by contrast, need real API connectors — not LLM "search."
+
+Honest source landscape (as of June 2026; verify terms at build time):
+
+- **Indeed** — public Job Search/Publisher API discontinued (~2020); employer/partner-only now. Not accessible without scraping (ToS violation, anti-bot).
+- **Glassdoor** — public API deprecated; partner-only. Not accessible.
+- **ZipRecruiter** — Partner/Publisher program exists but requires approval and a business relationship; not self-serve.
+- **FlexJobs** — paid curation service, no public API. Not accessible.
+- These four are reachable only by scraping, which the project forbids (Section 9; Product Integrity Rule). Scraping is also exactly what produced the fake results before.
+
+Legitimately accessible, real APIs:
+
+- **Remote, free, no key**: Remotive (`/api/remote-jobs`), RemoteOK (`/api`, requires backlink + User-Agent), We Work Remotely (RSS). **Implemented this pass.**
+- **Geographic, free key**: Adzuna (location + radius + salary; pairs with GeoCodio for coordinates), USAJobs (government), The Muse. Queued.
+- **Per-employer ATS** (cleanest, no key): Greenhouse + Lever already wired; Ashby/SmartRecruiters/Workable can be added for saved-employer monitoring. Queued.
+
+### Live Remote Job Search Implemented (2026-06-16)
+
+- `remote-jobs.ts` searches Remotive + RemoteOK + We Work Remotely concurrently, normalizes to a common shape, dedupes, and sorts by recency. Each source is fetched with a timeout and a User-Agent; a source that fails is reported as an error, never replaced with invented data.
+- `POST /api/jobs/remote` runs the search live (no persistence, so results are never stale), and when a saved intake exists it scores listings for fit via the existing `scoreOpportunity`.
+- The Roles (opportunities) page has a "Live remote job search" section with keyword + optional region filter. Listings link to the original posting; CIP does not repost or apply.
+- Verified all three sources return real data end-to-end before shipping.
+
+Next on this track: Adzuna + GeoCodio for geographic/radius search (needs a free Adzuna key), then per-employer ATS monitoring for saved employers.
+
 ## Business Model Concern
 
 CIP may eventually be sellable, but monetization must be handled carefully.
