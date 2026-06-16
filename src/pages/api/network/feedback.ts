@@ -75,6 +75,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       laneImpact: pick(incoming.laneImpact, previous?.laneImpact),
     };
 
+    // When a contact moves to "Awaiting reply" and no follow-up date is set,
+    // default one ~5 business days out so a nudge will fire without the user
+    // having to track it by hand.
+    if (feedback.conversationStatus === "Awaiting reply" && !feedback.followUpDate) {
+      feedback.followUpDate = addBusinessDays(5);
+    }
+
     const now = new Date().toISOString();
     const { error } = await supabase.from("career_sources").insert({
       user_id: user.id,
@@ -204,6 +211,17 @@ async function replaceConversationOutcome(
   });
 
   return !error;
+}
+
+function addBusinessDays(days: number) {
+  const date = new Date();
+  let added = 0;
+  while (added < days) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+  return date.toISOString().slice(0, 10);
 }
 
 function pick(incoming: string | undefined, previous: string | undefined) {

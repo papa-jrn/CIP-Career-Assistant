@@ -2181,6 +2181,21 @@ This makes the Follow Up conversation capture the structured front door to the l
 
 Still queued: the network analysis consumes `conversation_outcome` notes as free text; per-contact structured feedback fields (market signals/new leads/lane impact) are not yet first-class typed inputs to `NetworkFeedback` or the analysis prompt. Surfacing "what changed since last week" deltas in the Briefing from these records is also still pending.
 
+### Follow Up Personal-CRM Pass (2026-06-16)
+
+The Follow Up page is becoming a small, honest personal CRM for the weekly outreach group — deliberately NOT a sales tool. No bulk send, no drip sequences, no volume vanity metrics. The product thesis is small, respectful, market-read-first outreach, so the page should reinforce restraint, not throughput.
+
+Implemented in this pass:
+
+- **Worklist reframe.** The Weekly relationship queue now leads with an action worklist that buckets only the people who need attention (nudge due, met-needs-notes, active this week, awaiting reply). The full "All connections" roster stays below with inline status and collapsible deep-dive cards, so out-of-cycle work is never blocked.
+- **Remove actually removes.** Bug fix: the page built its own queue and never applied exclusion, so marking someone remove/retired/etc. left them in the list. Decisions in `EXCLUDED_DECISIONS` (remove, deceased, no_memory, retired, ethical_concern) now move the person into a collapsed, recoverable "Removed / not pursuing" section with a Restore control. Nothing is deleted. (Also fixed a latent bug where the "latest" feedback shown was actually the oldest record.)
+- **"Awaiting reply" status + nudge cue.** New status between "To contact" and "Scheduled"; a passed follow-up date now shows a "Nudge due" badge.
+- **Auto follow-up date.** When a contact moves to "Awaiting reply" with no date set, the feedback endpoint defaults one ~5 business days out so nudges fire without manual date tracking.
+- **Interaction timeline.** Every save is already an additive record; each card now shows the full per-contact history (date, decision, status, note) in a collapsed list.
+- **Outreach drafter.** `POST /api/network/draft-message` drafts a short, market-read-framed note per contact using the contact's context, the chosen intent, and the user's own name/positioning. AI when `OPENAI_API_KEY` is set, deterministic template otherwise; both are labeled as drafts. Hard rule: CIP never sends — it produces a starting draft the user copies, edits, and sends themselves.
+
+Still queued for this page: typed conversation fields into the analysis prompt (above), and possibly recency-aware ranking using LinkedIn `Connected On` dates (see First Outreach Triage Learnings).
+
 The cycle is a recommended rhythm, not a hard gate. Employers, Roles, and Briefing must keep working standalone. Things change over time: new employers can be added in a later week, and constraints like geography can loosen or shift (for example, becoming willing to relocate to another state). Each weekly pass should re-read current preferences instead of assuming the first answers are permanent.
 
 ## Loop-Back Conversation Notes
