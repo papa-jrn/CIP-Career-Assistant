@@ -2162,6 +2162,25 @@ Network finds candidates and warm paths. Follow Up turns those candidates into u
 
 Implementation note: the nav stepper labels steps 4-8 as the repeating weekly cycle. A future improvement is marking step completion states in the nav from saved data (intake saved, evidence analysis complete, assets drafted, network imported, follow-up queue reviewed).
 
+### Follow Up Page Cleanup (2026-06-16)
+
+First cleanup pass on the Follow Up page:
+
+- Tightened the intro to a few sentences that state the page's purpose: set connection status, decide use/park/remove, and record what each conversation taught so market reality flows into employer/role research and the next weekly pass.
+- Added a roster table at the top: each connection name links (anchor) down to its full detail card, shows the current decision, and has an inline connection-status control that saves immediately.
+- Each detail card now has a scroll-target id so the roster links land on it.
+- The conversation-capture fields (market signals, new leads, lane impact, conversation notes) are grouped under an accented "Capture the conversation" block that explains when the data feeds analysis.
+
+Integrity fix found during cleanup: the feedback endpoint was only persisting `contactName`, `feedbackType`, and `note` — the rich form fields (conversation status, intent, date, reason, market signals, new leads, lane impact) were silently dropped on save, so the capture spot looked real but lost data. The endpoint now:
+
+- Persists all structured fields.
+- Merges over the latest saved review for the contact, so a quick roster status change (or any partial save) does not wipe previously captured fields.
+- When the connection status indicates a real conversation happened (Met, Follow-up, Intro offered) and there is content, mirrors the conversation into a `conversation_outcome` record — the same source type the network analysis and evidence re-analysis already read. One auto log per contact is maintained (replace, not append) so repeated saves do not crowd the capped loop-back notes.
+
+This makes the Follow Up conversation capture the structured front door to the loop-back mechanism: the user no longer has to write a separate notes file for a contact they reviewed here.
+
+Still queued: the network analysis consumes `conversation_outcome` notes as free text; per-contact structured feedback fields (market signals/new leads/lane impact) are not yet first-class typed inputs to `NetworkFeedback` or the analysis prompt. Surfacing "what changed since last week" deltas in the Briefing from these records is also still pending.
+
 The cycle is a recommended rhythm, not a hard gate. Employers, Roles, and Briefing must keep working standalone. Things change over time: new employers can be added in a later week, and constraints like geography can loosen or shift (for example, becoming willing to relocate to another state). Each weekly pass should re-read current preferences instead of assuming the first answers are permanent.
 
 ## Loop-Back Conversation Notes

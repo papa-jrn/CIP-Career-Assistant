@@ -264,7 +264,7 @@ function selected(value: string | undefined, option: string) {
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Follow Up</p>
       <h1 class="mt-2 max-w-4xl text-3xl font-semibold">Turn the network list into reviewed relationship intelligence.</h1>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        Use this page after Network analysis. Review each suggested or user-added person, decide whether to use, park, remove, or follow up, and capture what the conversation taught you before moving to Employers, Roles, and Briefing.
+        This is where the people Network suggested become a working queue. Set each person's connection status, decide whether to use, park, or remove them, and after a conversation, write down what you learned. Those notes are the point: market reality on pay, titles, hiring, and new leads flows from here into your employer and role research and into the next weekly pass.
       </p>
       <div class="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -317,12 +317,52 @@ function selected(value: string | undefined, option: string) {
       </div>
 
       {queue.length ? (
-        <div class="mt-5 grid gap-4">
+        <>
+        <div class="mt-5 overflow-hidden rounded-md border border-[var(--line)]">
+          <table class="w-full border-collapse text-sm">
+            <thead>
+              <tr class="bg-[var(--background)] text-left text-xs font-semibold uppercase text-[var(--muted)]">
+                <th class="px-4 py-3">Connection</th>
+                <th class="px-4 py-3">Current decision</th>
+                <th class="px-4 py-3">Connection status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((person) => {
+                const id = slug(person.contact.name);
+                const saved = person.latestFeedback;
+                return (
+                  <tr class="border-t border-[var(--line)] align-middle">
+                    <td class="px-4 py-3">
+                      <a class="font-semibold text-[var(--accent-strong)] hover:underline" href={`#follow-up-${id}`}>{person.contact.name}</a>
+                      <p class="mt-0.5 text-xs text-[var(--muted)]">{[person.contact.title, person.contact.company].filter(Boolean).join(" at ") || "Needs review"}</p>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-[var(--muted)]">
+                      {saved?.feedbackType ? saved.feedbackType.replace("_", " ") : "Not set"}
+                    </td>
+                    <td class="px-4 py-3">
+                      <form class="flex items-center gap-2" hx-post="/api/network/feedback" hx-target={`#roster-result-${id}`} hx-swap="innerHTML">
+                        <input type="hidden" name="contact_name" value={person.contact.name} />
+                        <select name="conversation_status" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-1.5 text-xs">
+                          {conversationStatuses.map((status) => <option value={status} selected={selected(saved?.conversationStatus, status)}>{status}</option>)}
+                        </select>
+                        <button class="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>Set</button>
+                        <span id={`roster-result-${id}`} class="text-xs text-[var(--muted)]" aria-live="polite"></span>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 grid gap-4">
           {queue.map((person) => {
             const id = slug(person.contact.name);
             const saved = person.latestFeedback;
             return (
-              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+              <article id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold">{person.contact.name}</h3>
@@ -402,23 +442,29 @@ function selected(value: string | undefined, option: string) {
                       <input name="decision_reason" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" value={saved?.decisionReason ?? ""} placeholder="Why use, park, remove, or revisit this person?" />
                     </label>
                   </div>
-                  <div class="grid gap-3 lg:grid-cols-2">
-                    <label class="grid gap-1">
-                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
-                      <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points">{saved?.marketSignals ?? ""}</textarea>
-                    </label>
-                    <label class="grid gap-1">
-                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
-                      <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned">{saved?.newLeads ?? ""}</textarea>
-                    </label>
-                    <label class="grid gap-1">
-                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact</span>
-                      <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects">{saved?.laneImpact ?? ""}</textarea>
-                    </label>
-                    <label class="grid gap-1">
-                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up notes</span>
-                      <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Message sent, reply details, next step, or why this should wait">{saved?.note ?? ""}</textarea>
-                    </label>
+                  <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
+                    <p class="text-sm font-semibold text-[var(--foreground)]">Capture the conversation</p>
+                    <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+                      Fill this in after you talk. When the connection status is Met, Follow-up, or Intro offered, what you record here is saved as first-hand market evidence and feeds the next network and evidence re-analysis.
+                    </p>
+                    <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
+                        <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points">{saved?.marketSignals ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
+                        <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned">{saved?.newLeads ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact</span>
+                        <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects">{saved?.laneImpact ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes / next step</span>
+                        <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What was said, reply details, what you agreed, or why this should wait">{saved?.note ?? ""}</textarea>
+                      </label>
+                    </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
                     <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>
@@ -431,6 +477,7 @@ function selected(value: string | undefined, option: string) {
             );
           })}
         </div>
+        </>
       ) : (
         <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
           <p class="text-sm leading-6 text-[var(--muted)]">
