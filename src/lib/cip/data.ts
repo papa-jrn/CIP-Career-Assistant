@@ -17,7 +17,7 @@ export const navItems: NavStep[] = [
   { href: "/network", label: "Network", step: 4, cycle: true },
   { href: "/follow-up", label: "Follow Up", step: 5, cycle: true },
   { href: "/employers", label: "Employers", step: 6, cycle: true },
-  { href: "/opportunities", label: "Roles", step: 7, cycle: true },
+  { href: "/opportunities", label: "Opportunities", step: 7, cycle: true },
   { href: "/briefing", label: "Briefing", step: 8, cycle: true },
 ];
 

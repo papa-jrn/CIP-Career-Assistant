@@ -1,31 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { opportunities as fallbackOpportunities } from "../lib/cip/data";
-import { configuredMarketSources } from "../lib/cip/labor-market";
 import { buildTargetLanes, parseAnalysisAdvisor, parseIntakeSource } from "../lib/cip/resume-asset-context";
 import { createServer } from "../lib/supabase/server";
-
-type OpportunityRow = {
-  id: string;
-  match_score: number;
-  confidence: string;
-  fit_summary: string;
-  missing_skills: string[];
-  evidence: Array<{ label: string; value: string }>;
-  opportunities: {
-    title: string;
-    company: string;
-    location: string | null;
-    work_mode: string | null;
-    salary_min: number | null;
-    salary_max: number | null;
-    source_url: string | null;
-    source_provider: string | null;
-    description: string | null;
-    tags: string[] | null;
-    last_seen_at: string | null;
-  } | null;
-};
 
 type WatchedEmployerRow = {
   id: string;
@@ -44,12 +20,9 @@ type WatchedEmployerRow = {
 };
 
 let signedIn = false;
-let rankedMatches: OpportunityRow[] = [];
 let watchedEmployers: WatchedEmployerRow[] = [];
 let loadError = "";
 let suggestedTerms: string[] = [];
-const sources = configuredMarketSources();
-const sourceCount = sources.greenhouse.length + sources.lever.length;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -61,46 +34,14 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     signedIn = Boolean(user);
 
     if (user) {
-      const { data, error } = await supabase
-        .from("opportunity_matches")
-        .select(`
-          id,
-          match_score,
-          confidence,
-          fit_summary,
-          missing_skills,
-          evidence,
-          opportunities (
-            title,
-            company,
-            location,
-            work_mode,
-            salary_min,
-            salary_max,
-            source_url,
-            source_provider,
-            description,
-            tags,
-            last_seen_at
-          )
-        `)
-        .eq("user_id", user.id)
-        .order("match_score", { ascending: false })
-        .limit(30);
-
-      if (error) {
-        loadError = error.message;
-      } else {
-        rankedMatches = (data ?? []) as OpportunityRow[];
-      }
-
-      const { data: employerRows } = await supabase
+      const { data: employerRows, error: employerError } = await supabase
         .from("watched_employers")
         .select("id,name,region,category,location,priority,fit_score,fit_summary,target_roles,careers_url,source_url,adapter_status,confidence")
         .eq("user_id", user.id)
         .order("fit_score", { ascending: false })
-        .limit(12);
-      watchedEmployers = (employerRows ?? []) as WatchedEmployerRow[];
+        .limit(100);
+      if (employerError) loadError = employerError.message;
+      else watchedEmployers = (employerRows ?? []) as WatchedEmployerRow[];
 
       // Suggested search terms from the user's validated lanes, so the search
       // starts from "the work that fits you" instead of a blank box.
@@ -135,13 +76,6 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
   }
 }
 
-function salaryLabel(item: OpportunityRow["opportunities"]) {
-  if (!item?.salary_min && !item?.salary_max) return "Salary not listed";
-  if (item.salary_min && item.salary_max) return `$${item.salary_min.toLocaleString()}-${item.salary_max.toLocaleString()}`;
-  if (item.salary_min) return `$${item.salary_min.toLocaleString()}+`;
-  return `Up to $${item.salary_max?.toLocaleString()}`;
-}
-
 function employerSearchLocation(employer: WatchedEmployerRow) {
   return employer.location || employer.region.replaceAll("_", " ");
 }
@@ -170,69 +104,39 @@ function monitoringStatus(employer: WatchedEmployerRow) {
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Labor Market Engine</p>
-          <h1 class="mt-2 text-3xl font-semibold">Rank real opportunities by strategic fit.</h1>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Opportunities</p>
+          <h1 class="mt-2 text-3xl font-semibold">Turn your employer research into live job searches.</h1>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            Ingest public Greenhouse and Lever job boards, normalize listings, dedupe by source, and score matches against the saved identity graph.
+            You have already done the work of finding potential places to work. This page helps you connect to those employers, search their own career pages first, and then use geographic and remote searches to widen the net when an employer does not expose a clean job board.
           </p>
         </div>
-        <form hx-post="/api/labor-market/ingest" hx-target="#market-run-result" hx-swap="innerHTML" hx-indicator="#market-loading">
-          <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
-            <span>Run market research</span>
-          </button>
-        </form>
       </div>
-
-      <div class="mt-5 grid gap-3 md:grid-cols-3">
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Configured sources</p>
-          <p class="mt-2 text-2xl font-semibold">{sourceCount}</p>
-          <p class="mt-1 text-sm text-[var(--muted)]">Greenhouse: {sources.greenhouse.length}; Lever: {sources.lever.length}</p>
-        </div>
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Ranked matches</p>
-          <p class="mt-2 text-2xl font-semibold">{rankedMatches.length}</p>
-          <p class="mt-1 text-sm text-[var(--muted)]">Saved to your profile</p>
-        </div>
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Status</p>
-          <p class="mt-2 text-sm font-semibold text-[var(--accent-strong)]">{signedIn ? "Ready" : "Sign in required"}</p>
-          <p class="mt-1 text-sm text-[var(--muted)]">Save intake first for personalized scoring</p>
-        </div>
-      </div>
-
-      <div id="market-loading" class="htmx-indicator mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-        <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
-          <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
-          Researching configured job boards and refreshing match scores...
-        </div>
-      </div>
-      <div id="market-run-result" class="mt-5"></div>
 
       {loadError ? (
         <p class="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>
       ) : null}
 
-      <section id="networking" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Search and networking strategy</p>
-        <h2 class="mt-1 text-2xl font-semibold">Decide where to look before scaling applications.</h2>
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-          <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-            <h3 class="text-lg font-semibold">Networking data lives in the Network step</h3>
+      <section class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">How to use this page</p>
+        <div class="mt-3 grid gap-4 lg:grid-cols-3">
+          <div>
+            <h2 class="text-lg font-semibold">Start with saved employers</h2>
             <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-              Import LinkedIn connection exports, alumni lists, and manual contacts on the Network page, then run lane validation there. Advisor conversations from that step are the market intelligence this page should be tested against.
+              Employer percentages estimate how strongly each business appears to fit your career direction, target roles, region, and saved evidence. A high score is a prioritization signal, not a guarantee that the employer has an open role today.
             </p>
-            <a class="mt-3 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/network">Open Network</a>
-          </article>
-          <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="text-lg font-semibold">Job-board search lanes</h3>
-              <span class="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold text-[var(--warning)]">Planned, not built yet</span>
-            </div>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold">Use geography to dig deeper</h2>
             <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-              The planned feature turns the analysis into LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches with target titles, exclusion terms, salary filters, work model, geography, and review rules. Until it exists, this card is a description, not a tool.
+              If a target employer has a weak or confusing careers page, use the geographic search to look for similar roles nearby, alternate employer names, regional affiliates, hospitals, schools, municipalities, and vendors in the same labor market.
             </p>
-          </article>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold">Use remote search for range</h2>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Remote search helps test whether the same role language exists outside the local market. Use it to compare titles, compensation signals, and keywords you can bring back to employer career pages.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -257,7 +161,10 @@ function monitoringStatus(employer: WatchedEmployerRow) {
               Enter a search term once, then open the employer's own career page. The Adzuna check inside each row is secondary because broad job indexes can miss employer jobs or return unrelated similarly named results.
             </p>
           </div>
-          <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/employers">Update employers</a>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">{watchedEmployers.length} saved employer{watchedEmployers.length === 1 ? "" : "s"}</span>
+            <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/employers">Update employers</a>
+          </div>
         </div>
 
         {watchedEmployers.length ? (
@@ -404,73 +311,6 @@ function monitoringStatus(employer: WatchedEmployerRow) {
         </form>
         <div id="remote-results" class="mt-5"></div>
       </section>
-
-      {rankedMatches.length ? (
-        <div class="mt-6 grid gap-4">
-          {rankedMatches.map((match) => match.opportunities ? (
-            <article class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-5 md:grid-cols-[1fr_auto]">
-              <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="text-xl font-semibold">{match.opportunities.title}</h2>
-                  {match.opportunities.source_provider ? (
-                    <span class="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{match.opportunities.source_provider}</span>
-                  ) : null}
-                </div>
-                <p class="mt-1 text-sm text-[var(--muted)]">
-                  {match.opportunities.company}
-                  {match.opportunities.location ? ` - ${match.opportunities.location}` : ""}
-                  {match.opportunities.work_mode ? ` - ${match.opportunities.work_mode}` : ""}
-                </p>
-                <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{match.fit_summary}</p>
-                {match.missing_skills?.length ? (
-                  <p class="mt-3 text-sm font-semibold text-[var(--warning)]">Proof gaps: {match.missing_skills.join(", ")}</p>
-                ) : null}
-                {match.evidence?.length ? (
-                  <div class="mt-4 flex flex-wrap gap-2">
-                    {match.evidence.map((item) => (
-                      <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{item.label}: {item.value}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <div class="flex min-w-36 flex-col items-start gap-2 md:items-end">
-                <span class="text-3xl font-semibold text-[var(--accent-strong)]">{match.match_score}%</span>
-                <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold">{match.confidence} confidence</span>
-                <span class="text-xs text-[var(--muted)]">{salaryLabel(match.opportunities)}</span>
-                {match.opportunities.source_url ? (
-                  <a class="mt-2 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href={match.opportunities.source_url} target="_blank" rel="noreferrer">View source</a>
-                ) : null}
-              </div>
-            </article>
-          ) : null)}
-        </div>
-      ) : (
-        <div class="mt-6 grid gap-4">
-          <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-            <h2 class="text-xl font-semibold">No ranked matches yet</h2>
-            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-              {sourceCount
-                ? "Run market research above to ingest the configured job boards and score matches against your saved intake."
-                : "No job boards are connected yet, so live research cannot run. Job-board sources are currently configured by the operator, not from this page; connecting saved employers to live monitoring is planned but not built."}
-            </p>
-            <p class="mt-2 text-xs font-semibold uppercase text-[var(--warning)]">The cards below are illustrative fixtures, not real listings.</p>
-          </div>
-          {fallbackOpportunities.map((item) => (
-            <article class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-5 opacity-80 md:grid-cols-[1fr_auto]">
-              <div>
-                <h2 class="text-xl font-semibold">{item.role}</h2>
-                <p class="mt-1 text-sm text-[var(--muted)]">{item.company}</p>
-                <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{item.evidence}</p>
-                <p class="mt-3 text-sm font-semibold text-[var(--warning)]">{item.gap}</p>
-              </div>
-              <div class="flex min-w-32 flex-col items-start gap-2 md:items-end">
-                <span class="text-3xl font-semibold text-[var(--accent-strong)]">{item.match}%</span>
-                <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold">{item.confidence} confidence</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
     </section>
   </main>
 
@@ -551,6 +391,11 @@ function monitoringStatus(employer: WatchedEmployerRow) {
         const remote = document.getElementById("remote-q");
         if (geo) (geo as HTMLInputElement).value = term;
         if (remote) (remote as HTMLInputElement).value = term;
+        const employer = document.getElementById("employer-career-search-term");
+        if (employer) {
+          (employer as HTMLInputElement).value = term;
+          syncEmployerSearchTerm();
+        }
         document.getElementById("geographic-search")?.scrollIntoView({ behavior: "smooth", block: "start" });
         (geo as HTMLInputElement | null)?.focus();
       });
