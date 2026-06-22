@@ -1042,6 +1042,48 @@ The employer page must continue to label the map layer, adapters, and any unfini
 
 ---
 
+## Employer / Role / Follow-Up Bridge Plan
+
+The next product layer is the handoff between geography-first employer discovery, live role search, and relationship follow-up.
+
+Current bridge implemented:
+
+- The Opportunities page now reads saved watched employers.
+- Each watched employer shows its careers or source link, inferred hiring-tool label, adapter/manual-review status, target role lanes, and fit score.
+- Each watched employer can open the employer-owned career page/search and can run an employer-filtered public-listing cross-check using the existing geographic job-search endpoint.
+- This is intentionally labeled as manual-review unless an employer adapter is marked supported.
+
+Testing correction:
+
+- Broad public job indexes are not reliable as employer-specific search. Dartmouth Health can show jobs on its own careers site while returning nothing through Adzuna. Dartmouth College can produce public-index noise that is not actually Dartmouth College.
+- Therefore the employer career page is the source of truth. Public-board results are only leads until confirmed against the employer-owned career page or a supported ATS adapter.
+
+What still needs to happen:
+
+1. **Career-page verification**
+   - Add a server-side probe for saved employers that checks whether `careers_url` is reachable.
+   - Detect common hiring systems from URL and page signals, such as Greenhouse, Lever, Workday, iCIMS, SmartRecruiters, Ashby, BambooHR, GovernmentJobs, SchoolSpring, HigherEdJobs, and USAJobs.
+   - Store verification status, detected ATS/provider, last checked date, and confidence.
+
+2. **Employer-scoped role ingestion**
+   - If the hiring system exposes a safe public API or structured feed, ingest real roles into `opportunities`.
+   - If the employer only has a careers page without a supported adapter, keep it as a manual-review target and do not fabricate postings.
+   - Preserve source attribution and original posting URLs.
+
+3. **Role-to-follow-up prompts**
+   - When an employer has watched status plus live roles, surface follow-up prompts:
+     - Who do we know near this employer?
+     - What market-read question should we ask before applying?
+     - Which proof gap should be answered before outreach?
+   - Conversation outcomes should update employer priority, role fit, and future search terms.
+
+4. **Weekly loop**
+   - Weekly briefing should report new roles at watched employers, employers with stale hiring checks, follow-up nudges tied to target employers, and role lanes that need more evidence.
+
+Product rule: the app should never imply active monitoring until a supported adapter/feed exists. Careers pages and public-listing checks are useful, but they are not the same as reliable employer monitoring.
+
+---
+
 ## First Engine Pass Implemented
 
 Added:

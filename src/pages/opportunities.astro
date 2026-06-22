@@ -27,8 +27,25 @@ type OpportunityRow = {
   } | null;
 };
 
+type WatchedEmployerRow = {
+  id: string;
+  name: string;
+  region: string;
+  category: string;
+  location: string | null;
+  priority: string;
+  fit_score: number;
+  fit_summary: string;
+  target_roles: string[] | null;
+  careers_url: string | null;
+  source_url: string | null;
+  adapter_status: string;
+  confidence: string;
+};
+
 let signedIn = false;
 let rankedMatches: OpportunityRow[] = [];
+let watchedEmployers: WatchedEmployerRow[] = [];
 let loadError = "";
 let suggestedTerms: string[] = [];
 const sources = configuredMarketSources();
@@ -77,6 +94,14 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         rankedMatches = (data ?? []) as OpportunityRow[];
       }
 
+      const { data: employerRows } = await supabase
+        .from("watched_employers")
+        .select("id,name,region,category,location,priority,fit_score,fit_summary,target_roles,careers_url,source_url,adapter_status,confidence")
+        .eq("user_id", user.id)
+        .order("fit_score", { ascending: false })
+        .limit(12);
+      watchedEmployers = (employerRows ?? []) as WatchedEmployerRow[];
+
       // Suggested search terms from the user's validated lanes, so the search
       // starts from "the work that fits you" instead of a blank box.
       const [{ data: intakeRow }, { data: analysisRow }] = await Promise.all([
@@ -115,6 +140,28 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
   if (item.salary_min && item.salary_max) return `$${item.salary_min.toLocaleString()}-${item.salary_max.toLocaleString()}`;
   if (item.salary_min) return `$${item.salary_min.toLocaleString()}+`;
   return `Up to $${item.salary_max?.toLocaleString()}`;
+}
+
+function employerSearchLocation(employer: WatchedEmployerRow) {
+  return employer.location || employer.region.replaceAll("_", " ");
+}
+
+function hiringToolLabel(employer: WatchedEmployerRow) {
+  const url = employer.careers_url || "";
+  if (!url) return "Needs career-page check";
+  if (/greenhouse\.io/i.test(url)) return "Greenhouse hiring tool";
+  if (/lever\.co/i.test(url)) return "Lever hiring tool";
+  if (/workdayjobs|myworkdayjobs/i.test(url)) return "Workday hiring tool";
+  if (/icims/i.test(url)) return "iCIMS hiring tool";
+  if (/smartrecruiters/i.test(url)) return "SmartRecruiters hiring tool";
+  if (/jobs|careers|employment|join/i.test(url)) return "Career page";
+  return "Hiring link";
+}
+
+function monitoringStatus(employer: WatchedEmployerRow) {
+  if (employer.careers_url && employer.adapter_status === "supported") return "Adapter ready";
+  if (employer.careers_url) return "Manual review ready";
+  return "Find hiring page";
 }
 ---
 
@@ -200,6 +247,110 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
           </div>
         </section>
       ) : null}
+
+      <section id="employer-role-bridge" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Employer-to-role bridge</p>
+            <h2 class="mt-1 text-2xl font-semibold">Search employer career pages first.</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              Enter a search term once, then open the employer's own career page. The Adzuna check inside each row is secondary because broad job indexes can miss employer jobs or return unrelated similarly named results.
+            </p>
+          </div>
+          <a class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/employers">Update employers</a>
+        </div>
+
+        {watchedEmployers.length ? (
+          <div class="mt-4 rounded-md border border-[var(--accent)] bg-[var(--panel)] p-4">
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Search term for employer career pages</span>
+              <input id="employer-career-search-term" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="e.g. communications, program manager, analyst" />
+            </label>
+            <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Leave blank to open each employer's main careers page. Add a term to send that search into supported career-page links and Adzuna cross-check forms.</p>
+          </div>
+        ) : null}
+
+        {watchedEmployers.length ? (
+          <div class="mt-4 overflow-hidden rounded-md border border-[var(--line)]">
+            {watchedEmployers.map((employer) => (
+              <details class="group border-b border-[var(--line)] bg-[var(--panel)] last:border-b-0">
+                <summary class="grid cursor-pointer list-none gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
+                  <div>
+                    <h3 class="text-base font-semibold text-[var(--foreground)]">{employer.name}</h3>
+                    <p class="mt-1 text-xs text-[var(--muted)]">
+                      {[employer.location || employer.region.replaceAll("_", " "), employer.category].filter(Boolean).join(" - ")}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{monitoringStatus(employer)}</span>
+                    {employer.careers_url ? (
+                      <a
+                        class="cip-fancy-button px-4 py-2 text-sm"
+                        href={employer.careers_url}
+                        data-careers-base={employer.careers_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <span>Search career page</span>
+                      </a>
+                    ) : employer.source_url ? (
+                      <a class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href={employer.source_url} target="_blank" rel="noreferrer">Review source</a>
+                    ) : null}
+                    <span class="text-xs font-semibold text-[var(--muted)]">Details</span>
+                  </div>
+                </summary>
+
+                <div class="grid gap-4 border-t border-[var(--line)] bg-[var(--background)] p-4 lg:grid-cols-[1fr_0.9fr]">
+                  <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]">{employer.priority} priority</span>
+                      <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]">{hiringToolLabel(employer)}</span>
+                      <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]">{employer.confidence} confidence</span>
+                    </div>
+                    <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{employer.fit_summary}</p>
+                    {employer.target_roles?.length ? (
+                      <div class="mt-3 flex flex-wrap gap-1.5">
+                        {employer.target_roles.slice(0, 6).map((role) => (
+                          <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-0.5 text-xs font-semibold text-[var(--foreground)]">{role}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <form class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3" hx-post="/api/jobs/geographic" hx-target={`#employer-role-results-${employer.id}`} hx-swap="innerHTML" hx-indicator={`#employer-role-loading-${employer.id}`}>
+                      <div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                        <label class="grid gap-1">
+                          <span class="text-xs font-semibold uppercase text-[var(--muted)]">Adzuna cross-check term</span>
+                          <input name="q" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Use the search term above or type here" data-employer-crosscheck-term />
+                        </label>
+                        <label class="grid gap-1">
+                          <span class="text-xs font-semibold uppercase text-[var(--muted)]">Location</span>
+                          <input name="where" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" value={employerSearchLocation(employer)} />
+                        </label>
+                        <button class="self-end rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit">Cross-check</button>
+                      </div>
+                      <input type="hidden" name="radius" value="15" />
+                      <input type="hidden" name="country" value="us" />
+                      <input type="hidden" name="employer_name" value={employer.name} />
+                      <span id={`employer-role-loading-${employer.id}`} class="htmx-indicator text-xs font-semibold text-[var(--accent-strong)]">Searching public listings...</span>
+                    </form>
+                    <p class="mt-2 text-xs leading-5 text-[var(--muted)]">
+                      Adzuna is only a public-board cross-check. Trust the employer career page when the two disagree.
+                    </p>
+                    <div id={`employer-role-results-${employer.id}`} class="mt-3"></div>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+            <p class="text-sm font-semibold">No watched employers yet</p>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Run geography-first employer discovery, save the employers worth watching, then return here to inspect hiring tools and search employer-specific role lanes.</p>
+            <a class="mt-3 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/employers">Find employers</a>
+          </div>
+        )}
+      </section>
 
       <section id="geographic-search" class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Geographic job search</p>
@@ -324,6 +475,74 @@ function salaryLabel(item: OpportunityRow["opportunities"]) {
   </main>
 
   <script>
+    function careerSearchUrl(rawUrl: string, query: string) {
+      if (!query) return rawUrl;
+
+      try {
+        const url = new URL(rawUrl);
+        const normalizedHost = url.hostname.replace(/^www\./, "");
+
+        if (normalizedHost === "careers.dartmouth-health.org") {
+          url.pathname = "/dartmouth-health/results";
+          url.searchParams.set("keyword", query);
+          return url.toString();
+        }
+
+        if (normalizedHost === "searchjobs.dartmouth.edu") {
+          url.pathname = "/postings/search";
+          url.searchParams.set("query", query);
+          return url.toString();
+        }
+
+        if (normalizedHost === "usajobs.gov") {
+          url.pathname = "/Search/Results";
+          url.searchParams.set("k", query);
+          return url.toString();
+        }
+
+        if (/greenhouse\.io$/.test(normalizedHost) || /myworkdayjobs\.com$/.test(normalizedHost)) {
+          url.searchParams.set("keyword", query);
+          return url.toString();
+        }
+
+        if (/icims\.com$/.test(normalizedHost)) {
+          url.searchParams.set("ss", "1");
+          url.searchParams.set("searchKeyword", query);
+          return url.toString();
+        }
+
+        return url.toString();
+      } catch {
+        return rawUrl;
+      }
+    }
+
+    let lastSharedEmployerTerm = "";
+    function syncEmployerSearchTerm() {
+      const input = document.getElementById("employer-career-search-term") as HTMLInputElement | null;
+      const term = input?.value.trim() || "";
+
+      document.querySelectorAll<HTMLAnchorElement>("[data-careers-base]").forEach((link) => {
+        const base = link.getAttribute("data-careers-base") || link.href;
+        link.href = careerSearchUrl(base, term);
+      });
+
+      document.querySelectorAll<HTMLInputElement>("[data-employer-crosscheck-term]").forEach((field) => {
+        if (!field.value.trim() || field.value === lastSharedEmployerTerm) {
+          field.value = term;
+        }
+      });
+
+      lastSharedEmployerTerm = term;
+    }
+
+    document.getElementById("employer-career-search-term")?.addEventListener("input", syncEmployerSearchTerm);
+    syncEmployerSearchTerm();
+
+    document.querySelectorAll("#employer-role-bridge summary a").forEach((link) => {
+      link.addEventListener("click", (event) => event.stopPropagation());
+    });
+
     // Clicking a validated-lane chip loads that term into both job searches.
     document.querySelectorAll("[data-lane-term]").forEach((chip) => {
       chip.addEventListener("click", () => {

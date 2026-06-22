@@ -6,7 +6,7 @@ import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
 // Live geographic job search via Adzuna. Returns real listings near a location,
-// ranked against the saved intake when one exists. No persistence — live read.
+// ranked against the saved intake when one exists. No persistence; live read.
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
     return html('<p class="text-sm text-red-700">Invalid request origin.</p>', 403);
@@ -18,6 +18,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const country = getText(form, "country") || "us";
   const radiusMiles = clampNumber(getText(form, "radius"), 25, 0, 200);
   const salaryMin = getText(form, "salary_min") ? clampNumber(getText(form, "salary_min"), 0, 0, 10_000_000) : null;
+  const employerName = getText(form, "employer_name");
 
   if (!what && !where) {
     return html('<p class="text-sm font-semibold text-[var(--muted)]">Enter a role keyword and/or a location to search.</p>', 400);
@@ -55,8 +56,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return html(`<p class="text-sm font-semibold text-red-700">Adzuna search failed: ${escapeHtml(result.error ?? "unknown error")}</p>`, 502);
   }
 
-  const ranked = rank(result.jobs, intake);
-  return html(render(ranked, result.count, where, Boolean(intake)));
+  const jobs = employerName ? filterByEmployer(result.jobs, employerName) : result.jobs;
+  const ranked = rank(jobs, intake);
+  return html(render(ranked, result.count, where, Boolean(intake), employerName));
 };
 
 function rank(jobs: AdzunaJob[], intake: Partial<IntakeForm> | null) {
@@ -73,12 +75,32 @@ function rank(jobs: AdzunaJob[], intake: Partial<IntakeForm> | null) {
     .slice(0, 40);
 }
 
-function render(items: Array<{ job: AdzunaJob; score: number | null }>, total: number, where: string, personalized: boolean) {
+function filterByEmployer(jobs: AdzunaJob[], employerName: string) {
+  const expected = normalizeEmployer(employerName);
+  const expectedTokens = expected.split(" ").filter((token) => token.length > 2);
+
+  return jobs.filter((job) => {
+    const company = normalizeEmployer(job.company);
+    const text = normalizeEmployer(`${job.company} ${job.title} ${job.description}`);
+    if (company === expected || company.includes(expected) || expected.includes(company)) return true;
+
+    const hits = expectedTokens.filter((token) => text.includes(token));
+    return hits.length >= Math.min(2, expectedTokens.length);
+  });
+}
+
+function render(
+  items: Array<{ job: AdzunaJob; score: number | null }>,
+  total: number,
+  where: string,
+  personalized: boolean,
+  employerName = "",
+) {
   if (!items.length) {
     return `
       <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-        <p class="text-sm font-semibold">No listings matched that search${where ? ` near ${escapeHtml(where)}` : ""}.</p>
-        <p class="mt-2 text-xs text-[var(--muted)]">Try a broader keyword or a larger radius. Jobs by Adzuna.</p>
+        <p class="text-sm font-semibold">No ${employerName ? `${escapeHtml(employerName)} ` : ""}listings matched that public-board search${where ? ` near ${escapeHtml(where)}` : ""}.</p>
+        <p class="mt-2 text-xs text-[var(--muted)]">${employerName ? "This does not mean the employer has no jobs; it means Adzuna did not return employer-matched rows for this query. Use the employer career-page link for the source of truth." : "Try a broader keyword or a larger radius."} Jobs by Adzuna.</p>
       </div>
     `;
   }
@@ -89,7 +111,7 @@ function render(items: Array<{ job: AdzunaJob; score: number | null }>, total: n
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 class="text-base font-semibold">${escapeHtml(job.title)}</h3>
-            <p class="mt-0.5 text-sm text-[var(--muted)]">${escapeHtml(job.company)}${job.location ? ` · ${escapeHtml(job.location)}` : ""}</p>
+            <p class="mt-0.5 text-sm text-[var(--muted)]">${escapeHtml(job.company)}${job.location ? ` - ${escapeHtml(job.location)}` : ""}</p>
           </div>
           <div class="flex flex-col items-end gap-1">
             ${job.workMode ? `<span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]">${escapeHtml(job.workMode)}</span>` : ""}
@@ -105,7 +127,7 @@ function render(items: Array<{ job: AdzunaJob; score: number | null }>, total: n
 
   return `
     <div class="grid gap-3">
-      <p class="text-xs text-[var(--muted)]">Showing ${items.length} of ${total.toLocaleString()} matching listings${personalized ? " · ranked against your saved intake" : " · sign in and save intake for fit scoring"}.</p>
+      <p class="text-xs text-[var(--muted)]">Showing ${items.length} ${employerName ? `${escapeHtml(employerName)}-matched ` : ""}public listing${items.length === 1 ? "" : "s"} from ${total.toLocaleString()} Adzuna result${total === 1 ? "" : "s"}${personalized ? " - ranked against your saved intake" : " - sign in and save intake for fit scoring"}.</p>
       ${cards}
       <p class="text-xs leading-5 text-[var(--muted)]">Jobs by Adzuna. Listings link to the original posting; CIP does not repost or apply on your behalf.</p>
     </div>
@@ -132,6 +154,16 @@ function clampNumber(value: string, fallback: number, min: number, max: number) 
 function getText(form: FormData, key: string) {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeEmployer(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\b(inc|llc|ltd|corporation|corp|company|co|college|health|system|systems|the)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function html(body: string, status = 200) {
