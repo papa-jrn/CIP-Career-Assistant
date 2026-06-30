@@ -7,18 +7,21 @@ export interface NavStep {
   label: string;
   step?: number;
   cycle?: boolean;
+  /** Icon name (see src/components/Icon.astro). Optional. */
+  icon?: string;
 }
 
 export const navItems: NavStep[] = [
-  { href: "/", label: "Workbench" },
-  { href: "/intake", label: "Intake", step: 1 },
-  { href: "/evidence", label: "Evidence", step: 2 },
-  { href: "/assets", label: "Assets", step: 3 },
-  { href: "/network", label: "Network", step: 4, cycle: true },
-  { href: "/follow-up", label: "Follow Up", step: 5, cycle: true },
-  { href: "/employers", label: "Employers", step: 6, cycle: true },
-  { href: "/opportunities", label: "Opportunities", step: 7, cycle: true },
-  { href: "/briefing", label: "Briefing", step: 8, cycle: true },
+  { href: "/", label: "Workbench", icon: "workbench" },
+  { href: "/intake", label: "Intake", step: 1, icon: "intake" },
+  { href: "/evidence", label: "Evidence", step: 2, icon: "evidence" },
+  { href: "/assets", label: "Assets", step: 3, icon: "assets" },
+  { href: "/network", label: "Network", step: 4, cycle: true, icon: "network" },
+  { href: "/follow-up", label: "Follow Up", step: 5, cycle: true, icon: "followup" },
+  { href: "/employers", label: "Employers", step: 6, cycle: true, icon: "employers" },
+  { href: "/opportunities", label: "Opportunities", step: 7, cycle: true, icon: "opportunities" },
+  { href: "/briefing", label: "Briefing", step: 8, cycle: true, icon: "briefing" },
+  { href: "/report", label: "Report", step: 9, icon: "report" },
 ];
 
 export const pathwaySteps = [

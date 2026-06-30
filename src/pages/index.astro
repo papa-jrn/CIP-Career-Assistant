@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import Icon from "../components/Icon.astro";
 import {
   pathwaySteps,
   profileSignals,
@@ -158,202 +159,285 @@ function buildBriefingActions(source: IntakeSource | null, advisor: Partial<Advi
     ...(source?.draft?.nextQuestions ?? []).slice(0, 2),
   ].filter(Boolean);
 }
+
+// Map step href → icon name (kept here so the pathway cards stay self-contained)
+const pathwayIcon: Record<string, string> = {
+  "/assets": "assets",
+  "/network": "network",
+  "/follow-up": "followup",
+  "/employers": "employers",
+  "/opportunities": "opportunities",
+};
 ---
 
 <Layout
   title="Career Intelligence Platform"
   description="A trust-first career strategist workspace for job search intelligence."
 >
-  <header class="border-b border-[var(--line)] bg-[var(--panel)]">
-    <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-      <a href="/" class="text-base font-semibold text-[var(--foreground)]">CIP</a>
-      <div class="flex items-center gap-2">
-        <a class="cip-fancy-button" href="/intake">
-          <span>Start intake</span>
-        </a>
-      </div>
-    </div>
-  </header>
-
-  <main class="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 lg:grid-cols-[1.2fr_0.8fr]">
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Founder MVP</p>
-      <h1 class="mt-3 max-w-3xl text-4xl font-semibold leading-tight text-[var(--foreground)] md:text-5xl">
-        Career intelligence before job application volume.
-      </h1>
-      <p class="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-        CIP models the person, researches the market, and recommends source-backed moves across roles, resume, LinkedIn, portfolio, and weekly strategy.
-      </p>
-
-      <div class="mt-8 grid gap-3 sm:grid-cols-2">
-        {profileSignals.map((signal) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <div class="flex items-center justify-between gap-3">
-              <h2 class="text-sm font-semibold">{signal.label}</h2>
-              <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">{signal.value}</span>
-            </div>
-            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{signal.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <aside class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <h2 class="text-lg font-semibold">Trust Model</h2>
-      <div class="mt-5 space-y-4">
-        <div>
-          <div class="flex items-center justify-between text-sm">
-            <span>Verified claims</span>
-            <span class="font-semibold text-[var(--positive)]">Required</span>
-          </div>
-          <div class="mt-2 h-2 rounded-full bg-black/10 dark:bg-white/10">
-            <div class="h-2 w-[88%] rounded-full bg-[var(--positive)]"></div>
-          </div>
-        </div>
-        <div>
-          <div class="flex items-center justify-between text-sm">
-            <span>Source coverage</span>
-            <span class="font-semibold text-[var(--accent-strong)]">Growing</span>
-          </div>
-          <div class="mt-2 h-2 rounded-full bg-black/10 dark:bg-white/10">
-            <div class="h-2 w-[64%] rounded-full bg-[var(--accent)]"></div>
-          </div>
-        </div>
-        <div>
-          <div class="flex items-center justify-between text-sm">
-            <span>Unverified edits</span>
-            <span class="font-semibold text-[var(--warning)]">Blocked</span>
-          </div>
-          <div class="mt-2 h-2 rounded-full bg-black/10 dark:bg-white/10">
-            <div class="h-2 w-[18%] rounded-full bg-[var(--warning)]"></div>
-          </div>
-        </div>
-      </div>
-      <p class="mt-6 text-sm leading-6 text-[var(--muted)]">
-        Every recommendation should carry evidence, confidence, and a user approval state before it changes public career assets.
-      </p>
-    </aside>
-
-    <section id="pathway" class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 lg:col-span-2">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next-step pathway</p>
-          <h2 class="mt-2 max-w-3xl text-3xl font-semibold">After the analysis is strong, move through action in order.</h2>
-          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            The completed profile should become a guided job-search operating system: update assets, define ideal work, map relationships, find fit-based employers, then define job-board searches with filters and review rules.
+  <main class="cip-page-shell">
+    <!-- ============ HERO (2–3× the weight of everything below) ============ -->
+    <section class="mx-auto w-full max-w-7xl px-5 pt-8 pb-2 md:pt-12">
+      <div class="grid items-stretch gap-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_1px_2px_rgba(30,36,32,0.04),0_18px_48px_rgba(30,36,32,0.10)] md:grid-cols-[1.05fr_0.95fr]">
+        <!-- Hero copy -->
+        <div class="flex flex-col justify-center gap-5 p-7 md:p-10 lg:p-12">
+          <span class="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
+            <Icon name="spark" class="h-3.5 w-3.5" strokeWidth={2} />
+            Career Intelligence Platform
+          </span>
+          <h1 class="text-4xl leading-[1.08] md:text-5xl lg:text-[3.4rem]" style="font-family: var(--headline-font); font-weight: 620; letter-spacing: -0.025em;">
+            Career intelligence<br />before application volume.
+          </h1>
+          <p class="max-w-xl text-base leading-7 text-[var(--muted)] md:text-lg md:leading-8">
+            CIP works less like an apply bot and more like a career strategist. It models who you are, researches the market, and recommends source-backed moves across roles, resume, LinkedIn, portfolio, and weekly strategy.
           </p>
-        </div>
-        <a class="cip-fancy-button" href="/evidence">
-          <span>Check analysis readiness</span>
-        </a>
-      </div>
-      <div class="mt-6 grid gap-4 lg:grid-cols-4">
-        {pathwaySteps.map((item) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-            <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">{item.step}</p>
-            <h3 class="mt-2 text-lg font-semibold">{item.title}</h3>
-            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{item.outcome}</p>
-            <p class="mt-3 text-xs leading-5 text-[var(--muted)]">{item.detail}</p>
-            <a
-              class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
-              href={item.href}
-              data-asset-loader={item.href === "/assets" ? "true" : undefined}
-            >
-              {item.cta}
+          <div class="flex flex-wrap items-center gap-3 pt-1">
+            <a class="cip-fancy-button" href="/intake">
+              <span class="flex items-center gap-2">
+                <Icon name="arrow-right" class="h-4 w-4" strokeWidth={2.2} />
+                Start intake
+              </span>
             </a>
-          </article>
-        ))}
+            {hasPersonalizedWorkbench ? (
+              <a class="cip-fancy-button cip-fancy-button-secondary" href="/report">
+                <span>Generate your report</span>
+              </a>
+            ) : (
+              <a class="cip-fancy-button cip-fancy-button-secondary" href="/evidence">
+                <span>Check analysis readiness</span>
+              </a>
+            )}
+          </div>
+          <p class="text-xs leading-5 text-[var(--muted)]">
+            Every recommendation is meant to carry evidence, confidence, and a user approval state before it changes a public career asset.
+          </p>
+        </div>
+        <!-- Hero image slot: warm human moment. Drop optimized image at /images/hero-workspace.jpg (provenance in public/images/PROVENANCE.md). -->
+        <div class="relative min-h-[260px] overflow-hidden border-t border-[var(--line)] bg-[var(--surface-wash)] md:border-l md:border-t-0">
+          <img
+            src="/images/hero-workspace.jpg"
+            alt="A welcoming conversation in a bright workspace"
+            class="h-full w-full object-cover"
+            onerror="this.style.display='none';this.parentElement.classList.add('cip-hero-fallback')"
+            width="900"
+            height="700"
+          />
+          <!-- Overlay gradient for text legibility (image independent) -->
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-[rgba(31,68,56,0.45)] via-transparent to-transparent"></div>
+        </div>
       </div>
     </section>
 
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 lg:col-span-2">
-      <div class="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Opportunity Radar</p>
-          <h2 class="mt-2 text-2xl font-semibold">User-matched role hypotheses</h2>
-          <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            {hasPersonalizedWorkbench
-              ? `Built from the latest saved analysis${latestAnalysisAt ? ` from ${new Date(latestAnalysisAt).toLocaleString()}` : ""}.`
-              : workbenchState === "signin"
-                ? "Sign in and save an intake to replace this empty state with user-specific role hypotheses."
-                : "Save and analyze an intake to generate role hypotheses from the user's actual background."}
-          </p>
+    <div class="mx-auto grid w-full max-w-7xl gap-6 px-5 py-8 lg:grid-cols-[1.15fr_0.85fr]">
+      <!-- ============ PROFILE SIGNALS ============ -->
+      <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Founder test profile</p>
+        <h2 class="mt-2 text-2xl" style="font-family: var(--headline-font);">What CIP is modeling right now</h2>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+          These signals describe the founder-as-user test case. After intake and evidence analysis, this area shows the user's own background instead of this example.
+        </p>
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          {profileSignals.map((signal) => (
+            <article class="rounded-lg border border-[var(--line)] bg-[var(--background)] p-4">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold">{signal.label}</h3>
+                <span class="rounded-full bg-[var(--brass-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--warning)]">{signal.value}</span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{signal.detail}</p>
+            </article>
+          ))}
         </div>
-        <a class="rounded-md border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/opportunities">Open research queue</a>
-      </div>
-      {userRoleHypotheses.length ? (
-      <div class="mt-5 overflow-hidden rounded-md border border-[var(--line)]">
-        <table class="w-full border-collapse text-left text-sm">
-          <thead class="bg-black/5 text-[var(--muted)] dark:bg-white/10">
-            <tr>
-              <th class="px-4 py-3 font-semibold">Role</th>
-              <th class="px-4 py-3 font-semibold">Lane</th>
-              <th class="px-4 py-3 font-semibold">Evidence</th>
-              <th class="px-4 py-3 font-semibold">Next Gap</th>
-            </tr>
-          </thead>
-          <tbody>
-            {userRoleHypotheses.map((item) => (
-              <tr class="border-t border-[var(--line)]">
-                <td class="px-4 py-4">
-                  <div class="font-semibold">{item.role}</div>
-                </td>
-                <td class="px-4 py-4 font-semibold text-[var(--accent-strong)]">{item.match}</td>
-                <td class="max-w-md px-4 py-4 text-[var(--muted)]">{item.evidence}</td>
-                <td class="max-w-xs px-4 py-4 text-[var(--muted)]">{item.nextGap}</td>
+      </section>
+
+      <!-- ============ TRUST MODEL (brass-accented gauges) ============ -->
+      <aside class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+        <div class="flex items-center gap-2">
+          <Icon name="shield" class="h-5 w-5 text-[var(--accent-strong)]" strokeWidth={1.9} />
+          <h2 class="text-xl" style="font-family: var(--headline-font);">Trust Model</h2>
+        </div>
+        <div class="mt-5 space-y-4">
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-medium">Verified claims</span>
+              <span class="font-semibold text-[var(--positive)]">Required</span>
+            </div>
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+              <div class="h-2 rounded-full bg-[var(--accent-strong)]" style="width: 88%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-medium">Source coverage</span>
+              <span class="font-semibold text-[var(--brass)]">Growing</span>
+            </div>
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+              <div class="h-2 rounded-full bg-[var(--brass)]" style="width: 64%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-medium">Unverified edits</span>
+              <span class="font-semibold text-[var(--warning)]">Blocked</span>
+            </div>
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+              <div class="h-2 rounded-full bg-[var(--warning)]" style="width: 18%"></div>
+            </div>
+          </div>
+        </div>
+        <p class="mt-6 text-sm leading-6 text-[var(--muted)]">
+          Every recommendation should carry evidence, confidence, and a user approval state before it changes public career assets.
+        </p>
+      </aside>
+
+      <!-- ============ NEXT-STEP PATHWAY (icon-led) ============ -->
+      <section id="pathway" class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)] lg:col-span-2">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Next-step pathway</p>
+            <h2 class="mt-2 max-w-3xl text-3xl" style="font-family: var(--headline-font);">After the analysis is strong, move through action in order.</h2>
+            <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              The completed profile should become a guided job-search operating system: update assets, define ideal work, map relationships, find fit-based employers, then define job-board searches with filters and review rules.
+            </p>
+          </div>
+          <a class="cip-fancy-button cip-fancy-button-secondary" href="/evidence">
+            <span>Check analysis readiness</span>
+          </a>
+        </div>
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {pathwaySteps.map((item) => (
+            <article class="group flex flex-col rounded-lg border border-[var(--line)] bg-[var(--background)] p-5 transition-shadow hover:shadow-[var(--shadow-card)]">
+              <div class="flex items-center justify-between">
+                <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+                  <Icon name={pathwayIcon[item.href] ?? "file"} class="h-5 w-5" strokeWidth={1.9} />
+                </span>
+                <span class="text-xs font-bold text-[var(--brass)]">{item.step}</span>
+              </div>
+              <h3 class="mt-3 text-base font-semibold">{item.title}</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{item.outcome}</p>
+              <p class="mt-3 text-xs leading-5 text-[var(--muted)]">{item.detail}</p>
+              <a
+                class="mt-4 inline-flex items-center gap-1.5 self-start rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+                href={item.href}
+                data-asset-loader={item.href === "/assets" ? "true" : undefined}
+              >
+                {item.cta}
+                <Icon name="arrow-right" class="h-3.5 w-3.5" strokeWidth={2.1} />
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <!-- ============ OPPORTUNITY RADAR ============ -->
+      <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)] lg:col-span-2">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Opportunity Radar</p>
+            <h2 class="mt-2 text-2xl" style="font-family: var(--headline-font);">User-matched role hypotheses</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              {hasPersonalizedWorkbench
+                ? `Built from the latest saved analysis${latestAnalysisAt ? ` from ${new Date(latestAnalysisAt).toLocaleString()}` : ""}.`
+                : workbenchState === "signin"
+                  ? "Sign in and save an intake to replace this empty state with user-specific role hypotheses."
+                  : "Save and analyze an intake to generate role hypotheses from the user's actual background."}
+            </p>
+          </div>
+          <a class="inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/opportunities">
+            Open research queue
+            <Icon name="arrow-up-right" class="h-3.5 w-3.5" strokeWidth={2.1} />
+          </a>
+        </div>
+        {userRoleHypotheses.length ? (
+        <div class="mt-5 overflow-hidden rounded-lg border border-[var(--line)]">
+          <table class="w-full border-collapse text-left text-sm">
+            <thead class="bg-[var(--surface-wash)] text-[var(--muted)]">
+              <tr>
+                <th class="px-4 py-3 font-semibold">Role</th>
+                <th class="px-4 py-3 font-semibold">Lane</th>
+                <th class="px-4 py-3 font-semibold">Evidence</th>
+                <th class="px-4 py-3 font-semibold">Next Gap</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      ) : (
-        <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-          <h3 class="text-lg font-semibold">No user analysis loaded yet</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Complete intake and evidence analysis first. This area will then show role lanes from `advisor.roleBriefs` instead of demo examples.
-          </p>
-          <a class="mt-4 inline-flex rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/intake">Start intake</a>
+            </thead>
+            <tbody>
+              {userRoleHypotheses.map((item) => (
+                <tr class="border-t border-[var(--line)]">
+                  <td class="px-4 py-4">
+                    <div class="font-semibold">{item.role}</div>
+                  </td>
+                  <td class="px-4 py-4 font-semibold text-[var(--accent-strong)]">{item.match}</td>
+                  <td class="max-w-md px-4 py-4 text-[var(--muted)]">{item.evidence}</td>
+                  <td class="max-w-xs px-4 py-4 text-[var(--muted)]">{item.nextGap}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-    </section>
-
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <h2 class="text-2xl font-semibold">Career asset next moves</h2>
-      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-        {hasPersonalizedWorkbench
-          ? "These are derived from the latest positioning, evidence ledger, and claim-safety notes."
-          : "This will populate after the user saves an intake and runs analysis."}
-      </p>
-      <div class="mt-5 space-y-4">
-        {userAssetGuidance.length ? userAssetGuidance.map((item) => (
-          <article class="border-l-4 border-[var(--accent)] pl-4">
-            <h3 class="font-semibold">{item.area}</h3>
-            <p class="mt-1 text-sm leading-6 text-[var(--muted)]">{item.action}</p>
-            <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{item.guardrail}</p>
-          </article>
-        )) : (
-          <p class="text-sm leading-6 text-[var(--muted)]">No asset guidance is available yet.</p>
+        ) : (
+        <div class="mt-5 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--background)]">
+          <div class="grid gap-0 sm:grid-cols-[120px_1fr]">
+            <div class="hidden min-h-[120px] bg-[var(--surface-wash)] sm:block">
+              <img src="/images/empty-state.jpg" alt="" aria-hidden="true" class="h-full w-full object-cover" width="600" height="450" />
+            </div>
+            <div class="p-5">
+              <h3 class="text-lg font-semibold" style="font-family: var(--headline-font);">No user analysis loaded yet</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+                Complete intake and evidence analysis first. This area will then show role lanes from <code class="rounded bg-[var(--surface-wash)] px-1 py-0.5 text-xs">advisor.roleBriefs</code> instead of demo examples.
+              </p>
+              <a class="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/intake">
+                Start intake
+                <Icon name="arrow-right" class="h-3.5 w-3.5" strokeWidth={2.1} />
+              </a>
+            </div>
+          </div>
+        </div>
         )}
-      </div>
-    </section>
+      </section>
 
-    <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <h2 class="text-2xl font-semibold">Personal action briefing</h2>
-      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-        {hasPersonalizedWorkbench
-          ? "Pulled from remaining gaps, opportunity-mapping questions, and exploration experiments."
-          : "This will become a weekly action list once the user has saved analysis data."}
-      </p>
-      <ol class="mt-5 space-y-3">
-        {userBriefingActions.length ? userBriefingActions.map((item, index) => (
-          <li class="flex gap-3 text-sm leading-6 text-[var(--muted)]">
-            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--foreground)] text-xs font-semibold text-[var(--background)]">{index + 1}</span>
-            <span>{item}</span>
-          </li>
-        )) : (
-          <li class="text-sm leading-6 text-[var(--muted)]">No briefing actions are available yet.</li>
-        )}
-      </ol>
-    </section>
+      <!-- ============ CAREER ASSET NEXT MOVES ============ -->
+      <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+        <div class="flex items-center gap-2">
+          <Icon name="assets" class="h-5 w-5 text-[var(--accent-strong)]" strokeWidth={1.9} />
+          <h2 class="text-xl" style="font-family: var(--headline-font);">Career asset next moves</h2>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {hasPersonalizedWorkbench
+            ? "These are derived from the latest positioning, evidence ledger, and claim-safety notes."
+            : "This will populate after the user saves an intake and runs analysis."}
+        </p>
+        <div class="mt-5 space-y-4">
+          {userAssetGuidance.length ? userAssetGuidance.map((item) => (
+            <article class="border-l-[3px] border-[var(--brass)] pl-4">
+              <h3 class="font-semibold">{item.area}</h3>
+              <p class="mt-1 text-sm leading-6 text-[var(--muted)]">{item.action}</p>
+              <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{item.guardrail}</p>
+            </article>
+          )) : (
+            <p class="text-sm leading-6 text-[var(--muted)]">No asset guidance is available yet.</p>
+          )}
+        </div>
+      </section>
+
+      <!-- ============ PERSONAL ACTION BRIEFING ============ -->
+      <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+        <div class="flex items-center gap-2">
+          <Icon name="briefing" class="h-5 w-5 text-[var(--accent-strong)]" strokeWidth={1.9} />
+          <h2 class="text-xl" style="font-family: var(--headline-font);">Personal action briefing</h2>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {hasPersonalizedWorkbench
+            ? "Pulled from remaining gaps, opportunity-mapping questions, and exploration experiments."
+            : "This will become a weekly action list once the user has saved analysis data."}
+        </p>
+        <ol class="mt-5 space-y-3">
+          {userBriefingActions.length ? userBriefingActions.map((item, index) => (
+            <li class="flex gap-3 text-sm leading-6 text-[var(--muted)]">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-semibold text-[var(--accent-strong)]">{index + 1}</span>
+              <span class="pt-0.5">{item}</span>
+            </li>
+          )) : (
+            <li class="text-sm leading-6 text-[var(--muted)]">No briefing actions are available yet.</li>
+          )}
+        </ol>
+      </section>
+    </div>
   </main>
 </Layout>

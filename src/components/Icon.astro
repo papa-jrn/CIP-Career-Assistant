@@ -1,0 +1,58 @@
+---
+// CIP inline-SVG icon system. Stroke-based, currentColor, 20px box.
+// Usage: <Icon name="intake" class="h-5 w-5" />
+// Icons are intentionally simple/consistent so the app reads as finished
+// and product-grade without a new dependency.
+export interface Props {
+  name: string;
+  class?: string;
+  /** Stroke width override (default 1.75) */
+  strokeWidth?: number;
+}
+
+const { name, class: className = "h-5 w-5", strokeWidth = 1.75 } = Astro.props;
+
+// Each entry is the inner markup of a 24x24 viewBox SVG (stroke style).
+const paths: Record<string, string> = {
+  // --- Step icons ---
+  intake: '<path d="M4 4h16v4H4zM4 12h16M4 16h10"/><circle cx="6.5" cy="6" r="0.6" fill="currentColor" stroke="none"/>',
+  evidence: '<path d="M9 3h6l4 4v14H5V3z"/><path d="M9 3v4h4"/><path d="M8.5 12h7M8.5 15.5h7M8.5 18.5h4"/>',
+  assets: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/><circle cx="16" cy="16" r="2.2"/>',
+  network: '<circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M7.6 7.6L10.6 16M16.4 7.6L13.4 16M8 6h8"/>',
+  followup: '<path d="M21 11.5a8.5 8.5 0 1 1-2.5-6"/><path d="M21 4v4h-4"/><path d="M12 8v4l3 2"/>',
+  employers: '<path d="M3 21V8l9-5 9 5v13"/><path d="M3 21h18"/><rect x="9" y="13" width="6" height="8"/><path d="M7 10.5h.01M17 10.5h.01"/>',
+  opportunities: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/><path d="M11 8v6M8 11h6"/>',
+  briefing: '<path d="M19 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1z"/><path d="M4 5v15"/><path d="M10 8h6M10 12h6M10 16h4"/>',
+  report: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 14l2 2 4-4"/>',
+  workbench: '<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v6l9 4 9-4V7"/><path d="M12 11v6"/>',
+
+  // --- Utility icons ---
+  "arrow-right": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  "arrow-up-right": '<path d="M7 17L17 7M9 7h8v8"/>',
+  check: '<path d="M5 12l4.5 4.5L19 7"/>',
+  "check-circle": '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M12 7.5c1 3 1.5 3.5 4.5 4.5-3 1-3.5 1.5-4.5 4.5-1-3-1.5-3.5-4.5-4.5 3-1 3.5-1.5 4.5-4.5z"/>',
+  gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-3"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/>',
+  "map-pin": '<path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+  alert: '<path d="M12 3L2 20h20L12 3z"/><path d="M12 9v5M12 17.5h.01"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.2 7.5-8 9-4.8-1.5-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+  printer: '<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M7 17h10v4H7z"/><circle cx="17" cy="12.5" r="0.7" fill="currentColor" stroke="none"/>',
+  sparkles: '<path d="M12 4l1.5 4.5L18 10l-4.5 1.5L12 16l-1.5-4.5L6 10l4.5-1.5z"/><path d="M18 14l.7 2L21 17l-2.3.7L18 20l-.7-2.3L15 17l2.3-.7z"/>',
+};
+
+const inner = paths[name] ?? paths.file;
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width={strokeWidth}
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  class={className}
+  aria-hidden="true"
+  set:html={inner}
+></svg>

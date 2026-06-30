@@ -47,15 +47,34 @@ function fieldValue(name: keyof IntakeForm) {
 ---
 
 <Layout title="CIP Intake">
-  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+  <main class="cip-page-shell mx-auto w-full max-w-6xl px-5 py-8">
+    <!-- ============ INTRO BANNER (warm coach moment) ============ -->
+    <section class="mb-6 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
+      <div class="grid items-stretch gap-0 md:grid-cols-[0.85fr_1.15fr]">
+        <div class="relative min-h-[200px] overflow-hidden bg-[var(--surface-wash)]">
+          <img
+            src="/images/intake-coach.jpg"
+            alt="A career coach in conversation with a candidate"
+            class="h-full w-full object-cover"
+            width="900"
+            height="1100"
+          />
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-[rgba(31,68,56,0.35)] to-transparent md:bg-gradient-to-r"></div>
+        </div>
+        <div class="flex flex-col justify-center gap-3 p-6 md:p-8">
+          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Identity Graph</p>
+          <h1 class="text-3xl md:text-4xl" style="font-family: var(--headline-font); font-weight: 620; letter-spacing: -0.02em;">
+            Tell your story. We'll do the analysis.
+          </h1>
+          <p class="max-w-2xl text-sm leading-7 text-[var(--muted)] md:text-base">
+            This is the source material for the career model. Keep rough notes honest; the analysis engine will separate verified claims from hypotheses. You can refine it anytime.
+          </p>
+        </div>
+      </div>
+    </section>
     <div class="grid gap-6 lg:grid-cols-[0.9fr_0.55fr]">
       <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Identity Graph</p>
-        <h1 class="mt-2 text-3xl font-semibold">Resume and intake</h1>
-        <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          This is the source material for the career model. Keep rough notes honest; the analysis engine will separate verified claims from hypotheses.
-        </p>
-        <div id="intake-save-status" class="mt-4">
+        <div id="intake-save-status" class="mb-2">
           {savedIntake ? (
             <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
               Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}{signedInEmail ? ` for ${signedInEmail}` : ""}.
