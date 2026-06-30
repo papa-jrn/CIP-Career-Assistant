@@ -24,21 +24,25 @@ Drop optimized images into `public/images/` using the exact filenames below. Rec
 are noted — these are web display targets, not the full-resolution originals (which were
 ~16–25MB JPEGs at 6000–8000px and must be compressed before placement).
 
-| Filename | Surface | Recommended size | Status |
+| Filename | Surface | Actual size | Status |
 |---|---|---|---|
-| `hero-workspace.jpg` | Workbench home hero | ~1600×1200, < 400 KB | **pending image** |
-| `intake-coach.jpg` | Intake first-touch | ~900×1100, < 250 KB | **slot not yet built** |
-| `empty-state.jpg` | Generic empty-state encouragement | ~600×450, < 150 KB | **slot not yet built** |
-| `report-cover.jpg` | Career Intelligence Report cover | ~1400×600, < 300 KB | **slot not yet built** |
+| `hero-workspace.jpg` | Workbench home hero | 1600×1200, 216 KB | **placed ✓** |
+| `intake-coach.jpg` | Intake first-touch | 900×1100, 115 KB | **placed ✓** |
+| `empty-state.jpg` | Workbench empty-state encouragement | 600×450, 86 KB | **placed ✓** |
+| `report-cover.jpg` | Career Intelligence Report cover | 1400×700, 170 KB | **placed ✓** |
+
+All four images placed 2026-06-30. Compressed to web sizes (sRGB JPEG), well within budget. The
+report cover uses the 1400×700 spec per the founder's edit. Each renders with an overlay gradient
+for text legibility where copy is placed over imagery.
 
 ---
 
-## Source images (PhotoDune/Envato downloads in hand)
+## Source images (PhotoDune/Envato downloads)
 
-These are the licensed downloads. Map each to a slot after compression and a one-line visual
-note (warm/cool light, subject position) is confirmed — see the planning doc note. Until then,
-image slots show a warm `--surface-wash` fallback so the UI never breaks and never implies an
-image it doesn't have.
+Licensed downloads, compressed to the sizes above before placement. Until an image is dropped in,
+its slot falls back to a warm `--surface-wash` so the UI never breaks and never implies an image
+it doesn't have (all four are now in place, so no fallbacks currently render).
+
 
 1. **`smiling-woman-shake-hands-in-bright-workspace`** (original 7360×4912, 24.8 MB)
    - Candidate slot: `hero-workspace.jpg` (welcome moment) — *default mapping in code*.

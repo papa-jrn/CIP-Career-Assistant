@@ -372,15 +372,22 @@ const pathwayIcon: Record<string, string> = {
           </table>
         </div>
         ) : (
-        <div class="mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5">
-          <h3 class="text-lg font-semibold">No user analysis loaded yet</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Complete intake and evidence analysis first. This area will then show role lanes from <code class="rounded bg-[var(--surface-wash)] px-1 py-0.5 text-xs">advisor.roleBriefs</code> instead of demo examples.
-          </p>
-          <a class="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/intake">
-            Start intake
-            <Icon name="arrow-right" class="h-3.5 w-3.5" strokeWidth={2.1} />
-          </a>
+        <div class="mt-5 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--background)]">
+          <div class="grid gap-0 sm:grid-cols-[120px_1fr]">
+            <div class="hidden min-h-[120px] bg-[var(--surface-wash)] sm:block">
+              <img src="/images/empty-state.jpg" alt="" aria-hidden="true" class="h-full w-full object-cover" width="600" height="450" />
+            </div>
+            <div class="p-5">
+              <h3 class="text-lg font-semibold" style="font-family: var(--headline-font);">No user analysis loaded yet</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+                Complete intake and evidence analysis first. This area will then show role lanes from <code class="rounded bg-[var(--surface-wash)] px-1 py-0.5 text-xs">advisor.roleBriefs</code> instead of demo examples.
+              </p>
+              <a class="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" href="/intake">
+                Start intake
+                <Icon name="arrow-right" class="h-3.5 w-3.5" strokeWidth={2.1} />
+              </a>
+            </div>
+          </div>
         </div>
         )}
       </section>
