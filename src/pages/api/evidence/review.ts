@@ -247,7 +247,7 @@ function renderList(title: string, items: string[]) {
 function verdictClass(verdict: ReviewVerdict) {
   if (verdict === "answered") return "bg-[var(--accent-soft)] text-[var(--accent-strong)]";
   if (verdict === "partially_answered") return "bg-yellow-50 text-yellow-800";
-  if (verdict === "needs_follow_up") return "bg-[rgba(126,217,87,0.12)] text-[var(--accent-strong)] border border-[var(--line)]";
+  if (verdict === "needs_follow_up") return "bg-[var(--accent-tint)] text-[var(--accent-strong)] border border-[var(--line)]";
   return "bg-red-50 text-red-800";
 }
 

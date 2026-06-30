@@ -1,4 +1,13 @@
 ---
+// Self-hosted fonts (privacy-first: no third-party CDN calls).
+// Fraunces = warm modern serif for headlines; Inter = sans for body/UI.
+import "@fontsource/fraunces/500.css";
+import "@fontsource/fraunces/600.css";
+import "@fontsource/fraunces/700.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import "../styles/global.css";
 import StepNav from "../components/StepNav.astro";
 import { createServer } from "../lib/supabase/server";
@@ -40,10 +49,12 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       import "htmx.org";
     </script>
   </head>
-  <body class="min-h-full flex flex-col font-sans">
+  <body class="min-h-full flex flex-col">
     <div class="border-b border-[var(--line)] bg-[var(--background)]">
-      <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-2 text-sm">
-        <a href="/" class="font-semibold text-[var(--foreground)]">Career Intelligence Platform</a>
+      <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-2.5 text-sm">
+        <a href="/" class="flex items-baseline gap-2">
+          <span class="text-base font-semibold text-[var(--accent-strong)]" style="font-family: var(--headline-font);">Career Intelligence Platform</span>
+        </a>
         {signedInEmail ? (
           <div class="flex flex-wrap items-center gap-3">
             <span class="text-[var(--muted)]">

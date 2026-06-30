@@ -1,61 +1,128 @@
 @import "tailwindcss";
 
+/* ============================================================
+   CIP Design Tokens — Warm Ink + Deep Sage
+   Set 2026-06-30. Replaces the agtech-green palette with a
+   warm, professional, "career strategist" identity. Every page
+   reads these via var(--…), so palette swaps propagate here.
+   Headlines: Fraunces (warm modern serif). Body/UI: Inter.
+   ============================================================ */
+
 :root {
-  --background: #f7fbf4;
-  --foreground: #172017;
-  --muted: #60705f;
-  --panel: #ffffff;
-  --line: #dbe8d7;
-  --accent: #7ed957;
-  --accent-strong: #286f32;
-  --accent-soft: #eefbe8;
-  --positive: #23734d;
-  --warning: #8a5b10;
-  --surface-wash: #f0f7ec;
-  --display-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Surfaces & ink */
+  --background: #fbf8f1; /* warm off-white paper */
+  --foreground: #1e2420; /* near-black ink */
+  --muted: #6b7268; /* warm gray text */
+  --panel: #ffffff; /* card surface */
+  --line: #e6dfcf; /* warm hairline */
+  --surface-wash: #f4efe3; /* warm page wash */
+
+  /* Sage (primary accent / CTAs) */
+  --accent: #2f5d50; /* deep sage */
+  --accent-strong: #1f4438; /* deeper sage */
+  --accent-soft: #e7efe9; /* sage tint */
+
+  /* Brass (warm secondary accent — badges, gauges, flourish) */
+  --brass: #c19a4b;
+  --brass-soft: #f1e6cb;
+
+  /* Semantic */
+  --positive: #2f5d50; /* maps to sage — "verified" */
+  --positive-soft: #e7efe9;
+  --warning: #9a6a1f; /* warm amber, for caution labels */
+  --warning-soft: #f6ecda;
+  --danger: #8c3a2e;
+  --danger-soft: #f4e1dc;
+
+  /* On-sage text (for sage-filled buttons) */
+  --ink-on-sage: #fbf8f1;
+
+  /* Typography */
+  --headline-font: "Fraunces", ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  --body-font: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(30, 36, 32, 0.04), 0 8px 24px rgba(30, 36, 32, 0.06);
+  --shadow-lift: 0 2px 4px rgba(30, 36, 32, 0.06), 0 18px 48px rgba(30, 36, 32, 0.12);
+
+  /* Accent tint derived from token (used by StepNav active, pills, etc.) */
+  --accent-tint: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #10170f;
-    --foreground: #f3faef;
-    --muted: #b4c4ad;
-    --panel: #172215;
-    --line: #2f402a;
-    --accent: #91e66b;
-    --accent-strong: #c7f8b7;
-    --accent-soft: #1d3318;
-    --positive: #72c79d;
-    --warning: #e8c56d;
-    --surface-wash: #142012;
+    --background: #161a17; /* warm near-black paper */
+    --foreground: #f3efe4;
+    --muted: #b0a99c;
+    --panel: #1e241f;
+    --line: #333a33;
+    --surface-wash: #131613;
+
+    --accent: #6fae9b; /* lighter sage for dark bg contrast */
+    --accent-strong: #9fc9ba;
+    --accent-soft: #21352d;
+
+    --brass: #d4b173;
+    --brass-soft: #2e2718;
+
+    --positive: #6fae9b;
+    --positive-soft: #21352d;
+    --warning: #d4ab6a;
+    --warning-soft: #2e2616;
+    --danger: #c67b6e;
+    --danger-soft: #2e1f1b;
+
+    --ink-on-sage: #131613;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.5);
   }
 }
+
+/* ============================================================
+   Base elements
+   ============================================================ */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--display-font);
+  font-family: var(--body-font);
   min-height: 100vh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 h1,
 h2,
 h3,
 h4,
-nav a {
-  font-family: var(--display-font);
-  letter-spacing: 0;
+h5,
+nav a,
+.cip-display {
+  font-family: var(--headline-font);
+  letter-spacing: -0.01em;
 }
 
 h1,
 h2,
 h3 {
   color: var(--foreground);
-  font-weight: 800;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+h1 {
+  font-weight: 620;
+  letter-spacing: -0.022em;
 }
 
 nav a {
-  font-weight: 750;
+  font-weight: 600;
+  font-family: var(--body-font);
 }
 
 button,
@@ -80,51 +147,88 @@ button:disabled,
 }
 
 ::selection {
-  background: rgba(126, 217, 87, 0.28);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--foreground);
 }
+
+/* ============================================================
+   Page shell & cards
+   ============================================================ */
 
 .cip-page-shell {
   background:
-    radial-gradient(circle at top left, rgba(126, 217, 87, 0.18), transparent 34rem),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 12%, transparent), transparent 34rem),
     linear-gradient(180deg, var(--surface-wash), var(--background) 22rem);
 }
 
 .cip-card {
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 94%, var(--accent-soft));
-  box-shadow: 0 18px 48px rgba(30, 63, 26, 0.08);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
 }
+
+/* ============================================================
+   Image slot fallback (warm, intentional — not broken)
+   Shown via .cip-hero-fallback when an <img> fails to load.
+   ============================================================ */
+
+.cip-hero-fallback {
+  background:
+    radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--brass) 22%, transparent), transparent 55%),
+    radial-gradient(circle at 70% 70%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 50%),
+    var(--surface-wash);
+  position: relative;
+}
+
+.cip-hero-fallback::after {
+  align-items: center;
+  color: var(--muted);
+  content: "Warm workspace image";
+  display: flex;
+  font-family: var(--body-font);
+  font-size: 0.8rem;
+  font-weight: 500;
+  height: 100%;
+  inset: 0;
+  justify-content: center;
+  letter-spacing: 0.04em;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   Buttons — Deep Sage primary
+   ============================================================ */
 
 .cip-primary-button {
   background: var(--accent);
-  color: #13210f;
+  color: var(--ink-on-sage);
 }
 
 .cip-primary-button:hover {
-  filter: brightness(0.96);
+  filter: brightness(1.06);
 }
 
 .cip-fancy-button {
   --button-bg: var(--accent);
-  --button-fg: #13210f;
-  --button-edge: color-mix(in srgb, var(--accent-strong) 55%, var(--accent));
-  --button-shine: rgba(255, 255, 255, 0.38);
+  --button-fg: var(--ink-on-sage);
+  --button-edge: var(--accent-strong);
+  --button-shine: rgba(255, 255, 255, 0.22);
   align-items: center;
   background: var(--button-bg);
-  border: 2px solid var(--button-edge);
-  border-radius: 0.7rem;
-  box-shadow:
-    0 0.34rem 0 var(--button-edge),
-    0 0.85rem 1.45rem rgba(38, 111, 50, 0.18);
+  border: 1px solid var(--button-edge);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
   color: var(--button-fg);
   display: inline-flex;
-  font-family: var(--display-font);
-  font-weight: 800;
+  font-family: var(--body-font);
+  font-weight: 600;
   justify-content: center;
   letter-spacing: 0;
+  line-height: 1.4;
   min-height: 2.6rem;
   overflow: hidden;
-  padding: 0.62rem 1.05rem;
+  padding: 0.62rem 1.15rem;
   position: relative;
   transform: translateY(0);
   transition:
@@ -151,8 +255,9 @@ button:disabled,
 }
 
 .cip-fancy-button:hover {
-  filter: saturate(1.06);
-  transform: translateY(-0.08rem);
+  box-shadow: var(--shadow-lift);
+  filter: brightness(1.04);
+  transform: translateY(-0.06rem);
 }
 
 .cip-fancy-button:hover::before {
@@ -160,31 +265,35 @@ button:disabled,
 }
 
 .cip-fancy-button:active {
-  box-shadow:
-    0 0.12rem 0 var(--button-edge),
-    0 0.45rem 0.9rem rgba(38, 111, 50, 0.14);
-  transform: translateY(0.18rem);
+  box-shadow: var(--shadow-card);
+  transform: translateY(0.12rem);
 }
 
 .cip-fancy-button:disabled,
 .cip-fancy-button[aria-disabled="true"] {
-  filter: grayscale(0.25);
-  opacity: 0.65;
+  filter: grayscale(0.4);
+  opacity: 0.6;
 }
 
+/* Secondary: outlined on panel, sage text */
 .cip-fancy-button-secondary {
   --button-bg: var(--panel);
   --button-fg: var(--accent-strong);
-  --button-edge: color-mix(in srgb, var(--accent-strong) 40%, var(--line));
-  --button-shine: rgba(126, 217, 87, 0.24);
+  --button-edge: color-mix(in srgb, var(--accent-strong) 32%, var(--line));
+  --button-shine: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+/* Warning variant — warm amber for caution CTAs */
 .cip-fancy-button-warning {
-  --button-bg: #fff8e7;
+  --button-bg: var(--warning-soft);
   --button-fg: var(--warning);
-  --button-edge: color-mix(in srgb, var(--warning) 45%, var(--line));
-  --button-shine: rgba(255, 255, 255, 0.42);
+  --button-edge: color-mix(in srgb, var(--warning) 38%, var(--line));
+  --button-shine: rgba(255, 255, 255, 0.4);
 }
+
+/* ============================================================
+   Resume builder (Assets page)
+   ============================================================ */
 
 .resume-editor {
   color: var(--foreground);
@@ -202,8 +311,8 @@ button:disabled,
   color: var(--muted);
   display: block;
   font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   margin-bottom: 0.35rem;
   text-transform: uppercase;
 }
@@ -212,7 +321,7 @@ button:disabled,
 .resume-textarea {
   background: color-mix(in srgb, var(--background) 72%, var(--panel));
   border: 1px solid var(--line);
-  border-radius: 0.45rem;
+  border-radius: var(--radius-sm);
   color: var(--foreground);
   line-height: 1.55;
   outline: none;
@@ -223,17 +332,25 @@ button:disabled,
 .resume-input:focus,
 .resume-textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .resume-textarea {
   resize: vertical;
 }
 
+/* ============================================================
+   Pills & confidence labels
+   ============================================================ */
+
 .cip-pill {
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
+
+/* ============================================================
+   htmx indicators
+   ============================================================ */
 
 .htmx-indicator {
   display: none;
@@ -244,13 +361,18 @@ button:disabled,
   display: block;
 }
 
+/* ============================================================
+   Thinking / loading animation system (preserved — best part
+   of the existing UI). Recolored to sage.
+   ============================================================ */
+
 .cip-thinking-panel {
   align-items: center;
   background:
-    linear-gradient(135deg, rgba(126, 217, 87, 0.16), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 42%),
     var(--background);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   gap: 1rem;
   overflow: hidden;
@@ -264,7 +386,7 @@ button:disabled,
 }
 
 .cip-thinking-panel::before {
-  background: linear-gradient(90deg, transparent, rgba(126, 217, 87, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 20%, transparent), transparent);
   content: "";
   height: 100%;
   left: -45%;
@@ -323,7 +445,7 @@ button:disabled,
 .cip-thinking-lines {
   color: var(--foreground);
   font-size: 0.95rem;
-  font-weight: 750;
+  font-weight: 600;
   height: 1.55rem;
   margin-top: 0.35rem;
   overflow: hidden;
@@ -372,6 +494,10 @@ button:disabled,
   width: 42%;
 }
 
+/* ============================================================
+   Route loader (page transitions)
+   ============================================================ */
+
 .cip-route-loader[hidden] {
   display: none;
 }
@@ -392,11 +518,11 @@ button:disabled,
 .cip-route-loader-panel {
   align-items: center;
   background:
-    linear-gradient(135deg, rgba(126, 217, 87, 0.18), transparent 46%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 46%),
     var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  box-shadow: 0 24px 80px rgba(18, 34, 15, 0.24);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
   display: flex;
   gap: 1rem;
   max-width: 38rem;
@@ -408,7 +534,7 @@ button:disabled,
 
 .cip-route-loader-panel::before {
   animation: cip-panel-sheen 2.4s ease-in-out infinite;
-  background: linear-gradient(90deg, transparent, rgba(126, 217, 87, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 20%, transparent), transparent);
   content: "";
   height: 100%;
   left: -45%;
@@ -421,11 +547,50 @@ button:disabled,
 .cip-route-loader-line {
   color: var(--foreground);
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.5;
   margin-top: 0.35rem;
   min-height: 1.5rem;
 }
+
+/* ============================================================
+   Report reveal animation ("report ready" moment)
+   ============================================================ */
+
+.cip-report-reveal > * {
+  opacity: 0;
+  transform: translateY(0.5rem);
+  animation: cip-reveal-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.cip-report-reveal > *:nth-child(1) { animation-delay: 0.05s; }
+.cip-report-reveal > *:nth-child(2) { animation-delay: 0.12s; }
+.cip-report-reveal > *:nth-child(3) { animation-delay: 0.19s; }
+.cip-report-reveal > *:nth-child(4) { animation-delay: 0.26s; }
+.cip-report-reveal > *:nth-child(5) { animation-delay: 0.33s; }
+.cip-report-reveal > *:nth-child(6) { animation-delay: 0.4s; }
+.cip-report-reveal > *:nth-child(7) { animation-delay: 0.47s; }
+.cip-report-reveal > *:nth-child(n + 8) { animation-delay: 0.54s; }
+
+/* Report section accent rule (brass flourish) */
+.cip-report-section {
+  border-top: 3px solid var(--brass-soft);
+  position: relative;
+}
+
+.cip-report-section::before {
+  background: var(--brass);
+  content: "";
+  height: 3px;
+  left: 0;
+  position: absolute;
+  top: -3px;
+  width: 3rem;
+}
+
+/* ============================================================
+   Keyframes (preserved + report reveal added)
+   ============================================================ */
 
 @keyframes cip-panel-sheen {
   0% {
@@ -478,5 +643,44 @@ button:disabled,
   }
   100% {
     transform: translateX(245%);
+  }
+}
+
+@keyframes cip-reveal-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   Print scope — Career Intelligence Report deliverable
+   Applies only inside [data-report-print] so it never affects
+   the app shell. Honors the browser print/Save-to-PDF flow.
+   ============================================================ */
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  [data-report-print] {
+    box-shadow: none;
+  }
+
+  /* Hide app chrome when printing the report */
+  body:not(:has([data-report-print])) nav,
+  body:not(:has([data-report-print])) header {
+    display: none;
+  }
+
+  .cip-no-print {
+    display: none !important;
+  }
+
+  .cip-report-reveal > * {
+    opacity: 1;
+    transform: none;
+    animation: none;
   }
 }

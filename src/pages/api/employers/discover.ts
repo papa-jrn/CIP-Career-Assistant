@@ -125,7 +125,7 @@ function renderDiscoveryResult({
               <h3 class="font-semibold">${escapeHtml(candidate.name)}</h3>
               <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(candidate.location)} - ${escapeHtml(candidate.estimated_size)}</p>
             </div>
-            <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(candidate.priority)} priority</span>
+            <span class="rounded-md bg-[var(--accent-tint)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(candidate.priority)} priority</span>
           </div>
           <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(candidate.category)}</p>
           <p class="mt-2 text-xs text-[var(--muted)]">Sources: ${candidate.discovery_source_names.map(escapeHtml).join(", ")}</p>

@@ -100,7 +100,7 @@ function renderNoteSummary(notes: ParsedConversationNote[]) {
           (note) => `
             <li class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
               <span class="font-semibold text-[var(--foreground)]">${escapeHtml(note.fileName)}</span>
-              <span class="ml-2 rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-0.5 text-xs font-semibold ${note.status === "parsed" ? "text-[var(--accent-strong)]" : "text-red-700"}">${note.status === "parsed" ? "saved" : "skipped"}</span>
+              <span class="ml-2 rounded-md bg-[var(--accent-tint)] px-2 py-0.5 text-xs font-semibold ${note.status === "parsed" ? "text-[var(--accent-strong)]" : "text-red-700"}">${note.status === "parsed" ? "saved" : "skipped"}</span>
               <p class="mt-1 leading-6">${escapeHtml(note.detail)}${note.status === "parsed" ? ` ${note.text.length.toLocaleString()} characters captured.` : ""}</p>
             </li>
           `,

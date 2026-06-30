@@ -2475,3 +2475,46 @@ Goal: make the app feel slick, warm, human, and trustworthy — so the user *wan
 - **Imagery licensing note (integrity):** iStock images are licensed stock. If used, they must be properly purchased/licensed for the use; do not hotlink or scrape. Acceptable alternatives: properly licensed stock, owned photography, or rights-clear/AI-generated imagery. Record provenance.
 - Apply to the highest-trust-impact surfaces first: the new intake first-touch, the Workbench/home, and the empty states.
 
+## UI/UX Rebuild + Career Intelligence Report Plan (set 2026-06-30)
+
+This records the design decisions for the UI polish pass above, before code changes, so the rebuild is traceable in the project's own history (the same discipline every prior direction uses).
+
+### Aesthetic direction
+
+Lead with **warm, human, "career-coach" feel**; hold a **professional-strategist structural frame** underneath. The warmth lives where a person is making a decision (intake first-touch, Workbench/home, empty states, the report reveal). The precision and density live where the system shows its work (evidence ledger, match tables, briefing/report data). The two halves are the product: a coach with evidence.
+
+The existing sage-green palette reads as agtech / wellness, which undercuts the "career intelligence strategist" positioning. It is being deepened and warmed rather than abandoned — keeping brand continuity while reading as a trusted advisor instead of an agtech product. The bright `#7ed957` is retired.
+
+### Locked design decisions
+
+1. **Palette — Warm Ink + Deep Sage.** Warm off-white paper (`#FBF8F1`), near-black ink, deep emerald sage accent (`#2F5D50`) on warm neutrals, with **brass as a warm secondary accent** (`#C19A4B`) for badges, gauges, and the report flourish. Professional-leaning, keeps the green identity, drops the agtech feel.
+2. **Primary buttons — Deep Sage.** Deep sage buttons with cream text. Reads calm, trustworthy, "career strategist." Brass is a secondary accent only, not the primary CTA color.
+3. **Typography — Fraunces + Inter.** Warm modern serif (Fraunces) for headlines; clean neutral sans (Inter) for body, data, and UI. The human headlines + precise data pairing. **Self-hosted via `@fontsource`** — no Google Fonts network calls. This is a deliberate privacy-first choice consistent with the trust-first product thesis; the app does not leak user activity to third-party font CDNs.
+4. **Report placement — new `/report` route as nav step 9.** The report is the capstone deliverable outside the repeating weekly cycle (steps 4–8). The weekly Briefing stays a separate, recurring cadence.
+
+### Career Intelligence Report design
+
+The report is the missing capstone system. It is a **deterministic, honest, confidence-labeled** presentation of what the system already knows — not a new hallucination-prone AI generation pass. This is the critical integrity choice: the richest material already exists, saved, additive (`AdvisorAnalysis`, Evidence Sufficiency Score, role briefs, evidence ledger, skill gaps, exploration areas, claim-safety notes). The report assembles and presents it; it does not invent it.
+
+Persistence: additive `career_sources` row (`source_type: "career_report"`, `trust_state: "system_generated"`), matching how `resume_draft` already works and the additive-evidence philosophy. No new database table is needed.
+
+Every claim in the report carries its source status as a **visible confidence label**: `verified_from_resume` → Verified, `stated_by_user` → Stated, `inferred_medium_confidence` → Inferred, `needs_user_confirmation` → Needs confirmation, `not_enough_evidence` → Insufficient. If no analysis exists yet, the report says so plainly and routes to Evidence — it never fabricates a deliverable (the integrity rule, §19).
+
+An optional AI executive-summary pass, if added later, must be explicitly labeled as AI-synthesized and kept separate from the verified, deterministic body of the report.
+
+### Integrity rules this rebuild preserves
+
+- No hardcoded data, fixture, or placeholder is presented as live result (§19).
+- Every recommendation carries evidence, confidence, and a user approval state (§8).
+- No AI call fabricates report content; any optional AI summary is labeled.
+- Empty / not-configured states say so plainly and point to the real next step.
+- Provenance is recorded for every image (source: PhotoDune/Envato, license, date, intended use) in `public/images/PROVENANCE.md` (§2475). Images are licensed stock — properly purchased, not hotlinked or scraped.
+
+### Build order
+
+Phase A (foundation: palette, typography, iconography, component classes) is first — it is the visible proof for everything else and propagates automatically because every page reads design tokens via `var(--…)`. Then Phase B (Workbench redesign) and Phase C (report) proceed, since both depend on the foundation. A final verification pass checks palette/type consistency, no leftover bright-green, the report generating and printing honestly, and no broken pages.
+
+### Imagery provenance approach
+
+Imagery is treated as **seasoning, not the meal** — the structural rebuild (palette, type, icons, spacing, components, report) does not depend on any specific photo and ships without blocking. Each high-trust surface (home hero, intake first-touch, empty states, report cover) gets a correct image **slot**: aspect-correct container, overlay gradient for text legibility, and `srcset` readiness. Optimized images (web-sized, licensed) drop into `public/images/` by filename and the recorded provenance slots. Three PhotoDune/Envato images are in hand (warm-workspace handshake, dynamic job interview, businesswoman leading a team) — full-resolution originals to be compressed to web sizes before placement.
+

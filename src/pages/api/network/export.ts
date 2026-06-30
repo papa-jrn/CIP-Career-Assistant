@@ -138,20 +138,20 @@ function renderHtmlReport(payload: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CIP Network Intelligence Report</title>
     <style>
-      :root { color: #172017; background: #f7fbf4; font-family: Arial, sans-serif; }
+      :root { color: #1e2420; background: #fbf8f1; font-family: Arial, sans-serif; }
       body { margin: 0; }
       main { max-width: 920px; margin: 0 auto; padding: 32px 22px 56px; }
       h1 { font-size: 32px; margin: 0 0 8px; }
-      h2 { border-bottom: 1px solid #dbe8d7; font-size: 20px; margin-top: 30px; padding-bottom: 8px; }
+      h2 { border-bottom: 1px solid #e6dfcf; font-size: 20px; margin-top: 30px; padding-bottom: 8px; }
       h3 { font-size: 16px; margin-bottom: 6px; }
-      p, li { color: #40513f; font-size: 14px; line-height: 1.65; }
-      .toolbar { align-items: center; background: #fff; border-bottom: 1px solid #dbe8d7; display: flex; gap: 12px; justify-content: space-between; padding: 14px 22px; position: sticky; top: 0; }
-      .button { background: #7ed957; border: 1px solid #286f32; border-radius: 7px; color: #13210f; cursor: pointer; font-weight: 700; padding: 9px 14px; text-decoration: none; }
-      .muted { color: #60705f; }
+      p, li { color: #4a5048; font-size: 14px; line-height: 1.65; }
+      .toolbar { align-items: center; background: #fff; border-bottom: 1px solid #e6dfcf; display: flex; gap: 12px; justify-content: space-between; padding: 14px 22px; position: sticky; top: 0; }
+      .button { background: #2f5d50; border: 1px solid #1f4438; border-radius: 7px; color: #fbf8f1; cursor: pointer; font-weight: 700; padding: 9px 14px; text-decoration: none; }
+      .muted { color: #6b7268; }
       .grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .card { background: #fff; border: 1px solid #dbe8d7; border-radius: 8px; padding: 16px; }
-      .pill { background: #eefbe8; border: 1px solid #dbe8d7; border-radius: 999px; color: #286f32; display: inline-block; font-size: 12px; font-weight: 700; margin: 0 6px 6px 0; padding: 4px 8px; }
-      .print-note { background: #eefbe8; border: 1px solid #dbe8d7; border-radius: 8px; margin-top: 10px; padding: 12px; }
+      .card { background: #fff; border: 1px solid #e6dfcf; border-radius: 8px; padding: 16px; }
+      .pill { background: #e7efe9; border: 1px solid #e6dfcf; border-radius: 999px; color: #1f4438; display: inline-block; font-size: 12px; font-weight: 700; margin: 0 6px 6px 0; padding: 4px 8px; }
+      .print-note { background: #e7efe9; border: 1px solid #e6dfcf; border-radius: 8px; margin-top: 10px; padding: 12px; }
       @media print {
         body { background: #fff; }
         main { max-width: none; padding: 0; }

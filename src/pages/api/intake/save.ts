@@ -114,7 +114,7 @@ function renderIntakeResult(
     <section class="rounded-lg border border-[var(--line)] bg-[var(--background)] p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-xl font-semibold">Identity graph draft</h2>
-        <span class="rounded-md bg-[rgba(126,217,87,0.18)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(status)}</span>
+        <span class="rounded-md bg-[var(--accent-tint)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(status)}</span>
       </div>
       ${renderIdentityGraph(draft)}
       ${renderAdvisorAnalysis(advisor)}
@@ -240,7 +240,7 @@ function evidenceStatusClass(status: string) {
   if (status === "verified_from_resume") return "bg-[var(--accent-soft)] text-[var(--accent-strong)]";
   if (status === "stated_by_user") return "bg-[var(--panel)] text-[var(--accent-strong)] border border-[var(--line)]";
   if (status === "inferred_medium_confidence") return "bg-yellow-50 text-yellow-800";
-  if (status === "needs_user_confirmation") return "bg-[rgba(126,217,87,0.12)] text-[var(--accent-strong)] border border-[var(--line)]";
+  if (status === "needs_user_confirmation") return "bg-[var(--accent-tint)] text-[var(--accent-strong)] border border-[var(--line)]";
   return "bg-red-50 text-red-800";
 }
 
@@ -325,7 +325,7 @@ function renderIdentityGraph(draft: ReturnType<typeof buildIdentityDraft>) {
   return `
     <div class="mt-5 overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]">
       <div class="grid gap-0 lg:grid-cols-[1fr_0.72fr]">
-        <div class="relative min-h-[360px] bg-[radial-gradient(circle_at_center,rgba(126,217,87,0.16),transparent_58%)] p-4">
+        <div class="relative min-h-[360px] bg-[radial-gradient(circle_at_center,var(--accent-tint),transparent_58%)] p-4">
           <svg class="h-[360px] w-full" viewBox="0 0 720 360" role="img" aria-labelledby="identity-graph-title identity-graph-desc">
             <title id="identity-graph-title">Identity graph draft</title>
             <desc id="identity-graph-desc">A draft graph connecting the candidate profile to strengths, role hypotheses, evidence, and next questions.</desc>
