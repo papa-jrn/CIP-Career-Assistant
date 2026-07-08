@@ -88,6 +88,29 @@ export async function resolveSearchArea(query: string, radiusMiles: number): Pro
   };
 }
 
+/**
+ * Lightweight coordinates-only geocoding for cases that just need lat/long
+ * (e.g. building a static-map URL). Uses Geocodio when configured, falls back
+ * to Nominatim. Deliberately does NOT run the heavy Overpass nearby-places
+ * lookup that `resolveSearchArea` does, so it's fast and cheap. Returns null
+ * on any failure so callers can fall back to a stylized graphic.
+ */
+export async function geocodeCoordinates(
+  query: string,
+): Promise<{ latitude: number; longitude: number; displayName: string } | null> {
+  try {
+    const result = await geocode(query);
+    if (!Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) return null;
+    return {
+      latitude: result.latitude,
+      longitude: result.longitude,
+      displayName: result.displayName,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function geocode(query: string) {
   const geocodioKey = import.meta.env.GEOCODIO_API_KEY || process.env.GEOCODIO_API_KEY;
   if (geocodioKey) {

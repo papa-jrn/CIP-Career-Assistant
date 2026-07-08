@@ -38,6 +38,17 @@ export interface ResumeAssetContext {
   analysisReviews?: string[];
 }
 
+/**
+ * The specific career lane a resume draft is being written for. Defaults to
+ * the primary lane (targetLanes[0]) when a caller omits it, preserving the
+ * pre-multi-lane behavior.
+ */
+export type ResumeTargetLane = {
+  role: string;
+  label: string;
+  rationale: string;
+};
+
 export function isAiResumeDraftAvailable(context: ResumeAssetContext): boolean {
   const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   return Boolean(openAiKey && context.intake.resume_text);
@@ -45,19 +56,37 @@ export function isAiResumeDraftAvailable(context: ResumeAssetContext): boolean {
 
 // AI synthesis is slow (an OpenAI Responses round trip), so it must only run
 // from the on-demand API endpoint, never during a page render. Returns null
-// when the key is missing, there is no resume text, or the call fails.
-export async function buildAiMasterResumeDraft(context: ResumeAssetContext): Promise<ResumeAssetDraft | null> {
+// when the key is missing, there is no resume text, or the call fails. Pass a
+// `lane` to target a specific career lane; omit it to default to the primary.
+export async function buildAiMasterResumeDraft(
+  context: ResumeAssetContext,
+  lane?: ResumeTargetLane,
+): Promise<ResumeAssetDraft | null> {
   const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (!openAiKey || !context.intake.resume_text) return null;
-  const ai = await tryBuildAiMasterResume(context, openAiKey);
+  const targetLane = resolveLane(context, lane);
+  const ai = await tryBuildAiMasterResume(context, openAiKey, targetLane);
   return ai ? normalizeResumeDraft(ai) : null;
 }
 
-export function buildDeterministicResumeDraft(context: ResumeAssetContext): ResumeAssetDraft {
-  return normalizeResumeDraft(buildDeterministicCoachingDraft(context));
+export function buildDeterministicResumeDraft(
+  context: ResumeAssetContext,
+  lane?: ResumeTargetLane,
+): ResumeAssetDraft {
+  return normalizeResumeDraft(buildDeterministicCoachingDraft(context, resolveLane(context, lane)));
 }
 
-async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: string) {
+function resolveLane(context: ResumeAssetContext, lane?: ResumeTargetLane): ResumeTargetLane {
+  if (lane && lane.role) return lane;
+  const primary = context.targetLanes[0];
+  return {
+    role: primary?.role ?? "target role",
+    label: primary?.label ?? "Primary lane",
+    rationale: primary?.rationale ?? "Evidence-backed career positioning",
+  };
+}
+
+async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: string, lane: ResumeTargetLane) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -70,12 +99,18 @@ async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: st
         {
           role: "system",
           content:
-            "You are CIP's senior career strategist and resume writer. Create a new master resume from the user's original resume, intake, advisor analysis, evidence answers, linked-source evidence, and review notes. Do not paste old resume sections wholesale. Preserve true employers, titles, dates, education, tools, and accomplishments, but rewrite the resume through the approved primary career lane. Every public claim must be supported by supplied evidence or marked as needing confirmation in internal notes. Do not invent metrics, credentials, employers, dates, degrees, job titles, or technologies. If the evidence is thin, write a stronger truthful version and name the missing proof in internal notes.",
+            "You are CIP's senior career strategist and resume writer. Create a new master resume from the user's original resume, intake, advisor analysis, evidence answers, linked-source evidence, and review notes. Do not paste old resume sections wholesale. Preserve true employers, titles, dates, education, tools, and accomplishments, but rewrite the resume through the specified target career lane. Every public claim must be supported by supplied evidence or marked as needing confirmation in internal notes. Do not invent metrics, credentials, employers, dates, degrees, job titles, or technologies. If the evidence is thin, write a stronger truthful version and name the missing proof in internal notes.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: "Generate a refreshed master resume draft. Treat the original resume as source material, not copy to append. Rewrite summary, impact, skills, and experience bullets so they support the primary target lane and answer likely hiring-manager concerns.",
+            task: `Generate a refreshed master resume draft written for the "${lane.role}" lane (${lane.label}). Treat the original resume as source material, not copy to append. Rewrite summary, impact, skills, and experience bullets so they support THIS lane and answer likely hiring-manager concerns for ${lane.role}.`,
+            lane: {
+              role: lane.role,
+              label: lane.label,
+              rationale: lane.rationale,
+              instruction: `This resume is one of up to three lane-specific variants the user will generate. Tailor the angle, de-emphasized details, headline, and skills ordering to ${lane.role}. A different variant will be generated separately for the other lanes, so do not try to hedge across all of them here.`,
+            },
             required_behavior: [
               "Synthesize across the full context; do not merely summarize advisor paragraphs.",
               "Rewrite experience bullets around situation, action, scope, result, and proof.",
@@ -144,18 +179,17 @@ async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: st
   }
 }
 
-function buildDeterministicCoachingDraft(context: ResumeAssetContext): ResumeAssetDraft {
+function buildDeterministicCoachingDraft(context: ResumeAssetContext, lane: ResumeTargetLane): ResumeAssetDraft {
   const intake = context.intake;
   const fullName = textValue(intake.full_name) || "Your Name";
   const email = textValue(intake.email);
   const linkedin = textValue(intake.linkedin_url);
-  const targetTitle = textValue(intake.target_title) || context.targetLanes[0]?.role || "Target Role";
+  const targetTitle = textValue(intake.target_title) || lane.role || "Target Role";
   const workModes = Array.isArray(intake.work_modes) ? intake.work_modes.map(String).filter(Boolean).join(", ") : "";
   const salary = intake.salary_target ? `$${Number(intake.salary_target).toLocaleString()} target` : "";
-  const primaryLane = context.targetLanes[0];
   const proofBullets = context.proofItems.length
     ? context.proofItems.map((item) => `- ${item.claim}\n  Evidence: ${item.evidence}`).join("\n")
-    : "- Add 3-5 verified accomplishments that support the primary lane.";
+    : "- Add 3-5 verified accomplishments that support this lane.";
   const originalRoles = extractRoleSignals(textValue(intake.resume_text));
 
   return {
@@ -163,19 +197,19 @@ function buildDeterministicCoachingDraft(context: ResumeAssetContext): ResumeAss
     fullName,
     contact: [email, linkedin, workModes, salary].filter(Boolean).join(" | "),
     targetTitle,
-    headline: `${targetTitle} | ${primaryLane?.rationale ?? "Evidence-backed career positioning"}`,
+    headline: `${targetTitle} | ${lane.rationale}`,
     summary: [
-      context.positioning[0]?.detail ?? "Write a 3-4 line summary around the approved primary lane.",
+      context.positioning[0]?.detail ?? `Write a 3-4 line summary around the ${lane.role} (${lane.label}) lane.`,
       context.positioning[1]?.detail ?? "Anchor the summary in verified accomplishments, not broad traits.",
-      "This worksheet cannot safely rewrite the full resume. Use the Generate AI master resume button to create a synthesized draft (requires OPENAI_API_KEY and saved resume text).",
+      "This worksheet cannot safely rewrite the full resume. Use the Generate AI master resume button to create a synthesized draft for this lane (requires OPENAI_API_KEY and saved resume text).",
     ].join("\n\n"),
     skills: buildSkills(context),
     selectedImpact: proofBullets,
-    experience: buildExperienceRewriteWorksheet(originalRoles, primaryLane?.role ?? targetTitle),
+    experience: buildExperienceRewriteWorksheet(originalRoles, lane.role || targetTitle),
     education: inferEducation(textValue(intake.resume_text)),
     additional: [textValue(intake.portfolio_urls), textValue(intake.public_evidence)].filter(Boolean).join("\n"),
     internalNotes: [
-      "Resume generation is in deterministic coaching mode, so CIP is showing a rewrite worksheet instead of pretending it can synthesize a finished resume.",
+      `Resume generation is in deterministic coaching mode for the ${lane.label} (${lane.role}) lane, so CIP is showing a rewrite worksheet instead of pretending it can synthesize a finished resume.`,
       "Run the Generate AI master resume button for the career-coach rewrite pass (requires OPENAI_API_KEY).",
       ...context.proofItems.map((item) => `Traceable claim: ${item.claim} | ${item.evidence}`),
     ].join("\n"),

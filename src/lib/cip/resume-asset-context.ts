@@ -26,7 +26,15 @@ export interface LoadedResumeAssetContext {
 export interface SavedResumeDraft {
   draft: ResumeAssetDraft;
   savedAt: string;
+  laneRole: string;
 }
+
+/**
+ * Drafts keyed by their target lane role. The Assets page renders one editor
+ * per lane; each lane may have zero or one saved draft. Rows saved before the
+ * per-lane feature lacked a `lane_role` and are treated as the primary lane.
+ */
+export type SavedResumeDraftByLane = Record<string, SavedResumeDraft>;
 
 export async function loadResumeAssetContext(
   supabase: SupabaseClient,
@@ -111,31 +119,46 @@ export async function loadResumeAssetContext(
   };
 }
 
-export async function loadLatestSavedResumeDraft(
+/**
+ * Loads up to 8 newest `resume_draft` rows and keys each by its target lane
+ * role. We fetch a few more than the 3 visible lanes so a user who previously
+ * generated drafts against different lane sets still resolves the current
+ * lanes correctly; per-lane dedupe keeps only the newest per `lane_role`.
+ */
+export async function loadSavedResumeDrafts(
   supabase: SupabaseClient,
   userId: string,
-): Promise<SavedResumeDraft | null> {
+): Promise<SavedResumeDraftByLane> {
   const { data } = await supabase
     .from("career_sources")
     .select("extracted_text, created_at")
     .eq("user_id", userId)
     .eq("source_type", "resume_draft")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(8);
 
-  if (!data?.extracted_text) return null;
-  try {
-    const parsed = JSON.parse(data.extracted_text);
-    const draft = parsed?.draft;
-    if (!draft || typeof draft !== "object" || typeof draft.summary !== "string") return null;
-    return {
-      draft: draft as ResumeAssetDraft,
-      savedAt: String(parsed?.saved_at ?? data.created_at ?? ""),
-    };
-  } catch {
-    return null;
+  const byLane: SavedResumeDraftByLane = {};
+  for (const row of data ?? []) {
+    if (!row?.extracted_text) continue;
+    try {
+      const parsed = JSON.parse(row.extracted_text);
+      const draft = parsed?.draft;
+      if (!draft || typeof draft !== "object" || typeof draft.summary !== "string") continue;
+      const laneRole = typeof parsed?.lane_role === "string" && parsed.lane_role ? parsed.lane_role : "";
+      const savedAt = String(parsed?.saved_at ?? row.created_at ?? "");
+      // Rows are ordered newest-first; keep the first (newest) per lane.
+      const key = laneRole || (draft as ResumeAssetDraft).targetTitle || "__primary__";
+      if (byLane[key]) continue;
+      byLane[key] = {
+        draft: draft as ResumeAssetDraft,
+        savedAt,
+        laneRole: laneRole || (draft as ResumeAssetDraft).targetTitle || "",
+      };
+    } catch {
+      continue;
+    }
   }
+  return byLane;
 }
 
 export function parseIntakeSource(value: string | null): IntakeSource | null {

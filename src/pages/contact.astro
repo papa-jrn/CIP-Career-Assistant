@@ -1,0 +1,51 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const contactItems = [
+  {
+    title: "Product questions",
+    body: "Use this page for now as the public contact and support placeholder while CIP moves from personal beta toward a commercial product.",
+  },
+  {
+    title: "Privacy and security",
+    body: "The production version should publish clear data retention, export, deletion, and AI-processing policies before onboarding paying users.",
+  },
+  {
+    title: "Feedback",
+    body: "The strongest feedback right now is about whether the process makes hard advisor conversations easier to prepare for.",
+  },
+];
+---
+
+<Layout
+  title="Contact - Career Intelligence Platform"
+  description="Contact, privacy, and feedback information for Career Intelligence Platform."
+>
+  <main class="cip-page-shell">
+    <section class="mx-auto w-full max-w-5xl px-5 py-16">
+      <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Contact</p>
+      <h1 class="mt-3 text-4xl md:text-5xl" style="font-family: var(--headline-font);">
+        Questions, feedback, and trust details.
+      </h1>
+      <p class="mt-5 max-w-3xl text-base leading-7 text-[var(--muted)]">
+        CIP is still moving from a personal beta into a product shape. This page should eventually hold support details, company information, privacy and security links, and a clear way to reach the team.
+      </p>
+
+      <div class="mt-9 grid gap-4 md:grid-cols-3">
+        {contactItems.map((item) => (
+          <article class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5 shadow-[var(--shadow-card)]">
+            <h2 class="text-lg font-semibold">{item.title}</h2>
+            <p class="mt-3 text-sm leading-6 text-[var(--muted)]">{item.body}</p>
+          </article>
+        ))}
+      </div>
+
+      <div class="mt-8 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+        <h2 class="text-xl" style="font-family: var(--headline-font);">Before launch</h2>
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+          Add a real contact address, privacy policy, terms, data deletion path, and a short security note explaining how private career data is stored and protected.
+        </p>
+      </div>
+    </section>
+  </main>
+</Layout>

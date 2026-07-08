@@ -4,19 +4,20 @@ import {
   buildPositioningInputs,
   buildProofItems,
   buildTargetLanes,
-  loadLatestSavedResumeDraft,
   loadResumeAssetContext,
-  type SavedResumeDraft,
+  loadSavedResumeDrafts,
+  type SavedResumeDraftByLane,
 } from "../lib/cip/resume-asset-context";
 import {
   buildDeterministicResumeDraft,
   isAiResumeDraftAvailable,
   type ResumeAssetContext,
+  type ResumeAssetDraft,
 } from "../lib/cip/resume-assets";
 import { createServer } from "../lib/supabase/server";
 
 let assetState: "ready" | "signin" | "empty" | "local" | "error" = "local";
-let savedDraft: SavedResumeDraft | null = null;
+let savedDraftsByLane: SavedResumeDraftByLane = {};
 let targetLanes = buildTargetLanes(null, null);
 let positioningInputs = buildPositioningInputs(null, null);
 let proofItems = buildProofItems(null, null);
@@ -36,15 +37,15 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     } = await supabase.auth.getUser();
 
     if (user) {
-      const [loaded, draftRecord] = await Promise.all([
+      const [loaded, draftByLane] = await Promise.all([
         loadResumeAssetContext(supabase, user.id),
-        loadLatestSavedResumeDraft(supabase, user.id),
+        loadSavedResumeDrafts(supabase, user.id),
       ]);
       targetLanes = loaded.targetLanes;
       positioningInputs = loaded.positioningInputs;
       proofItems = loaded.proofItems;
       resumeContext = loaded.context;
-      savedDraft = draftRecord;
+      savedDraftsByLane = draftByLane;
       assetState = loaded.latestSource || loaded.latestAdvisor ? "ready" : "empty";
     } else {
       assetState = "signin";
@@ -56,11 +57,44 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 
 const hasPersonalizedAssets = assetState === "ready";
 const aiDraftAvailable = isAiResumeDraftAvailable(resumeContext);
-// The page never calls OpenAI during render: it shows the newest saved AI
-// draft when one exists, otherwise the instant deterministic worksheet.
-// Fresh AI drafts are generated on demand via /api/assets/resume-draft.
-const resumeDraft = savedDraft?.draft ?? buildDeterministicResumeDraft(resumeContext);
-const draftSavedAtLabel = savedDraft?.savedAt ? new Date(savedDraft.savedAt).toLocaleString("en-US") : "";
+
+// Per-lane initial draft: the saved AI draft for that lane if present,
+// otherwise the instant deterministic worksheet written for that lane.
+// Carried into the page as JSON so the client can swap tabs without a fetch.
+type LaneDraft = {
+  laneRole: string;
+  laneLabel: string;
+  laneRationale: string;
+  mode: "ai" | "deterministic";
+  draft: ResumeAssetDraft;
+  savedAt: string | null;
+};
+const laneDrafts: LaneDraft[] = targetLanes.map((lane) => {
+  const saved = savedDraftsByLane[lane.role] ?? null;
+  const draft = saved?.draft ?? buildDeterministicResumeDraft(resumeContext, {
+    role: lane.role,
+    label: lane.label,
+    rationale: lane.rationale,
+  });
+  return {
+    laneRole: lane.role,
+    laneLabel: lane.label,
+    laneRationale: lane.rationale,
+    mode: saved ? "ai" : "deterministic",
+    draft,
+    savedAt: saved?.savedAt ?? null,
+  };
+});
+const laneDraftsJson = JSON.stringify(laneDrafts.map((item) => ({
+  laneRole: item.laneRole,
+  laneLabel: item.laneLabel,
+  laneRationale: item.laneRationale,
+  mode: item.mode,
+  savedAt: item.savedAt,
+  draft: item.draft,
+})));
+const initialDraft = laneDrafts[0]?.draft ?? buildDeterministicResumeDraft(resumeContext);
+
 const resumeGuardrails = [
   "Use the user's actual phrasing where possible, then tighten for clarity instead of replacing everything with generic polished language.",
   "Keep every public claim traceable to resume text, saved evidence, source analysis, or explicit user approval.",
@@ -70,13 +104,13 @@ const resumeGuardrails = [
 ];
 ---
 
-<Layout title="CIP Career Assets">
+<Layout title="CIP Career Lanes">
   <main class="mx-auto w-full max-w-6xl px-5 py-8">
     <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Asset Workbench</p>
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Career Lanes</p>
       <h1 class="mt-2 text-3xl font-semibold">Turn the analysis into materials a hiring market can understand.</h1>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        The first asset is a refreshed master resume. The resume you provided was the starting evidence; the new resume is the strategy document that incorporates verified accomplishments, target lanes, proof gaps, and the clearest positioning from the analysis.
+        Each target lane gets its own resume variant, reframed from the same verified evidence. The resume you provided was the starting evidence; each lane's resume is the strategy document that incorporates verified accomplishments, proof gaps, and the clearest positioning for that direction.
       </p>
       <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
         <h2 class="text-lg font-semibold">Why start with a new master resume?</h2>
@@ -178,17 +212,17 @@ const resumeGuardrails = [
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Interactive builder</p>
-          <h2 class="mt-1 text-2xl font-semibold">Edit the new master resume draft.</h2>
+          <h2 class="mt-1 text-2xl font-semibold">One resume per lane, reframed from the same evidence.</h2>
           <p class="mt-2 inline-flex rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]" data-draft-mode>
-            Draft mode: {savedDraft ? `AI career strategist synthesis — saved ${draftSavedAtLabel}` : "Deterministic coaching worksheet (no AI draft generated yet)"}
+            Draft mode: <span data-draft-mode-text>Deterministic coaching worksheet</span>
           </p>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            This draft starts from the primary lane and the current evidence. Edit it until it sounds like the user, then export the current version as Word-compatible `.doc`, rich text `.rtf`, or print/save as PDF.
+            Pick a lane, generate its resume, and edit until it sounds like the user. Each lane's draft is saved and edited independently. Export the current lane as Word-compatible `.doc`, rich text `.rtf`, or print/save as PDF.
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
           <button class="cip-fancy-button" type="button" data-generate-draft disabled={!aiDraftAvailable}>
-            <span>{savedDraft ? "Regenerate AI draft" : "Generate AI master resume"}</span>
+            <span data-generate-label>Generate AI resume</span>
           </button>
           <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-export-doc><span>Export .doc</span></button>
           <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-export-rtf><span>Export .rtf</span></button>
@@ -199,69 +233,87 @@ const resumeGuardrails = [
       <p class="mt-3 hidden rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold" data-generate-status></p>
       {!aiDraftAvailable && (
         <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--muted)]">
-          AI draft generation is unavailable: it needs saved intake resume text and a configured OPENAI_API_KEY. The editor below shows the deterministic coaching worksheet.
+          AI draft generation is unavailable: it needs saved intake resume text and a configured OPENAI_API_KEY. The editors below show the deterministic coaching worksheet for each lane.
         </p>
       )}
 
+      <!-- Lane tabs -->
+      <div class="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Resume target lane" data-lane-tabs>
+        {laneDrafts.map((item, index) => (
+          <button
+            type="button"
+            role="tab"
+            id={`lane-tab-${index}`}
+            aria-selected={index === 0 ? "true" : "false"}
+            aria-controls="resume-editor-panel"
+            data-lane-tab={item.laneRole}
+            data-lane-index={index}
+            class:list={[
+              "rounded-md border px-3 py-2 text-sm font-semibold transition-colors",
+              index === 0
+                ? "border-[var(--accent-strong)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                : "border-[var(--line)] bg-[var(--background)] text-[var(--muted)] hover:bg-black/5 dark:hover:bg-white/10",
+            ]}
+          >
+            <span class="block text-[10px] uppercase tracking-wide opacity-80">{item.laneLabel}</span>
+            <span class="block">{item.laneRole}</span>
+          </button>
+        ))}
+      </div>
+
       <div class="mt-5 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
         <aside class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <label class="block text-sm font-semibold" for="resume-lane">Resume target lane</label>
-          <select id="resume-lane" class="mt-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" data-lane-select>
-            {targetLanes.map((lane, index) => (
-              <option value={lane.role} data-rationale={lane.rationale} selected={index === 0}>{lane.label}: {lane.role}</option>
-            ))}
-          </select>
-          <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+          <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
             <p class="text-xs font-semibold uppercase text-[var(--muted)]">Current lane rationale</p>
-            <p class="mt-2 text-sm leading-6 text-[var(--muted)]" data-lane-rationale>{targetLanes[0]?.rationale}</p>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]" data-lane-rationale>{laneDrafts[0]?.laneRationale}</p>
           </div>
           <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
             <p class="text-xs font-semibold uppercase text-[var(--muted)]">Human review checklist</p>
             <ul class="mt-2 space-y-2 text-sm leading-6 text-[var(--muted)]">
-              <li>Remove any claim the user would not defend in an interview.</li>
+              <li>Remove any claim the user would not defend in an interview for this lane.</li>
               <li>Add missing numbers only when the user knows they are true.</li>
-              <li>Keep one master resume, then create variants later.</li>
+              <li>Each lane is its own resume &mdash; edits here do not affect the other lanes.</li>
             </ul>
           </div>
         </aside>
 
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <div class="resume-editor rounded-md border border-[var(--line)] bg-[var(--panel)] p-5" data-resume-editor>
+          <div class="resume-editor rounded-md border border-[var(--line)] bg-[var(--panel)] p-5" id="resume-editor-panel" role="tabpanel" aria-labelledby="lane-tab-0" data-resume-editor>
             <label class="resume-field">
               <span>Name</span>
-              <input data-resume-field="name" value={resumeDraft.fullName} class="resume-input text-2xl font-semibold" />
+              <input data-resume-field="name" value={initialDraft.fullName} class="resume-input text-2xl font-semibold" />
             </label>
             <label class="resume-field">
               <span>Contact line</span>
-              <input data-resume-field="contact" value={resumeDraft.contact} class="resume-input" placeholder="Email | LinkedIn | Location | Work model" />
+              <input data-resume-field="contact" value={initialDraft.contact} class="resume-input" placeholder="Email | LinkedIn | Location | Work model" />
             </label>
             <label class="resume-field">
               <span>Headline</span>
-              <textarea data-resume-field="headline" class="resume-textarea min-h-20">{resumeDraft.headline}</textarea>
+              <textarea data-resume-field="headline" class="resume-textarea min-h-20">{initialDraft.headline}</textarea>
             </label>
             <label class="resume-field">
               <span>Summary</span>
-              <textarea data-resume-field="summary" class="resume-textarea min-h-32">{resumeDraft.summary}</textarea>
+              <textarea data-resume-field="summary" class="resume-textarea min-h-32">{initialDraft.summary}</textarea>
             </label>
             <label class="resume-field">
               <span>Core skills</span>
-              <textarea data-resume-field="skills" class="resume-textarea min-h-20">{resumeDraft.skills}</textarea>
+              <textarea data-resume-field="skills" class="resume-textarea min-h-20">{initialDraft.skills}</textarea>
             </label>
             <label class="resume-field">
               <span>Selected impact</span>
-              <textarea data-resume-field="impact" class="resume-textarea min-h-36">{resumeDraft.selectedImpact}</textarea>
+              <textarea data-resume-field="impact" class="resume-textarea min-h-36">{initialDraft.selectedImpact}</textarea>
             </label>
             <label class="resume-field">
               <span>Professional experience</span>
-              <textarea data-resume-field="experience" class="resume-textarea min-h-56">{resumeDraft.experience}</textarea>
+              <textarea data-resume-field="experience" class="resume-textarea min-h-56">{initialDraft.experience}</textarea>
             </label>
             <label class="resume-field">
               <span>Education</span>
-              <textarea data-resume-field="education" class="resume-textarea min-h-24">{resumeDraft.education}</textarea>
+              <textarea data-resume-field="education" class="resume-textarea min-h-24">{initialDraft.education}</textarea>
             </label>
             <label class="resume-field">
               <span>Additional credentials, portfolio, or selected projects</span>
-              <textarea data-resume-field="additional" class="resume-textarea min-h-28">{resumeDraft.additional}</textarea>
+              <textarea data-resume-field="additional" class="resume-textarea min-h-28">{initialDraft.additional}</textarea>
             </label>
           </div>
         </div>
@@ -269,9 +321,9 @@ const resumeGuardrails = [
       <details class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
         <summary class="text-sm font-semibold text-[var(--foreground)]">Internal evidence notes, not exported</summary>
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-          These notes help the user improve the resume, but they are intentionally excluded from `.doc`, `.rtf`, and PDF output.
+          These notes help the user improve the resume for the current lane, but they are intentionally excluded from `.doc`, `.rtf`, and PDF output.
         </p>
-        <textarea class="resume-textarea mt-3 min-h-28" readonly data-internal-notes>{resumeDraft.internalNotes}</textarea>
+        <textarea class="resume-textarea mt-3 min-h-28" readonly data-internal-notes>{initialDraft.internalNotes}</textarea>
       </details>
     </section>
 
@@ -304,7 +356,27 @@ const resumeGuardrails = [
     </section>
   </main>
 
-  <script>
+  <script is:inline define:vars={{ laneDraftsJson }}>
+    // Per-lane resume state. Each lane holds its own draft and the editor
+    // renders whichever lane is active. Switching tabs captures the current
+    // editor back into the active lane's state before swapping. Edits to one
+    // lane never bleed into another.
+    const laneDrafts = JSON.parse(laneDraftsJson);
+    let activeLaneRole = laneDrafts[0]?.laneRole ?? "";
+
+    const draftKeyByField = {
+      name: "fullName",
+      contact: "contact",
+      headline: "headline",
+      summary: "summary",
+      skills: "skills",
+      impact: "selectedImpact",
+      experience: "experience",
+      education: "education",
+      additional: "additional",
+    };
+    const fieldToKey = Object.fromEntries(Object.entries(draftKeyByField).map(([k, v]) => [v, k]));
+
     const fieldMap = {
       name: "Name",
       contact: "Contact",
@@ -317,70 +389,111 @@ const resumeGuardrails = [
       additional: "Additional Credentials, Portfolio, or Selected Projects",
     };
 
-    const select = document.querySelector("[data-lane-select]");
-    const rationale = document.querySelector("[data-lane-rationale]");
-    const headline = document.querySelector('[data-resume-field="headline"]');
-
-    select?.addEventListener("change", () => {
-      const selected = select.options[select.selectedIndex];
-      const selectedRole = selected.value;
-      const selectedRationale = selected.dataset.rationale || "";
-      if (rationale) rationale.textContent = selectedRationale;
-      if (headline && !headline.dataset.userEdited) {
-        headline.value = `${selectedRole} | ${selectedRationale}`;
-      }
-    });
-
-    document.querySelectorAll("[data-resume-field]").forEach((field) => {
-      field.addEventListener("input", () => {
-        field.dataset.userEdited = "true";
-      });
-    });
-
     const generateButton = document.querySelector("[data-generate-draft]");
+    const generateLabel = document.querySelector("[data-generate-label]");
     const generateStatus = document.querySelector("[data-generate-status]");
-    const modeBadge = document.querySelector("[data-draft-mode]");
-    const draftKeyByField = {
-      name: "fullName",
-      contact: "contact",
-      headline: "headline",
-      summary: "summary",
-      skills: "skills",
-      impact: "selectedImpact",
-      experience: "experience",
-      education: "education",
-      additional: "additional",
-    };
+    const modeText = document.querySelector("[data-draft-mode-text]");
+    const rationaleEl = document.querySelector("[data-lane-rationale]");
+    const laneTabs = Array.from(document.querySelectorAll("[data-lane-tab]"));
+
+    function activeDraft() {
+      return laneDrafts.find((d) => d.laneRole === activeLaneRole) ?? laneDrafts[0];
+    }
+
+    // Read the current editor DOM back into the active lane's draft state.
+    function captureActiveFromDom() {
+      const active = activeDraft();
+      if (!active) return;
+      document.querySelectorAll("[data-resume-field]").forEach((field) => {
+        const fieldKey = field.dataset.resumeField;
+        const draftKey = draftKeyByField[fieldKey];
+        if (draftKey) active.draft[draftKey] = field.value ?? "";
+      });
+      const notes = document.querySelector("[data-internal-notes]");
+      if (notes) active.draft.internalNotes = notes.value ?? "";
+    }
+
+    // Render a lane's draft state into the editor DOM.
+    function renderDraft(lane) {
+      const d = lane.draft;
+      document.querySelectorAll("[data-resume-field]").forEach((field) => {
+        const draftKey = draftKeyByField[field.dataset.resumeField];
+        field.value = typeof d[draftKey] === "string" ? d[draftKey] : "";
+      });
+      const notes = document.querySelector("[data-internal-notes]");
+      if (notes) notes.value = d.internalNotes ?? "";
+      if (rationaleEl) rationaleEl.textContent = lane.laneRationale;
+      updateModeBadge(lane);
+    }
+
+    function updateModeBadge(lane) {
+      if (!modeText) return;
+      if (lane.mode === "ai" && lane.savedAt) {
+        modeText.textContent = `AI career strategist synthesis \u2014 saved ${new Date(lane.savedAt).toLocaleString()}`;
+      } else if (lane.mode === "ai") {
+        modeText.textContent = "AI career strategist synthesis (generated, but saving failed)";
+      } else {
+        modeText.textContent = "Deterministic coaching worksheet (no AI draft generated yet)";
+      }
+      if (generateLabel) {
+        generateLabel.textContent = lane.mode === "ai" ? "Regenerate AI resume" : "Generate AI resume";
+      }
+    }
+
+    function setActiveLane(laneRole) {
+      captureActiveFromDom();
+      const next = laneDrafts.find((d) => d.laneRole === laneRole);
+      if (!next) return;
+      activeLaneRole = laneRole;
+      laneTabs.forEach((tab) => {
+        const selected = tab.dataset.laneTab === laneRole;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.classList.toggle("border-[var(--accent-strong)]", selected);
+        tab.classList.toggle("bg-[var(--accent-soft)]", selected);
+        tab.classList.toggle("text-[var(--accent-strong)]", selected);
+        tab.classList.toggle("border-[var(--line)]", !selected);
+        tab.classList.toggle("bg-[var(--background)]", !selected);
+        tab.classList.toggle("text-[var(--muted)]", !selected);
+      });
+      renderDraft(next);
+      if (generateStatus) generateStatus.classList.add("hidden");
+    }
+
+    laneTabs.forEach((tab) => {
+      tab.addEventListener("click", () => setActiveLane(tab.dataset.laneTab));
+    });
 
     generateButton?.addEventListener("click", async () => {
-      const hasEdits = Array.from(document.querySelectorAll("[data-resume-field]")).some(
-        (field) => field.dataset.userEdited,
-      );
-      if (hasEdits && !window.confirm("Generating a new AI draft replaces your current edits in the builder. Continue?")) {
+      captureActiveFromDom();
+      const active = activeDraft();
+      const hasEdits = active?.mode !== "ai";
+      const verb = active?.mode === "ai" ? "regenerate" : "replace";
+      if (hasEdits && !window.confirm(`Generating an AI resume for the "${active.laneLabel}" lane will ${verb} the current worksheet in the builder. Continue?`)) {
         return;
       }
 
       generateButton.disabled = true;
-      showGenerateStatus("Generating the AI master resume draft. This usually takes 15-30 seconds...", "working");
+      showGenerateStatus(`Generating the AI resume for ${active?.laneLabel} (${active?.laneRole}). This usually takes 15-30 seconds...`, "working");
       try {
-        const response = await fetch("/api/assets/resume-draft", { method: "POST" });
+        const response = await fetch("/api/assets/resume-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ laneRole: activeLaneRole }),
+        });
         const payload = await response.json();
         if (!payload.ok || !payload.draft) {
           showGenerateStatus(payload.error || "Draft generation failed.", "error");
           return;
         }
-        applyDraft(payload.draft);
-        if (modeBadge) {
-          modeBadge.textContent = payload.savedAt
-            ? `Draft mode: AI career strategist synthesis — saved ${new Date(payload.savedAt).toLocaleString()}`
-            : "Draft mode: AI career strategist synthesis (generated, but saving failed)";
-        }
-        const generateLabel = generateButton.querySelector("span");
-        if (generateLabel) generateLabel.textContent = "Regenerate AI draft";
+        const lane = activeDraft();
+        lane.draft = payload.draft;
+        lane.mode = "ai";
+        lane.savedAt = payload.savedAt ?? null;
+        renderDraft(lane);
         showGenerateStatus(
           payload.saveError
             ? `Draft generated, but saving failed: ${payload.saveError}`
-            : "AI draft generated and saved. Reloading this page keeps the newest saved draft.",
+            : `AI resume generated and saved for ${active?.laneLabel}. Switch lanes to build the other variants.`,
           payload.saveError ? "error" : "ok",
         );
       } catch (error) {
@@ -390,17 +503,6 @@ const resumeGuardrails = [
       }
     });
 
-    function applyDraft(draft) {
-      document.querySelectorAll("[data-resume-field]").forEach((field) => {
-        const key = draftKeyByField[field.dataset.resumeField];
-        if (!key || typeof draft[key] !== "string") return;
-        field.value = draft[key];
-        delete field.dataset.userEdited;
-      });
-      const notes = document.querySelector("[data-internal-notes]");
-      if (notes && typeof draft.internalNotes === "string") notes.value = draft.internalNotes;
-    }
-
     function showGenerateStatus(message, tone) {
       if (!generateStatus) return;
       generateStatus.classList.remove("hidden");
@@ -408,20 +510,31 @@ const resumeGuardrails = [
       generateStatus.style.color = tone === "error" ? "#b91c1c" : "";
     }
 
+    // Export the active lane's current state. Capture from DOM first so any
+    // edits made since the last tab switch are included.
+    function exportFilename(ext) {
+      const lane = activeDraft();
+      const slug = String(lane?.laneLabel ?? "primary").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "primary";
+      return `cip-resume-${slug}.${ext}`;
+    }
+
     document.querySelector("[data-export-doc]")?.addEventListener("click", () => {
+      captureActiveFromDom();
       const html = buildResumeHtml();
       downloadFile(
-        "cip-master-resume.doc",
+        exportFilename("doc"),
         `<!doctype html><html><head><meta charset="utf-8"><title>Executive Resume</title><style>${resumeDocumentStyles()}</style></head><body>${html}</body></html>`,
         "application/msword",
       );
     });
 
     document.querySelector("[data-export-rtf]")?.addEventListener("click", () => {
-      downloadFile("cip-master-resume.rtf", buildResumeRtf(), "application/rtf");
+      captureActiveFromDom();
+      downloadFile(exportFilename("rtf"), buildResumeRtf(), "application/rtf");
     });
 
     document.querySelector("[data-export-pdf]")?.addEventListener("click", () => {
+      captureActiveFromDom();
       const printWindow = window.open("", "_blank", "noopener,noreferrer");
       if (!printWindow) return;
       printWindow.document.write(`<!doctype html><html><head><title>Resume</title><style>${printStyles()}</style></head><body>${buildResumeHtml()}</body></html>`);
@@ -431,9 +544,13 @@ const resumeGuardrails = [
     });
 
     function getResumeData() {
+      // Build from the active lane's in-memory draft (kept current by
+      // captureActiveFromDom on tab switch / export), not the DOM directly.
+      const lane = activeDraft();
+      const d = lane ? lane.draft : {};
       const data = {};
-      document.querySelectorAll("[data-resume-field]").forEach((field) => {
-        data[field.dataset.resumeField] = field.value || "";
+      Object.entries(fieldToKey).forEach(([draftKey, fieldKey]) => {
+        data[fieldKey] = typeof d[draftKey] === "string" ? d[draftKey] : "";
       });
       return normalizeResumeData(data);
     }
@@ -635,5 +752,8 @@ const resumeGuardrails = [
         .replace(/}/g, "\\}")
         .replace(/\n/g, "\\par ");
     }
+
+    // Initialize the badge/label for the first lane on load.
+    updateModeBadge(activeDraft());
   </script>
 </Layout>

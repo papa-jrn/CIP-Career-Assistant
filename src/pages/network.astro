@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import Icon from "../components/Icon.astro";
 import type { NetworkAnalysis } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
 
@@ -262,6 +263,78 @@ const conversationStatuses = [
   "Intro offered",
   "Park for later",
 ];
+
+// Lane-validation conversation openers. Grouped by intent so a user can match
+// the ask to the relationship. These are openers, not scripts — each one is
+// designed to surface market reality (titles, pay bands, employer fit, proof
+// points) before the user rewrites assets, applies, or asks for a referral.
+const conversationGroundRules = [
+  "Lead with your three lanes, not a job title. You are asking for market reads, not referrals.",
+  "Ask what titles and teams are actually called inside their company — that language becomes your search filter.",
+  "Request one piece of proof or vocabulary per conversation, not a full tour of their network.",
+  "Separate what they confirm from what they guess. Both are useful; only one is evidence.",
+  "End by naming the one employer, person, or term you will go look up next.",
+];
+
+const conversationOpeners = [
+  {
+    intent: "Market read",
+    when: "You want to know if a lane is real and reachable before investing in it.",
+    openers: [
+      "I'm testing three directions right now — [lane A], [lane B], and [lane C]. From where you sit, which of those feels like it has real demand?",
+      "When you hear \u201Clane A\u201D work, what do you actually picture day to day? Does that match what I've been doing?",
+      "Is [lane A] the kind of role a company hires for deliberately, or does it usually grow out of something else?",
+    ],
+  },
+  {
+    intent: "Role translation",
+    when: "Your past title doesn't map cleanly to how a target employer thinks about the work.",
+    openers: [
+      "My background is [current/past title], but I'm aiming at [lane A]. In your company, what would that kind of work be called?",
+      "What title should I actually be searching for if I want to do [lane A] work? Are there three or four you'd expect to see on a careers page?",
+      "Is there a gap between what my title says and what the market expects? I'd rather hear it from you than a recruiter.",
+    ],
+  },
+  {
+    intent: "Employer context",
+    when: "You want to know which organizations are worth watching before you apply.",
+    openers: [
+      "Who in [your industry or region] is genuinely good at [lane A] work? Not just hiring — actually good at it.",
+      "Are there companies doing [lane A] well that I wouldn't find by searching job boards?",
+      "What separates an employer that's serious about [lane A] from one that's just using the language?",
+    ],
+  },
+  {
+    intent: "Pay and scope reality",
+    when: "You need evidence on compensation, seniority, and work model before you anchor a target.",
+    openers: [
+      "Roughly, what does senior IC versus manager scope look like for [lane A]? I'm trying not to under- or over-shoot.",
+      "Is remote or hybrid realistic for this kind of work, or does it tend to be in-office at most places?",
+      "What's a realistic compensation range for someone with my years of experience moving into [lane A]?",
+    ],
+  },
+  {
+    intent: "Intro later",
+    when: "The lane checks out and you want to meet one more person before deciding.",
+    openers: [
+      "This is really helpful. Is there one person doing [lane A] day to day who'd be willing to have a 20-minute version of this conversation?",
+      "If I came back with two specific questions after I've looked into [company or term], would you be open to a quick follow-up?",
+    ],
+  },
+];
+
+// Personalized lanes: surface the user's own lanes (with their AI-recommended
+// validation ask) when network analysis has run. Falls back to nothing — the
+// generic opener bank above is always shown so the primer is useful pre-analysis.
+const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
+  .slice(0, 3)
+  .map((lane) => ({
+    name: lane.lane,
+    status: lane.status.replace("_", " "),
+    recommendedAsk: lane.recommendedValidationAsk,
+    missingEvidence: lane.missingEvidence[0] ?? null,
+    namedPeople: lane.namedPeople.slice(0, 3),
+  }));
 ---
 
 <Layout title="CIP Network Intelligence">
@@ -349,6 +422,75 @@ const conversationStatuses = [
           </p>
         </article>
       </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Conversation openers</p>
+      <h2 class="mt-1 text-2xl font-semibold">Questions that get you lane validation, not a referral.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        The goal of an early conversation is to learn whether a lane is real, reachable, and worth pursuing — not to land a job lead. Use these openers to surface titles, pay bands, employer fit, and proof vocabulary before you rewrite assets or apply. Replace the bracketed text with your own lanes.
+      </p>
+
+      {personalLanes.length > 0 && (
+        <div class="mt-5 rounded-md border border-[var(--accent-soft)] bg-[var(--accent-soft)] p-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Your lanes right now</p>
+          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+            From your latest network analysis. Each one carries the question CIP thinks is most worth asking first.
+          </p>
+          <div class="mt-3 grid gap-3 md:grid-cols-3">
+            {personalLanes.map((lane) => (
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <div class="flex items-start justify-between gap-2">
+                  <h3 class="text-sm font-semibold">{lane.name}</h3>
+                  <span class="shrink-0 rounded-full bg-[var(--brass-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]">{lane.status}</span>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{lane.recommendedAsk}</p>
+                {lane.missingEvidence && (
+                  <p class="mt-2 text-xs leading-5 text-[var(--warning)]">Still missing: {lane.missingEvidence}</p>
+                )}
+                {lane.namedPeople.length > 0 && (
+                  <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Named contacts: {lane.namedPeople.join(", ")}</p>
+                )}
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Five ground rules</p>
+        <ol class="mt-2 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
+          {conversationGroundRules.map((rule) => (
+            <li class="flex gap-2">
+              <span class="text-[var(--brass)]" aria-hidden="true">&bull;</span>
+              <span>{rule}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        {conversationOpeners.map((group) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex items-baseline justify-between gap-2">
+              <h3 class="font-semibold">{group.intent}</h3>
+            </div>
+            <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{group.when}</p>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {group.openers.map((line) => (
+                <li class="flex gap-2">
+                  <Icon name="spark" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-strong)]" strokeWidth={2} />
+                  <span>&ldquo;{line}&rdquo;</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+
+      <p class="mt-5 text-xs leading-5 text-[var(--muted)]">
+        After each conversation, capture what was confirmed or weakened on the follow-up page. Confirmed lanes, rejected lanes, salary evidence, new employers, and new names all feed the next analysis pass.
+      </p>
     </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">

@@ -9,7 +9,7 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "../styles/global.css";
-import StepNav from "../components/StepNav.astro";
+import TopNav from "../components/TopNav.astro";
 import { createServer } from "../lib/supabase/server";
 
 interface Props {
@@ -50,30 +50,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     </script>
   </head>
   <body class="min-h-full flex flex-col">
-    <div class="border-b border-[var(--line)] bg-[var(--background)]">
-      <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-2.5 text-sm">
-        <a href="/" class="flex items-baseline gap-2">
-          <span class="text-base font-semibold text-[var(--accent-strong)]" style="font-family: var(--headline-font);">Career Intelligence Platform</span>
-        </a>
-        {signedInEmail ? (
-          <div class="flex flex-wrap items-center gap-3">
-            <span class="text-[var(--muted)]">
-              Signed in as <span class="font-semibold text-[var(--foreground)]">{signedInEmail}</span>
-            </span>
-            <form hx-post="/api/auth/logout" hx-swap="none">
-              <button class="rounded-md border border-[var(--line)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10" type="submit">
-                Sign out
-              </button>
-            </form>
-          </div>
-        ) : (
-          <a class="rounded-md border border-[var(--line)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10" href="/login">
-            Sign in
-          </a>
-        )}
-      </div>
-    </div>
-    <StepNav />
+    <TopNav signedInEmail={signedInEmail} />
     <slot />
     <div class="cip-route-loader" data-asset-route-loader hidden role="status" aria-live="polite" aria-label="Preparing career assets">
       <div class="cip-route-loader-panel">

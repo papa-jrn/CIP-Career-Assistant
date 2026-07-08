@@ -1,0 +1,78 @@
+---
+import { navItems } from "../lib/cip/data";
+interface Props {
+  signedInEmail?: string;
+}
+
+const { signedInEmail = "" } = Astro.props;
+const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
+
+// Build the Process dropdown straight from navItems (single source of truth)
+// so the nav can never drift from the canonical step order/labels again.
+// Excludes Workbench (its own top-level link) and Report (its own link).
+const processItems = navItems.filter((item) => item.href !== "/" && item.href !== "/report" && item.href !== "/workbench");
+
+const isCurrent = (href: string) => currentPath === href;
+const isProcessCurrent = processItems.some((item) => isCurrent(item.href));
+---
+
+<header class="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--background)_94%,transparent)] backdrop-blur">
+  <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+    <a href="/" class="flex min-w-0 items-baseline gap-2">
+      <span class="truncate text-base font-semibold text-[var(--accent-strong)]" style="font-family: var(--headline-font);">
+        Career Intelligence Platform
+      </span>
+    </a>
+
+    <nav class="flex flex-wrap items-center gap-1" aria-label="Primary navigation">
+      <a class:list={["cip-top-nav-link", isCurrent("/") ? "cip-top-nav-link-active" : ""]} href="/">Home</a>
+      <a class:list={["cip-top-nav-link", isCurrent("/workbench") ? "cip-top-nav-link-active" : ""]} href="/workbench">Workbench</a>
+
+      <details class="cip-nav-menu">
+        <summary class:list={["cip-top-nav-link", isProcessCurrent ? "cip-top-nav-link-active" : ""]}>
+          Process
+          <span aria-hidden="true" class="text-xs">v</span>
+        </summary>
+        <div class="cip-nav-menu-panel">
+          {processItems.map((item, index) => (
+            <a
+              href={item.href}
+              aria-current={isCurrent(item.href) ? "page" : undefined}
+              class:list={["cip-nav-menu-item", isCurrent(item.href) ? "cip-nav-menu-item-active" : ""]}
+            >
+              <span class="cip-nav-menu-step">{item.step ?? index + 1}</span>
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </div>
+      </details>
+
+      <a class:list={["cip-top-nav-link", isCurrent("/report") ? "cip-top-nav-link-active" : ""]} href="/report">Report</a>
+      <a class:list={["cip-top-nav-link", isCurrent("/contact") ? "cip-top-nav-link-active" : ""]} href="/contact">Contact</a>
+    </nav>
+
+    <div class="flex items-center gap-2">
+      {signedInEmail ? (
+        <details class="cip-nav-menu cip-account-menu">
+          <summary class="cip-top-nav-link cip-account-summary">
+            Account
+            <span aria-hidden="true" class="text-xs">v</span>
+          </summary>
+          <div class="cip-nav-menu-panel cip-account-panel">
+            <p class="px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+              Signed in as <span class="font-semibold text-[var(--foreground)]">{signedInEmail}</span>
+            </p>
+            <a href="/account" class="cip-nav-menu-item">Account info</a>
+            <form hx-post="/api/auth/logout" hx-swap="none">
+              <button class="cip-nav-menu-item w-full text-left" type="submit">Sign out</button>
+            </form>
+          </div>
+        </details>
+      ) : (
+        <a class="cip-fancy-button px-3 py-1.5 text-sm" href="/login">
+          <span>Sign in</span>
+        </a>
+      )}
+    </div>
+  </div>
+</header>

@@ -125,6 +125,111 @@ nav a {
   font-family: var(--body-font);
 }
 
+.cip-top-nav-link {
+  align-items: center;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: inline-flex;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.7rem;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.cip-top-nav-link:hover,
+.cip-top-nav-link-active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+
+.cip-nav-menu {
+  position: relative;
+}
+
+.cip-nav-menu summary {
+  list-style: none;
+}
+
+.cip-nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.cip-nav-menu-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lift);
+  display: grid;
+  gap: 0.15rem;
+  left: 0;
+  min-width: 13rem;
+  padding: 0.35rem;
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  z-index: 60;
+}
+
+.cip-nav-menu:not([open]) .cip-nav-menu-panel {
+  display: none;
+}
+
+.cip-nav-menu-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  display: flex;
+  font-family: var(--body-font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  gap: 0.55rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.65rem;
+  text-decoration: none;
+}
+
+.cip-nav-menu-item:hover,
+.cip-nav-menu-item-active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.cip-nav-menu-step {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  height: 1.35rem;
+  justify-content: center;
+  width: 1.35rem;
+}
+
+.cip-nav-menu-item-active .cip-nav-menu-step,
+.cip-nav-menu-item:hover .cip-nav-menu-step {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+
+.cip-account-panel {
+  left: auto;
+  right: 0;
+  width: min(18rem, calc(100vw - 2rem));
+}
+
+@media (max-width: 720px) {
+  .cip-nav-menu-panel {
+    left: auto;
+    right: 0;
+  }
+}
+
 button,
 input,
 textarea,

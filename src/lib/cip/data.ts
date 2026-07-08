@@ -9,66 +9,79 @@ export interface NavStep {
   cycle?: boolean;
   /** Icon name (see src/components/Icon.astro). Optional. */
   icon?: string;
+  /** One-line outcome shown on the Workbench "How CIP works" infographic. */
+  blurb?: string;
 }
 
 export const navItems: NavStep[] = [
   { href: "/", label: "Workbench", icon: "workbench" },
-  { href: "/intake", label: "Intake", step: 1, icon: "intake" },
-  { href: "/evidence", label: "Evidence", step: 2, icon: "evidence" },
-  { href: "/assets", label: "Assets", step: 3, icon: "assets" },
-  { href: "/network", label: "Network", step: 4, cycle: true, icon: "network" },
-  { href: "/follow-up", label: "Follow Up", step: 5, cycle: true, icon: "followup" },
-  { href: "/employers", label: "Employers", step: 6, cycle: true, icon: "employers" },
-  { href: "/opportunities", label: "Opportunities", step: 7, cycle: true, icon: "opportunities" },
-  { href: "/briefing", label: "Briefing", step: 8, cycle: true, icon: "briefing" },
-  { href: "/report", label: "Report", step: 9, icon: "report" },
-];
-
-export const pathwaySteps = [
   {
-    step: "01",
-    title: "Turn analysis into career assets",
-    outcome: "Update the resume, LinkedIn profile, portfolio notes, and interview stories from verified evidence.",
-    detail:
-      "Start here when the analysis is solid. The user needs usable public-facing language before outreach or applications scale up.",
+    href: "/intake",
+    label: "Intake",
+    step: 1,
+    icon: "intake",
+    blurb: "Capture the career story, constraints, target pay, work model, and proof sources.",
+  },
+  {
+    href: "/evidence",
+    label: "Evidence",
+    step: 2,
+    icon: "evidence",
+    blurb: "Separate verified claims, user-supplied context, inferred strengths, and gaps.",
+  },
+  {
     href: "/assets",
-    cta: "Prepare assets",
+    label: "Career Lanes",
+    step: 3,
+    icon: "assets",
+    blurb: "Turn verified evidence into resume, LinkedIn, portfolio, and outreach language.",
   },
   {
-    step: "02",
-    title: "Define ideal work, then map network",
-    outcome: "Combine LinkedIn/profile data with work preferences, compensation needs, and stretch goals before ranking warm paths.",
-    detail:
-      "Relationship data should be interpreted through the user's desired workplace, role, pay floor, remote/hybrid needs, dealbreakers, and learning goals.",
     href: "/network",
-    cta: "Map network",
+    label: "Network",
+    step: 4,
+    cycle: true,
+    icon: "network",
+    blurb: "Map advisors and warm connections against the ideal-work profile.",
   },
   {
-    step: "03",
-    title: "Review and work warm introductions",
-    outcome: "Turn AI-suggested and user-added people into a human-reviewed follow-up queue.",
-    detail:
-      "Mark who to use now, park, remove, or revisit; capture conversation status, reasons, market signals, new leads, and next actions.",
     href: "/follow-up",
-    cta: "Work follow-ups",
+    label: "Follow Up",
+    step: 5,
+    cycle: true,
+    icon: "followup",
+    blurb: "Human-review the queue: use now, park, revisit, or remove.",
   },
   {
-    step: "04",
-    title: "Find employers by fit",
-    outcome: "Search local, regional, remote-first, and national employers that match the ideal work profile.",
-    detail:
-      "Geography is a user-selected constraint, not the default cage. Local anchors need compensation and seniority evidence before becoming priorities.",
     href: "/employers",
-    cta: "Find businesses",
+    label: "Employers",
+    step: 6,
+    cycle: true,
+    icon: "employers",
+    blurb: "Research organizations that fit the lane, geography, and work preferences.",
   },
   {
-    step: "05",
-    title: "Choose job-board search lanes",
-    outcome: "Translate the profile into specific LinkedIn, Indeed, Monster, Greenhouse, Lever, and company-careers searches.",
-    detail:
-      "The goal is not one generic keyword search. The app should produce role families, filters, exclusion terms, and review rules.",
     href: "/opportunities",
-    cta: "Research roles",
+    label: "Opportunities",
+    step: 7,
+    cycle: true,
+    icon: "opportunities",
+    blurb: "Translate the profile into role families, filters, and review rules.",
+  },
+  {
+    href: "/briefing",
+    label: "Briefing",
+    step: 8,
+    cycle: true,
+    icon: "briefing",
+    blurb: "Summarize what was learned and feed it back into the next pass.",
+  },
+  {
+    href: "/report",
+    label: "Report",
+    step: 9,
+    icon: "report",
+    blurb: "Generate a fresh, evidence-backed report each pass.",
   },
 ];
 
@@ -79,13 +92,6 @@ export const intakeQuestions = [
   "Which industries feel energizing, and which ones are hard no's?",
   "What public evidence can we inspect: LinkedIn, GitHub, portfolio, talks, writing, or projects?",
   "What claims are verified, inferred, or aspirational?",
-];
-
-export const profileSignals = [
-  { label: "Leadership", value: "High", detail: "Founder/operator background, cross-functional communication, systems building." },
-  { label: "Technical Trajectory", value: "Growing", detail: "AI-enabled product work, modern development workflow, applied experimentation." },
-  { label: "Narrative Edge", value: "Strong", detail: "Media, communications, community systems, and strategic positioning." },
-  { label: "Target Path", value: "$120K+", detail: "Remote or hybrid roles with AI operations, product, customer intelligence, or enablement scope." },
 ];
 
 export const opportunities = [

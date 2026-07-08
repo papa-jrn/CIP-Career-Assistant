@@ -6,6 +6,7 @@ import {
   saveBusinessSearchResult,
 } from "@/lib/cip/business-search-engine";
 import { loadLatestIntake } from "@/lib/cip/profile";
+import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -43,6 +44,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   if (!geography) {
     return html('<p class="text-sm text-red-700">Enter a geography before running business search.</p>', 400);
+  }
+
+  if (!user) {
+    const limit = checkRateLimit({
+      key: clientRateLimitKey(request, "anonymous:employer-discovery"),
+      limit: 3,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return rateLimitedHtml("Too many public employer searches. Sign in or try again in a few minutes.", limit);
+    }
   }
 
   const searchInput = { geography, radiusMiles, sectors, minimumSize };

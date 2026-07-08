@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
 import { scoreOpportunity } from "@/lib/cip/labor-market";
+import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { searchRemoteJobs, type RemoteJob, type RemoteSourceStatus } from "@/lib/cip/remote-jobs";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
@@ -22,6 +23,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   let intake: Partial<IntakeForm> | null = null;
+  let signedIn = false;
   if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
     try {
       const supabase = createServer(cookies);
@@ -29,6 +31,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        signedIn = true;
         const { data } = await supabase
           .from("career_sources")
           .select("extracted_text")
@@ -41,6 +44,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
     } catch {
       // Personalization is optional; fall back to relevance-only ranking.
+    }
+  }
+
+  if (!signedIn) {
+    const limit = checkRateLimit({
+      key: clientRateLimitKey(request, "anonymous:remote-jobs"),
+      limit: 10,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return rateLimitedHtml("Too many public job searches. Sign in or try again in a few minutes.", limit);
     }
   }
 
