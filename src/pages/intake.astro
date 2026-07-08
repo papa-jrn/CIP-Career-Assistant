@@ -5,6 +5,7 @@ import { createServer } from "../lib/supabase/server";
 
 let savedIntake: Partial<IntakeForm> | null = null;
 let savedAt: string | null = null;
+let savedTrustState = "";
 let signedInEmail = "";
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
@@ -18,7 +19,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       signedInEmail = user.email ?? "";
       const { data } = await supabase
         .from("career_sources")
-        .select("extracted_text, created_at")
+        .select("extracted_text, created_at, trust_state")
         .eq("user_id", user.id)
         .eq("source_type", "resume_intake")
         .order("created_at", { ascending: false })
@@ -29,6 +30,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         const parsed = JSON.parse(data.extracted_text);
         savedIntake = parsed?.intake ?? null;
         savedAt = data.created_at ?? null;
+        savedTrustState = data.trust_state ?? "";
       }
     }
   } catch {
@@ -40,6 +42,13 @@ const savedWorkModes = new Set(savedIntake?.work_modes ?? []);
 const advisorModeLabel = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
   ? "OpenAI advisor analysis is enabled."
   : "The first pass uses deterministic extraction; add OPENAI_API_KEY for AI advisor analysis.";
+
+// Resume-from-draft: if the newest intake is a draft, jump the user to the step
+// they left off at. Step 1 = no resume yet; Step 2 = resume present but not yet
+// analyzed; otherwise (complete or no save) start at Step 1.
+const isDraft = savedTrustState === "draft";
+const hasResumeText = Boolean(savedIntake?.resume_text && savedIntake.resume_text.trim().length >= 40);
+const initialStep = isDraft ? (hasResumeText ? 3 : 2) : 1;
 
 function fieldValue(name: keyof IntakeForm) {
   return savedIntake?.[name] ?? "";
@@ -74,10 +83,32 @@ function fieldValue(name: keyof IntakeForm) {
     </section>
     <div class="grid gap-6 lg:grid-cols-[0.9fr_0.55fr]">
       <section class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-        <div id="intake-save-status" class="mb-2">
-          {savedIntake ? (
+        <!-- Step indicator -->
+        <ol class="flex items-center gap-2 text-xs font-semibold" data-step-indicator>
+          <li class="flex items-center gap-2" data-indicator-step="1">
+            <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[var(--accent-strong)] bg-[var(--accent-soft)] text-[var(--accent-strong)]">1</span>
+            <span class="text-[var(--accent-strong)]">About you</span>
+          </li>
+          <span class="h-px w-6 bg-[var(--line)]"></span>
+          <li class="flex items-center gap-2" data-indicator-step="2">
+            <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[var(--line)] text-[var(--muted)]">2</span>
+            <span class="text-[var(--muted)]">Work history</span>
+          </li>
+          <span class="h-px w-6 bg-[var(--line)]"></span>
+          <li class="flex items-center gap-2" data-indicator-step="3">
+            <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[var(--line)] text-[var(--muted)]">3</span>
+            <span class="text-[var(--muted)]">Review</span>
+          </li>
+        </ol>
+
+        <div id="intake-save-status" class="mt-4">
+          {savedIntake && !isDraft ? (
             <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
               Loaded your latest saved intake{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}{signedInEmail ? ` for ${signedInEmail}` : ""}.
+            </p>
+          ) : isDraft ? (
+            <p class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)]">
+              Picking up your draft{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}. You're on step {initialStep} of 3.
             </p>
           ) : (
             <p class="rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-sm font-semibold text-[var(--muted)]">
@@ -86,99 +117,174 @@ function fieldValue(name: keyof IntakeForm) {
           )}
         </div>
 
+        <!-- The form wraps all 3 steps. Only the final submit (Step 3) fires the
+             htmx POST to /api/intake/save. Steps 1 and 2 advance via plain JS
+             and autosave drafts via fetch to /api/intake/draft. -->
         <form
           id="intake-form"
-          class="mt-8 grid gap-5"
+          class="mt-6 grid gap-5"
           hx-post="/api/intake/save"
           hx-target="#intake-result"
           hx-swap="innerHTML"
           hx-indicator="#intake-loading"
+          data-initial-step={initialStep}
         >
-          <div class="grid gap-5 md:grid-cols-2">
-            <label class="grid gap-2">
-              <span class="text-sm font-semibold">Full name</span>
-              <input name="full_name" value={fieldValue("full_name")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
-            </label>
-            <label class="grid gap-2">
-              <span class="text-sm font-semibold">Target title or direction</span>
-              <input name="target_title" value={fieldValue("target_title")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
-            </label>
-          </div>
+          <!-- ============ STEP 1: ABOUT YOU (the easy-in) ============ -->
+          <fieldset class="grid gap-5" data-step="1" hidden={initialStep !== 1}>
+            <div>
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 1 of 3</p>
+              <h2 class="mt-1 text-2xl font-semibold">Tell us about you.</h2>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                A few quick questions to start. These give the analysis context a resume can't — what energizes you, what you're aiming for, and where the boundaries are. Rough notes are fine.
+              </p>
+            </div>
 
-          <div class="grid gap-5 md:grid-cols-2">
-            <label class="grid gap-2">
-              <span class="text-sm font-semibold">Email</span>
-              <input name="email" type="email" value={fieldValue("email") || signedInEmail} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional for now" />
-            </label>
-            <label class="grid gap-2">
-              <span class="text-sm font-semibold">Salary target</span>
-              <input name="salary_target" value={fieldValue("salary_target")} type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
-            </label>
-          </div>
+            <div class="grid gap-5 md:grid-cols-2">
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Target title or direction</span>
+                <input name="target_title" value={fieldValue("target_title")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
+              </label>
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Salary target</span>
+                <input name="salary_target" value={fieldValue("salary_target")} type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
+              </label>
+            </div>
 
-          <fieldset class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <legend class="px-1 text-sm font-semibold">Preferred work model</legend>
-            <div class="mt-3 flex flex-wrap gap-3">
-              {["Remote", "Hybrid", "On-site", "Flexible"].map((mode) => (
-                <label class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">
-                  <input class="h-4 w-4 accent-[var(--accent)]" type="checkbox" name="work_modes" value={mode.toLowerCase()} checked={savedWorkModes.has(mode.toLowerCase())} />
-                  <span>{mode}</span>
+            <fieldset class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <legend class="px-1 text-sm font-semibold">Preferred work model</legend>
+              <div class="mt-3 flex flex-wrap gap-3">
+                {["Remote", "Hybrid", "On-site", "Flexible"].map((mode) => (
+                  <label class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">
+                    <input class="h-4 w-4 accent-[var(--accent)]" type="checkbox" name="work_modes" value={mode.toLowerCase()} checked={savedWorkModes.has(mode.toLowerCase())} />
+                    <span>{mode}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div class="grid gap-4">
+              {intakeQuestionFields.map((field) => (
+                <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                  <span class="text-sm font-semibold">{field.label}</span>
+                  <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}>{fieldValue(field.name)}</textarea>
                 </label>
               ))}
             </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="cip-fancy-button" type="button" data-advance-step>
+                <span>Continue to work history</span>
+              </button>
+              <span class="text-xs text-[var(--muted)]" data-draft-status>Your answers save automatically when you're signed in.</span>
+            </div>
           </fieldset>
 
-          <label class="grid gap-2">
-            <span class="text-sm font-semibold">Resume or work history</span>
-            <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste resume text, verified accomplishments, work history, or a detailed career note.">{fieldValue("resume_text")}</textarea>
-          </label>
+          <!-- ============ STEP 2: WORK HISTORY ============ -->
+          <fieldset class="grid gap-5" data-step="2" hidden={initialStep !== 2}>
+            <div>
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2 of 3</p>
+              <h2 class="mt-1 text-2xl font-semibold">Your work history.</h2>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                Whatever you have — a resume, a few bullets about past roles, or a quick note about what you've done. This is the evidence the analysis engine reads to separate verified claims from hypotheses.
+              </p>
+            </div>
 
-          <div class="grid gap-5 md:grid-cols-2">
             <label class="grid gap-2">
-              <span class="text-sm font-semibold">LinkedIn URL</span>
-              <input name="linkedin_url" value={fieldValue("linkedin_url")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+              <span class="text-sm font-semibold">Resume or work history</span>
+              <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste a resume, a few bullets about past roles, or a quick note about what you've done. Keep it honest — the analysis will tell apart proven facts from guesses.">{fieldValue("resume_text")}</textarea>
+              <span class="text-xs text-[var(--muted)]">Minimum ~40 characters. A few sentences about your most recent role is enough to start.</span>
             </label>
-            <label class="grid gap-2">
-              <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
-              <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine.">{fieldValue("portfolio_urls")}</textarea>
-            </label>
-          </div>
 
-          <div class="grid gap-4">
-            {intakeQuestionFields.map((field) => (
-              <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-                <span class="text-sm font-semibold">{field.label}</span>
-                <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}>{fieldValue(field.name)}</textarea>
+            <div class="grid gap-5 md:grid-cols-2">
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Full name</span>
+                <input name="full_name" value={fieldValue("full_name")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
               </label>
-            ))}
-          </div>
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Email</span>
+                <input name="email" type="email" value={fieldValue("email") || signedInEmail} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
+              </label>
+            </div>
 
-          <div class="flex flex-wrap items-center gap-3">
-            <button class="cip-fancy-button" type="submit" data-intake-submit>
-              <span data-ready-label>Save and analyze intake</span>
-              <span data-busy-label hidden>Analyzing intake...</span>
-            </button>
-            <span class="text-sm text-[var(--muted)]">{advisorModeLabel}</span>
-          </div>
-          <div id="intake-loading" class="htmx-indicator cip-thinking-panel" role="status" aria-live="polite">
-            <div class="cip-thinking-orbit" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
+            <div class="grid gap-5 md:grid-cols-2">
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">LinkedIn URL</span>
+                <input name="linkedin_url" value={fieldValue("linkedin_url")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+              </label>
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
+                <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine.">{fieldValue("portfolio_urls")}</textarea>
+              </label>
             </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Analysis in progress</p>
-              <div class="cip-thinking-lines" aria-hidden="true">
-                <span>Reading resume evidence and work history...</span>
-                <span>Separating verified facts from career hypotheses...</span>
-                <span>Building the evidence ledger and safety notes...</span>
-                <span>Finding underused strengths and exploration lanes...</span>
-                <span>Saving the intake and refreshing the identity graph...</span>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-back-step>
+                <span>Back</span>
+              </button>
+              <button class="cip-fancy-button" type="button" data-advance-step>
+                <span>Continue to review</span>
+              </button>
+              <span class="text-xs text-[var(--muted)]" data-draft-status></span>
+            </div>
+          </fieldset>
+
+          <!-- ============ STEP 3: REVIEW AND ANALYZE ============ -->
+          <fieldset class="grid gap-5" data-step="3" hidden={initialStep !== 3}>
+            <div>
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 3 of 3</p>
+              <h2 class="mt-1 text-2xl font-semibold">Review and analyze.</h2>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                Here's everything you've entered. When you're ready, the analysis engine will read your work history and answers, separate verified claims from hypotheses, and build the career model. This usually takes 15-30 seconds.
+              </p>
+            </div>
+
+            <!-- Live summary mirrors the entered values into read-only cards so the
+                 user sees the whole picture once before committing. Populated by JS. -->
+            <div class="grid gap-4" data-review-summary>
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <h3 class="text-sm font-semibold">Target &amp; preferences</h3>
+                <dl class="mt-3 grid gap-2 text-sm leading-6 text-[var(--muted)]" data-review-target></dl>
+              </article>
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <h3 class="text-sm font-semibold">Your answers</h3>
+                <dl class="mt-3 grid gap-3 text-sm leading-6 text-[var(--muted)]" data-review-answers></dl>
+              </article>
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <h3 class="text-sm font-semibold">Work history</h3>
+                <p class="mt-3 whitespace-pre-line text-sm leading-6 text-[var(--muted)]" data-review-resume></p>
+              </article>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="cip-fancy-button cip-fancy-button-secondary" type="button" data-back-step>
+                <span>Back</span>
+              </button>
+              <button class="cip-fancy-button" type="submit" data-intake-submit>
+                <span data-ready-label>Save and analyze intake</span>
+                <span data-busy-label hidden>Analyzing intake...</span>
+              </button>
+              <span class="text-sm text-[var(--muted)]">{advisorModeLabel}</span>
+            </div>
+            <div id="intake-loading" class="htmx-indicator cip-thinking-panel" role="status" aria-live="polite">
+              <div class="cip-thinking-orbit" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
               </div>
-              <p class="sr-only">Analyzing intake, updating the identity graph, and building advisor notes.</p>
-              <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Analysis in progress</p>
+                <div class="cip-thinking-lines" aria-hidden="true">
+                  <span>Reading resume evidence and work history...</span>
+                  <span>Separating verified facts from career hypotheses...</span>
+                  <span>Building the evidence ledger and safety notes...</span>
+                  <span>Finding underused strengths and exploration lanes...</span>
+                  <span>Saving the intake and refreshing the identity graph...</span>
+                </div>
+                <p class="sr-only">Analyzing intake, updating the identity graph, and building advisor notes.</p>
+                <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+              </div>
             </div>
-          </div>
+          </fieldset>
         </form>
       </section>
 
@@ -197,39 +303,191 @@ function fieldValue(name: keyof IntakeForm) {
   </main>
 
   <script>
-    const intakeForm = document.querySelector("#intake-form");
-    const submitButton = document.querySelector("[data-intake-submit]");
-    const readyLabel = document.querySelector("[data-ready-label]");
-    const busyLabel = document.querySelector("[data-busy-label]");
+    // Module script (deferred by default — runs after DOM parse, no
+    // DOMContentLoaded dance needed). Reads initialStep from the form's
+    // data attribute instead of define:vars to avoid is:inline quirks.
+    const form = document.getElementById("intake-form");
+    if (!form) {
+      console.error("[intake] #intake-form not found — step controller disabled.");
+    } else {
+      const initialStep = Number(form.dataset.initialStep) || 1;
 
-    function setIntakeBusy(isBusy) {
-      intakeForm?.setAttribute("aria-busy", String(isBusy));
-      if (submitButton instanceof HTMLButtonElement) {
-        submitButton.disabled = isBusy;
+      const stepFields = document.querySelectorAll("fieldset[data-step]");
+      const advanceButtons = document.querySelectorAll("[data-advance-step]");
+      const backButtons = document.querySelectorAll("[data-back-step]");
+      const draftStatusEls = document.querySelectorAll("[data-draft-status]");
+      const submitButton = document.querySelector("[data-intake-submit]");
+      const readyLabel = document.querySelector("[data-ready-label]");
+      const busyLabel = document.querySelector("[data-busy-label]");
+      const indicators = {
+        1: document.querySelector('[data-indicator-step="1"]'),
+        2: document.querySelector('[data-indicator-step="2"]'),
+        3: document.querySelector('[data-indicator-step="3"]'),
+      };
+
+      let currentStep = initialStep;
+
+      function showStep(step) {
+        currentStep = step;
+        stepFields.forEach((el) => {
+          const stepNum = Number(el.dataset.step);
+          el.hidden = stepNum !== step;
+        });
+        Object.entries(indicators).forEach(([num, li]) => {
+          if (!li) return;
+          const badge = li.querySelector("span:first-child");
+          const label = li.querySelector("span:last-child");
+          const isActive = Number(num) === step;
+          const isPast = Number(num) < step;
+          if (badge) {
+            badge.className = `flex h-6 w-6 items-center justify-center rounded-full border-2 ${
+              isActive || isPast
+                ? "border-[var(--accent-strong)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                : "border-[var(--line)] text-[var(--muted)]"
+            }`;
+          }
+          if (label) {
+            label.className = isActive ? "text-[var(--accent-strong)]" : "text-[var(--muted)]";
+          }
+        });
+        const formSection = document.getElementById("intake-form")?.closest("section");
+        formSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (step === 3) populateReview();
       }
-      if (readyLabel instanceof HTMLElement && busyLabel instanceof HTMLElement) {
-        readyLabel.hidden = isBusy;
-        busyLabel.hidden = !isBusy;
+
+      function collectFormData() {
+        const data = new FormData(form);
+        const obj = {};
+        for (const [key, value] of data.entries()) {
+          if (obj[key] !== undefined) {
+            if (!Array.isArray(obj[key])) obj[key] = [obj[key]];
+            obj[key].push(value);
+          } else {
+            obj[key] = value;
+          }
+        }
+        return obj;
       }
+
+      async function saveDraft() {
+        try {
+          const data = new FormData(form);
+          const response = await fetch("/api/intake/draft", { method: "POST", body: data });
+          const payload = await response.json();
+          if (payload.ok) {
+            setDraftStatus("Draft saved.", "ok");
+          } else if (payload.error === "Sign in to save your progress.") {
+            setDraftStatus("Sign in to save your draft automatically.", "muted");
+          } else {
+            setDraftStatus(payload.error || "Draft could not be saved.", "error");
+          }
+        } catch {
+          setDraftStatus("Draft could not be saved (network).", "error");
+        }
+      }
+
+      function setDraftStatus(message, tone) {
+        draftStatusEls.forEach((el) => {
+          el.textContent = message;
+          el.style.color = tone === "error" ? "#b91c1c" : tone === "ok" ? "var(--accent-strong)" : "";
+        });
+      }
+
+      function populateReview() {
+        const data = collectFormData();
+        const get = (key) => (typeof data[key] === "string" ? data[key] : "");
+        const workModes = Array.isArray(data.work_modes) ? data.work_modes : data.work_modes ? [data.work_modes] : [];
+
+        const targetLines = [];
+        if (get("target_title")) targetLines.push(["Target title", get("target_title")]);
+        if (get("salary_target")) targetLines.push(["Salary target", `$${Number(get("salary_target")).toLocaleString()}`]);
+        if (workModes.length) targetLines.push(["Work model", workModes.join(", ")]);
+        const targetDl = document.querySelector("[data-review-target]");
+        if (targetDl) {
+          targetDl.innerHTML = targetLines.length
+            ? targetLines.map(([k, v]) => `<dt class="text-xs font-semibold uppercase text-[var(--muted)]">${k}</dt><dd>${v}</dd>`).join("")
+            : '<p class="text-sm text-[var(--muted)]">No target or preferences entered.</p>';
+        }
+
+        const questionFields = [
+          ["hidden_achievements", "Achievements that never fit on a resume"],
+          ["energizing_problems", "Problems that make you lose track of time"],
+          ["career_constraints", "Salary, location, and work model"],
+          ["industry_preferences", "Industries that energize (and hard no's)"],
+          ["public_evidence", "Public evidence we can inspect"],
+          ["claim_boundaries", "Verified vs inferred vs aspirational claims"],
+        ];
+        const answersDl = document.querySelector("[data-review-answers]");
+        if (answersDl) {
+          const filled = questionFields.filter(([key]) => get(key).trim());
+          answersDl.innerHTML = filled.length
+            ? filled.map(([key, label]) => `<dt class="text-xs font-semibold uppercase text-[var(--muted)]">${label}</dt><dd class="whitespace-pre-line">${get(key)}</dd>`).join("")
+            : '<p class="text-sm text-[var(--muted)]">No answers entered yet — that\'s fine, the analysis will work with what you have.</p>';
+        }
+
+        const resumeEl = document.querySelector("[data-review-resume]");
+        if (resumeEl) {
+          const text = get("resume_text").trim();
+          resumeEl.textContent = text || "No work history entered yet. Go back to Step 2 to add some.";
+        }
+      }
+
+      advanceButtons.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          try {
+            const next = currentStep + 1;
+            if (next > 3) return;
+            if (currentStep === 2) {
+              const resume = form.querySelector('[name="resume_text"]');
+              if (resume && resume.value.trim().length < 40) {
+                setDraftStatus("Add a little work history (at least ~40 characters) before continuing.", "error");
+                resume.focus();
+                return;
+              }
+            }
+            btn.disabled = true;
+            await saveDraft();
+            btn.disabled = false;
+            showStep(next);
+          } catch (err) {
+            setDraftStatus("Something went wrong advancing: " + (err && err.message ? err.message : err), "error");
+            console.error("[intake] advance error:", err);
+            btn.disabled = false;
+          }
+        });
+      });
+
+      backButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          showStep(Math.max(1, currentStep - 1));
+        });
+      });
+
+      function setIntakeBusy(isBusy) {
+        form.setAttribute("aria-busy", String(isBusy));
+        if (submitButton instanceof HTMLButtonElement) submitButton.disabled = isBusy;
+        if (readyLabel instanceof HTMLElement && busyLabel instanceof HTMLElement) {
+          readyLabel.hidden = isBusy;
+          busyLabel.hidden = !isBusy;
+        }
+      }
+
+      document.body.addEventListener("htmx:beforeRequest", (event) => {
+        if (event.target === form) {
+          setIntakeBusy(true);
+          document.getElementById("intake-loading")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+      document.body.addEventListener("htmx:afterRequest", (event) => {
+        if (event.target === form) setIntakeBusy(false);
+      });
+      document.body.addEventListener("htmx:responseError", (event) => {
+        if (event.target === form) setIntakeBusy(false);
+      });
+
+      // Initialize: show the right step, populate review if landing on step 3.
+      showStep(initialStep);
+      console.log("[intake] step controller ready. steps:", stepFields.length, "advance btns:", advanceButtons.length, "initialStep:", initialStep);
     }
-
-    document.body.addEventListener("htmx:beforeRequest", (event) => {
-      if (event.target === intakeForm) {
-        setIntakeBusy(true);
-        document.querySelector("#intake-loading")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
-
-    document.body.addEventListener("htmx:afterRequest", (event) => {
-      if (event.target === intakeForm) {
-        setIntakeBusy(false);
-      }
-    });
-
-    document.body.addEventListener("htmx:responseError", (event) => {
-      if (event.target === intakeForm) {
-        setIntakeBusy(false);
-      }
-    });
   </script>
 </Layout>
