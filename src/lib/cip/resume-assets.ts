@@ -95,6 +95,7 @@ async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: st
     },
     body: JSON.stringify({
       model: import.meta.env.OPENAI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      max_output_tokens: 5000,
       input: [
         {
           role: "system",

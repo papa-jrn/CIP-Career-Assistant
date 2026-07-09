@@ -93,6 +93,7 @@ async function tryBuildAiAnalysis(
     },
     body: JSON.stringify({
       model: import.meta.env.OPENAI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      max_output_tokens: 8000,
       input: [
         {
           role: "system",

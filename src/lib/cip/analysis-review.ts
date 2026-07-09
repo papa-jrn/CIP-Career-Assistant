@@ -18,10 +18,15 @@ export interface AnalysisReview {
   answers: AnalysisReviewAnswer[];
 }
 
+// Max characters kept per strategic question. A question is a sentence, so
+// 500 is generous; capping bounds prompt size and token spend regardless of
+// what the user pastes in.
+const MAX_QUESTION_LENGTH = 500;
+
 export function parseStrategicQuestions(form: FormData) {
   return getText(form, "strategic_questions")
     .split(/\n+/)
-    .map((question) => question.trim())
+    .map((question) => question.trim().slice(0, MAX_QUESTION_LENGTH))
     .filter(Boolean)
     .slice(0, 6);
 }
@@ -67,6 +72,7 @@ async function tryBuildAiReview({
     },
     body: JSON.stringify({
       model: import.meta.env.OPENAI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      max_output_tokens: 5000,
       input: [
         {
           role: "system",
