@@ -13,6 +13,18 @@ export interface NetworkContact {
   notes: string;
 }
 
+// Import abuse limits: cap files per import, bytes per file, inflated bytes
+// per ZIP entry (zip-bomb defense - enforced DURING decompression), and
+// entries read per archive.
+const MAX_IMPORT_FILES = 10;
+const MAX_IMPORT_FILE_BYTES = 25_000_000;
+const MAX_ZIP_ENTRY_BYTES = 25_000_000;
+const MAX_ZIP_ENTRIES = 40;
+
+function looksLikeZip(bytes: Buffer) {
+  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+}
+
 export interface NetworkImportSummary {
   fileName: string;
   kind: "zip" | "csv" | "xlsx" | "txt" | "pdf" | "unsupported";
@@ -118,8 +130,32 @@ export async function parseNetworkImport(form: FormData) {
   const idealWorkProfile = parseIdealWorkProfile(form);
   const noteHints = parseRelationshipHints([notes, warmConnectionNotes, feedbackNotes].filter(Boolean).join("\n"));
 
+  let acceptedFiles = 0;
   for (const value of form.getAll("network_files")) {
     if (!(value instanceof File) || !value.name) continue;
+    if (acceptedFiles >= MAX_IMPORT_FILES) {
+      files.push({
+        fileName: value.name,
+        kind: "unsupported",
+        status: "skipped",
+        detail: `File limit reached (${MAX_IMPORT_FILES} per import). Upload this one in a separate import.`,
+        contactCount: 0,
+        rowCount: 0,
+      });
+      continue;
+    }
+    if (value.size > MAX_IMPORT_FILE_BYTES) {
+      files.push({
+        fileName: value.name,
+        kind: "unsupported",
+        status: "skipped",
+        detail: `File exceeds the ${Math.floor(MAX_IMPORT_FILE_BYTES / 1_000_000)} MB per-file limit.`,
+        contactCount: 0,
+        rowCount: 0,
+      });
+      continue;
+    }
+    acceptedFiles += 1;
     const parsed = await parseNetworkFile(value);
     contacts.push(...parsed.contacts);
     files.push(...parsed.files);
@@ -136,6 +172,7 @@ export async function parseNetworkImport(form: FormData) {
         ? "Parsed pasted contacts or notes into reviewable relationship records."
         : "Captured pasted notes but did not find contact-like rows.",
       contactCount: parsedNotes.length,
+      rowCount: 0,
     });
   }
 
@@ -150,6 +187,7 @@ export async function parseNetworkImport(form: FormData) {
         ? "Parsed user-added warm connections with links, relationship context, and conversation status."
         : "Captured warm connection rows but did not find reviewable people.",
       contactCount: parsedWarmConnections.length,
+      rowCount: 0,
     });
   }
 
@@ -215,6 +253,22 @@ async function parseNetworkFile(file: File) {
   const name = file.name;
   const lower = name.toLowerCase();
   const bytes = Buffer.from(await file.arrayBuffer());
+
+  // ZIP-based formats must actually start with the ZIP local-file-header
+  // magic ("PK"); extension alone is not proof of content.
+  if ((lower.endsWith(".zip") || lower.endsWith(".xlsx")) && !looksLikeZip(bytes)) {
+    return {
+      contacts: [],
+      files: [{
+        fileName: name,
+        kind: "unsupported" as const,
+        status: "skipped" as const,
+        detail: "File content does not match its extension (not a real ZIP/Excel file).",
+        contactCount: 0,
+        rowCount: 0,
+      }],
+    };
+  }
 
   if (lower.endsWith(".zip")) {
     const entries = readZipEntries(bytes);
@@ -1101,7 +1155,7 @@ export function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)
 
   const entries: Array<{ name: string; text: string; bytes: Buffer }> = [];
   let offset = 0;
-  while (offset < bytes.length - 30) {
+  while (offset < bytes.length - 30 && entries.length < MAX_ZIP_ENTRIES) {
     if (bytes.readUInt32LE(offset) !== 0x04034b50) {
       offset += 1;
       continue;
@@ -1109,7 +1163,6 @@ export function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)
 
     const method = bytes.readUInt16LE(offset + 8);
     const compressedSize = bytes.readUInt32LE(offset + 18);
-    const uncompressedSize = bytes.readUInt32LE(offset + 22);
     const nameLength = bytes.readUInt16LE(offset + 26);
     const extraLength = bytes.readUInt16LE(offset + 28);
     const name = bytes.subarray(offset + 30, offset + 30 + nameLength).toString("utf8");
@@ -1121,9 +1174,8 @@ export function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)
     }
 
     try {
-      const compressed = bytes.subarray(dataStart, dataEnd);
-      const content = method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : null;
-      if (content && content.length <= Math.max(uncompressedSize || 0, 25_000_000)) {
+      const content = inflateZipEntry(bytes.subarray(dataStart, dataEnd), method);
+      if (content) {
         entries.push({ name, text: content.toString("utf8"), bytes: Buffer.from(content) });
       }
     } catch {
@@ -1131,7 +1183,19 @@ export function readZipEntries(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)
     }
     offset = dataEnd;
   }
-  return entries.slice(0, 40);
+  return entries;
+}
+
+// Decompress a single ZIP entry with the output ceiling enforced DURING
+// inflation (maxOutputLength aborts mid-stream), so a zip bomb cannot
+// balloon in memory before any size check runs. The header's declared
+// uncompressed size is attacker-controlled and deliberately ignored.
+function inflateZipEntry(compressed: Buffer, method: number): Buffer | null {
+  if (method === 0) {
+    return compressed.length <= MAX_ZIP_ENTRY_BYTES ? compressed : null;
+  }
+  if (method !== 8) return null;
+  return inflateRawSync(compressed, { maxOutputLength: MAX_ZIP_ENTRY_BYTES });
 }
 
 function readZipEntriesFromCentralDirectory(bytes: Buffer, includePattern = /\.(csv|txt|xlsx)$/i) {
@@ -1144,12 +1208,11 @@ function readZipEntriesFromCentralDirectory(bytes: Buffer, includePattern = /\.(
   const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
   let offset = centralDirectoryOffset;
 
-  while (offset < centralDirectoryEnd && offset < bytes.length - 46) {
+  while (offset < centralDirectoryEnd && offset < bytes.length - 46 && entries.length < MAX_ZIP_ENTRIES) {
     if (bytes.readUInt32LE(offset) !== 0x02014b50) break;
 
     const method = bytes.readUInt16LE(offset + 10);
     const compressedSize = bytes.readUInt32LE(offset + 20);
-    const uncompressedSize = bytes.readUInt32LE(offset + 24);
     const nameLength = bytes.readUInt16LE(offset + 28);
     const extraLength = bytes.readUInt16LE(offset + 30);
     const commentLength = bytes.readUInt16LE(offset + 32);
@@ -1163,9 +1226,8 @@ function readZipEntriesFromCentralDirectory(bytes: Buffer, includePattern = /\.(
       const dataEnd = dataStart + compressedSize;
 
       try {
-        const compressed = bytes.subarray(dataStart, dataEnd);
-        const content = method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : null;
-        if (content && content.length <= Math.max(uncompressedSize || 0, 25_000_000)) {
+        const content = inflateZipEntry(bytes.subarray(dataStart, dataEnd), method);
+        if (content) {
           entries.push({ name, text: content.toString("utf8"), bytes: Buffer.from(content) });
         }
       } catch {
@@ -1176,7 +1238,7 @@ function readZipEntriesFromCentralDirectory(bytes: Buffer, includePattern = /\.(
     offset += 46 + nameLength + extraLength + commentLength;
   }
 
-  return entries.slice(0, 40);
+  return entries;
 }
 
 function findEndOfCentralDirectory(bytes: Buffer) {

@@ -17,6 +17,10 @@ type IntakeSource = {
   intake?: unknown;
 };
 
+// Upload ceiling for the whole multipart body. A full LinkedIn archive ZIP
+// is typically well under 10 MB; 25 MB leaves generous headroom.
+const MAX_UPLOAD_BYTES = 25_000_000;
+
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
     return html('<p class="text-sm text-red-700">Invalid request origin.</p>', 403);
@@ -30,6 +34,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   try {
+    // Authenticate BEFORE reading the request body: request.formData()
+    // buffers and parses the entire upload (including ZIP decompression
+    // downstream), which must never be spent on anonymous requests.
+    const supabase = createServer(cookies);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return html('<p class="text-sm font-semibold text-red-700">Sign in before importing network data.</p>', 401);
+    }
+
+    // Reject oversized uploads before buffering the body.
+    const contentLength = Number(request.headers.get("content-length") ?? "0");
+    if (contentLength > MAX_UPLOAD_BYTES) {
+      return html(`<p class="text-sm font-semibold text-red-700">Upload too large. Keep imports under ${Math.floor(MAX_UPLOAD_BYTES / 1_000_000)} MB - the LinkedIn Connections.csv alone is enough.</p>`, 413);
+    }
+
     const form = await request.formData();
     const parsedImport = await parseNetworkImport(form);
 
@@ -41,15 +63,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           ${renderImportSummary(parsedImport.files)}
         </div>
       `, 400);
-    }
-
-    const supabase = createServer(cookies);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return html('<p class="text-sm font-semibold text-red-700">Sign in before importing network data.</p>', 401);
     }
 
     const [
