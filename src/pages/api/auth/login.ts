@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getPublicEnv } from "@/lib/env";
+import { checkAuthEmailRateLimit, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -28,6 +29,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       status: 200,
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
+  }
+
+  // Throttle before triggering Supabase to send a magic-link email, so this
+  // endpoint cannot be used to mail-bomb an address or inflate email costs.
+  const limited = checkAuthEmailRateLimit(request, "auth-login", email);
+  if (limited) {
+    return rateLimitedHtml("Too many sign-in attempts. Wait a few minutes and try again.", limited);
   }
 
   const supabase = createServer(cookies);

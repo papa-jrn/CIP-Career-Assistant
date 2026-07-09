@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getPublicEnv } from "@/lib/env";
+import { checkAuthEmailRateLimit, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -19,6 +20,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const email = String(form.get("email") ?? "").trim();
   if (!email) {
     return html('<p class="text-sm text-red-600">Email is required.</p>');
+  }
+
+  // Throttle before triggering Supabase to send a reset email, so this
+  // endpoint cannot be used to mail-bomb an address or inflate email costs.
+  const limited = checkAuthEmailRateLimit(request, "auth-reset", email);
+  if (limited) {
+    return rateLimitedHtml("Too many password reset requests. Wait a few minutes and try again.", limited);
   }
 
   const supabase = createServer(cookies);

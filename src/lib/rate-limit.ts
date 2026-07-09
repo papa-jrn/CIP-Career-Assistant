@@ -56,6 +56,36 @@ export function checkRateLimit(options: RateLimitOptions): RateLimitResult {
   };
 }
 
+// Throttle an email-sending auth endpoint (magic link, password reset).
+// Guards two abuse shapes at once: bombing one address (per email+IP) and
+// one IP spraying many addresses (per IP). Returns the blocking result, or
+// null when the request is under both limits. `scope` distinguishes
+// endpoints (e.g. "auth-login" vs "auth-reset").
+export function checkAuthEmailRateLimit(
+  request: Request,
+  scope: string,
+  email: string,
+): RateLimitResult | null {
+  const normalizedEmail = email.trim().toLowerCase();
+  const windowMs = 60 * 60 * 1000; // 1 hour
+
+  const perEmail = checkRateLimit({
+    key: clientRateLimitKey(request, `${scope}:email:${normalizedEmail}`),
+    limit: 5,
+    windowMs,
+  });
+  if (!perEmail.allowed) return perEmail;
+
+  const perIp = checkRateLimit({
+    key: clientRateLimitKey(request, `${scope}:ip`),
+    limit: 20,
+    windowMs,
+  });
+  if (!perIp.allowed) return perIp;
+
+  return null;
+}
+
 export function rateLimitedHtml(message: string, result: RateLimitResult) {
   return new Response(`<p class="text-sm font-semibold text-red-700">${escapeHtml(message)}</p>`, {
     status: 429,
