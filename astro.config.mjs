@@ -10,7 +10,11 @@ export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),
   security: {
-    checkOrigin: false,
+    // Framework-level CSRF: Astro enforces the Origin header on form-style
+    // POST/PUT/PATCH/DELETE (multipart / x-www-form-urlencoded / text-plain).
+    // JSON webhooks (e.g. Stripe, signature-verified) are exempt. Per-route
+    // isSameOriginRequest() checks remain as a backstop.
+    checkOrigin: true,
   },
   devToolbar: {
     enabled: false,
