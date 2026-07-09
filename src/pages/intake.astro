@@ -393,6 +393,25 @@ function fieldValue(name: keyof IntakeForm) {
         });
       }
 
+      // Review values are raw user input, so they must never pass through an
+      // HTML parser (innerHTML) — build nodes and assign via textContent.
+      function reviewTerm(label, value, preLine) {
+        const dt = document.createElement("dt");
+        dt.className = "text-xs font-semibold uppercase text-[var(--muted)]";
+        dt.textContent = label;
+        const dd = document.createElement("dd");
+        if (preLine) dd.className = "whitespace-pre-line";
+        dd.textContent = value;
+        return [dt, dd];
+      }
+
+      function reviewEmptyNote(message) {
+        const p = document.createElement("p");
+        p.className = "text-sm text-[var(--muted)]";
+        p.textContent = message;
+        return p;
+      }
+
       function populateReview() {
         const data = collectFormData();
         const get = (key) => (typeof data[key] === "string" ? data[key] : "");
@@ -404,9 +423,11 @@ function fieldValue(name: keyof IntakeForm) {
         if (workModes.length) targetLines.push(["Work model", workModes.join(", ")]);
         const targetDl = document.querySelector("[data-review-target]");
         if (targetDl) {
-          targetDl.innerHTML = targetLines.length
-            ? targetLines.map(([k, v]) => `<dt class="text-xs font-semibold uppercase text-[var(--muted)]">${k}</dt><dd>${v}</dd>`).join("")
-            : '<p class="text-sm text-[var(--muted)]">No target or preferences entered.</p>';
+          targetDl.replaceChildren(
+            ...(targetLines.length
+              ? targetLines.flatMap(([k, v]) => reviewTerm(k, v, false))
+              : [reviewEmptyNote("No target or preferences entered.")]),
+          );
         }
 
         const questionFields = [
@@ -420,9 +441,11 @@ function fieldValue(name: keyof IntakeForm) {
         const answersDl = document.querySelector("[data-review-answers]");
         if (answersDl) {
           const filled = questionFields.filter(([key]) => get(key).trim());
-          answersDl.innerHTML = filled.length
-            ? filled.map(([key, label]) => `<dt class="text-xs font-semibold uppercase text-[var(--muted)]">${label}</dt><dd class="whitespace-pre-line">${get(key)}</dd>`).join("")
-            : '<p class="text-sm text-[var(--muted)]">No answers entered yet — that\'s fine, the analysis will work with what you have.</p>';
+          answersDl.replaceChildren(
+            ...(filled.length
+              ? filled.flatMap(([key, label]) => reviewTerm(label, get(key), true))
+              : [reviewEmptyNote("No answers entered yet — that's fine, the analysis will work with what you have.")]),
+          );
         }
 
         const resumeEl = document.querySelector("[data-review-resume]");
