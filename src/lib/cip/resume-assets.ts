@@ -113,6 +113,7 @@ async function tryBuildAiMasterResume(context: ResumeAssetContext, openAiKey: st
             },
             required_behavior: [
               "Synthesize across the full context; do not merely summarize advisor paragraphs.",
+              "selectedImpact must be polished resume-caliber accomplishment bullets rewritten for this lane. Never copy proofItems claim/evidence text, evidence answers, or intake phrasing verbatim - the evidence is source material written informally, not resume copy.",
               "Rewrite experience bullets around situation, action, scope, result, and proof.",
               "Keep real role chronology and recognizable user voice.",
               "De-emphasize old details that do not support the target lane.",

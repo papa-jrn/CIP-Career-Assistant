@@ -208,7 +208,7 @@ const resumeGuardrails = [
       </ol>
     </section>
 
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" id="resume-builder">
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" id="resume-builder" data-lane-drafts={laneDraftsJson}>
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Interactive builder</p>
@@ -356,12 +356,21 @@ const resumeGuardrails = [
     </section>
   </main>
 
-  <script is:inline define:vars={{ laneDraftsJson }}>
+  <script>
     // Per-lane resume state. Each lane holds its own draft and the editor
     // renders whichever lane is active. Switching tabs captures the current
     // editor back into the active lane's state before swapping. Edits to one
     // lane never bleed into another.
-    const laneDrafts = JSON.parse(laneDraftsJson);
+    //
+    // Module script (deferred by default — runs after DOM parse) reading the
+    // lane drafts from a data attribute instead of is:inline+define:vars,
+    // which was unreliable for element lookups (the lane-tab click listeners
+    // never attached because querySelectorAll ran before the DOM was ready).
+    const builderEl = document.getElementById("resume-builder");
+    const laneDrafts = builderEl ? JSON.parse(builderEl.dataset.laneDrafts || "[]") : [];
+    if (!laneDrafts.length) {
+      console.error("[assets] lane drafts not found — resume builder disabled.");
+    } else {
     let activeLaneRole = laneDrafts[0]?.laneRole ?? "";
 
     const draftKeyByField = {
@@ -463,43 +472,72 @@ const resumeGuardrails = [
       tab.addEventListener("click", () => setActiveLane(tab.dataset.laneTab));
     });
 
+    // Export buttons are locked while a generation is in flight so the
+    // worksheet can never be exported in the window where the user thinks
+    // the AI draft already landed.
+    const exportButtons = ["[data-export-doc]", "[data-export-rtf]", "[data-export-pdf]"]
+      .map((selector) => document.querySelector(selector))
+      .filter(Boolean);
+    let generationInFlight = false;
+
+    function setGenerationInFlight(inFlight) {
+      generationInFlight = inFlight;
+      if (generateButton) generateButton.disabled = inFlight;
+      exportButtons.forEach((button) => {
+        button.disabled = inFlight;
+      });
+    }
+
     generateButton?.addEventListener("click", async () => {
       captureActiveFromDom();
-      const active = activeDraft();
-      const hasEdits = active?.mode !== "ai";
-      const verb = active?.mode === "ai" ? "regenerate" : "replace";
-      if (hasEdits && !window.confirm(`Generating an AI resume for the "${active.laneLabel}" lane will ${verb} the current worksheet in the builder. Continue?`)) {
+      // Pin the requesting lane NOW. The user may switch lanes during the
+      // 15-30s round trip; the finished draft must land in this lane, not
+      // whichever lane happens to be active when the response arrives.
+      const requestLane = activeDraft();
+      if (!requestLane) return;
+      const hasEdits = requestLane.mode !== "ai";
+      if (hasEdits && !window.confirm(`Generating an AI resume for the "${requestLane.laneLabel}" lane will replace the current worksheet in the builder. Continue?`)) {
         return;
       }
 
-      generateButton.disabled = true;
-      showGenerateStatus(`Generating the AI resume for ${active?.laneLabel} (${active?.laneRole}). This usually takes 15-30 seconds...`, "working");
+      setGenerationInFlight(true);
+      showGenerateStatus(`Generating the AI resume for ${requestLane.laneLabel} (${requestLane.laneRole}). This usually takes 15-30 seconds... Exports are locked until it finishes.`, "working");
       try {
         const response = await fetch("/api/assets/resume-draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ laneRole: activeLaneRole }),
+          body: JSON.stringify({ laneRole: requestLane.laneRole }),
         });
         const payload = await response.json();
         if (!payload.ok || !payload.draft) {
-          showGenerateStatus(payload.error || "Draft generation failed.", "error");
+          showGenerateStatus(`${payload.error || "Draft generation failed."} The editor still shows the previous draft for ${requestLane.laneLabel} - nothing was replaced.`, "error");
           return;
         }
-        const lane = activeDraft();
-        lane.draft = payload.draft;
-        lane.mode = "ai";
-        lane.savedAt = payload.savedAt ?? null;
-        renderDraft(lane);
+        if (payload.laneRole && payload.laneRole !== requestLane.laneRole) {
+          // The server could not resolve the requested lane (target lanes
+          // changed since page load) and fell back to another one. Do not
+          // silently store a mismatched draft; ask the user to reload.
+          showGenerateStatus(`The server generated a draft for "${payload.laneRole}" instead of "${requestLane.laneRole}" - the target lanes have changed since this page loaded. Reload the page and try again.`, "error");
+          return;
+        }
+        requestLane.draft = payload.draft;
+        requestLane.mode = "ai";
+        requestLane.savedAt = payload.savedAt ?? null;
+        // Only re-render if the user is still on the lane that requested the
+        // draft; otherwise it is safely stored and shown on next tab switch.
+        if (activeLaneRole === requestLane.laneRole) {
+          renderDraft(requestLane);
+        }
         showGenerateStatus(
           payload.saveError
             ? `Draft generated, but saving failed: ${payload.saveError}`
-            : `AI resume generated and saved for ${active?.laneLabel}. Switch lanes to build the other variants.`,
+            : `AI resume generated and saved for ${requestLane.laneLabel}. Switch lanes to build the other variants.`,
           payload.saveError ? "error" : "ok",
         );
       } catch (error) {
-        showGenerateStatus(`Draft generation failed: ${error instanceof Error ? error.message : "network error"}`, "error");
+        showGenerateStatus(`Draft generation failed: ${error instanceof Error ? error.message : "network error"}. The editor still shows the previous draft - nothing was replaced.`, "error");
       } finally {
-        generateButton.disabled = false;
+        setGenerationInFlight(false);
       }
     });
 
@@ -512,6 +550,22 @@ const resumeGuardrails = [
 
     // Export the active lane's current state. Capture from DOM first so any
     // edits made since the last tab switch are included.
+    //
+    // Honesty guard: the deterministic worksheet is coaching scaffolding, not
+    // a resume - it contains instruction text ("This worksheet cannot safely
+    // rewrite the full resume..."). Never let it leave the app as a resume
+    // document without an explicit, informed confirmation.
+    function confirmExportIsReal() {
+      if (generationInFlight) return false;
+      const lane = activeDraft();
+      if (!lane || lane.mode === "ai") return true;
+      return window.confirm(
+        `No AI resume has been generated for the "${lane.laneLabel}" lane yet - the editor is showing the coaching worksheet. ` +
+        "The exported file will contain worksheet guidance text, not a finished resume. " +
+        "Use the Generate AI resume button first, or export anyway?",
+      );
+    }
+
     function exportFilename(ext) {
       const lane = activeDraft();
       const slug = String(lane?.laneLabel ?? "primary").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "primary";
@@ -519,6 +573,7 @@ const resumeGuardrails = [
     }
 
     document.querySelector("[data-export-doc]")?.addEventListener("click", () => {
+      if (!confirmExportIsReal()) return;
       captureActiveFromDom();
       const html = buildResumeHtml();
       downloadFile(
@@ -529,11 +584,13 @@ const resumeGuardrails = [
     });
 
     document.querySelector("[data-export-rtf]")?.addEventListener("click", () => {
+      if (!confirmExportIsReal()) return;
       captureActiveFromDom();
       downloadFile(exportFilename("rtf"), buildResumeRtf(), "application/rtf");
     });
 
     document.querySelector("[data-export-pdf]")?.addEventListener("click", () => {
+      if (!confirmExportIsReal()) return;
       captureActiveFromDom();
       const printWindow = window.open("", "_blank", "noopener,noreferrer");
       if (!printWindow) return;
@@ -755,5 +812,6 @@ const resumeGuardrails = [
 
     // Initialize the badge/label for the first lane on load.
     updateModeBadge(activeDraft());
+    } // end else (lane drafts present)
   </script>
 </Layout>
