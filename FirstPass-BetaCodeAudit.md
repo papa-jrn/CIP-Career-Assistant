@@ -6,6 +6,11 @@ Before I lay this out — I want to be honest about one thing: the Geoapify PUBL
 
 Here's the consolidated audit.
 
+2026-08-06 Codex follow-up:
+- Fixed before beta: SSRF-safe source fetching is now present; intake review uses textContent/replaceChildren; auth email endpoints are rate-limited; OpenAI calls have max_output_tokens; strategic questions are capped; network import authenticates before parsing and has file/ZIP limits.
+- Fixed in this pass: client-side password minimum now matches the expected 8-character Supabase Auth policy; /api/intake/save now requires a signed-in user before reading the form body or running AI analysis, and signed-in intake analysis is rate-limited.
+- Still on the beta punch list: re-enable Astro checkOrigin, harden upload limits for missing Content-Length/chunked clients, confirm Geoapify referrer restrictions, decide whether to genericize raw backend error messages, and verify the live Supabase Auth password minimum in the dashboard because it is not represented as a SQL migration in this repo.
+
 Pre-Beta Security Audit — Consolidated Findings
 The three audits agree strongly. Good news first: your RLS is solid (all 14 tables protected, auth.uid()-scoped), you use auth.getUser() everywhere (never getSession()), the service-role key is isolated, the Stripe webhook is genuinely well-hardened (signature + payment status + price pinning + identity binding), and your CSP/security headers are above average. IDOR checks out clean — every user-scoped query filters by user_id.
 

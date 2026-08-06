@@ -1,12 +1,46 @@
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, type AdvisorAnalysis } from "@/lib/cip/advisor";
 import { buildIdentityDraft, parseIntakeForm } from "@/lib/cip/intake";
+import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
     return html('<p class="text-sm text-red-700">Invalid request origin.</p>', 403);
+  }
+
+  const hasSupabaseEnv =
+    Boolean(import.meta.env.PUBLIC_SUPABASE_URL) &&
+    Boolean(import.meta.env.PUBLIC_SUPABASE_ANON_KEY);
+  const hasOpenAiKey = Boolean(import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+  const supabase = hasSupabaseEnv ? createServer(cookies) : null;
+  let userId: string | null = null;
+
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return html('<p class="text-sm font-semibold text-red-700">Sign in before running intake analysis.</p>', 401);
+    }
+
+    userId = user.id;
+
+    const limit = checkRateLimit({
+      key: clientRateLimitKey(request, `intake-analysis:user:${userId}`),
+      limit: 8,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return rateLimitedHtml("Too many intake analyses. Wait a bit before running another.", limit);
+    }
+  } else if (hasOpenAiKey) {
+    return html(
+      '<p class="text-sm font-semibold text-red-700">Sign-in must be configured before AI intake analysis can run.</p>',
+      503,
+    );
   }
 
   const parsed = parseIntakeForm(await request.formData());
@@ -18,7 +52,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const intake = parsed.data;
   const draft = buildIdentityDraft(intake);
   const advisor = await buildAdvisorAnalysis(intake, draft);
-  const persistence = await tryPersistIntake(intake, draft, advisor, cookies);
+  const persistence = await tryPersistIntake(intake, draft, advisor, supabase, userId);
 
   return html(renderIntakeResult(draft, advisor, persistence));
 };
@@ -32,27 +66,20 @@ async function tryPersistIntake(
   intake: ReturnType<typeof parseIntakeForm> extends { data: infer T } ? T : never,
   draft: ReturnType<typeof buildIdentityDraft>,
   advisor: AdvisorAnalysis,
-  cookies: Parameters<typeof createServer>[0],
+  supabase: ReturnType<typeof createServer> | null,
+  userId: string | null,
 ): Promise<PersistenceResult> {
-  if (
-    !import.meta.env.PUBLIC_SUPABASE_URL ||
-    !import.meta.env.PUBLIC_SUPABASE_ANON_KEY
-  ) {
+  if (!supabase) {
     return { state: "local" };
   }
 
   try {
-    const supabase = createServer(cookies);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return { state: "signin" };
+    if (!userId) return { state: "signin" };
 
     const { data: source, error: sourceError } = await supabase
       .from("career_sources")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         source_type: "resume_intake",
         title: intake.full_name ? `${intake.full_name} intake` : "Career intake",
         url: intake.linkedin_url || null,
@@ -67,7 +94,7 @@ async function tryPersistIntake(
     }
 
     const { error: profileError } = await supabase.from("career_profiles").insert({
-      user_id: user.id,
+      user_id: userId,
       salary_target: intake.salary_target ?? null,
       preferred_work_modes: intake.work_modes,
       preferred_industries: splitList(intake.industry_preferences),
