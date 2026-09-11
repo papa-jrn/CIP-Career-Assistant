@@ -74,8 +74,8 @@ bypasses RLS) and none of its queries filter by `user_id`, so it read every acco
 interleaved. Every app query filters by `user_id`, and the founder's own Evidence page reports
 his latest analysis as **2026-05-15 15:30Z** (5 saved runs) — exactly where the "Jennifer"
 analyses begin in the unfiltered output. The 5/18 "complete" analysis and the "Jennifer" profile
-therefore almost certainly belong to a second account on the project (confirm under
-Authentication → Users). The record counts above (43 evidence responses, 28 watched employers,
+belong to a second account on the project — confirmed by the founder 2026-09-11: a family
+member's test profile. The record counts above (43 evidence responses, 28 watched employers,
 10 network analyses) are likewise all-account totals; the founder's Evidence page shows 41
 evidence answers. The core diagnosis is unchanged for the founder's account: both conversation
 outcomes (6/15, 8/6) postdate his 5/15 analysis and were never processed until the smoke test.
@@ -136,9 +136,10 @@ that failed in August.
 ## Not yet done (per plan)
 
 - ~~Confirm DB phase values~~ — done 2026-09-11 (above).
-- ~~Decide single-person vs multi-profile account handling~~ — likely moot; the "stacking" was
-  the unscoped baseline script reading two accounts (see correction above). Confirm the second
-  account exists, then drop this gate.
+- ~~Decide single-person vs multi-profile account handling~~ — resolved 2026-09-11: the second
+  account is confirmed (a family member's test profile), so the "stacking" was the unscoped
+  baseline script reading two accounts (see correction above). Gate dropped; no multi-profile
+  work needed before Phase 2.
 - ~~Milestone 1 end-to-end proof~~ — passed on live data 2026-09-11 (see smoke test below).
 - Phase 2 (structured conversation outcomes), Phase 3 (propagation), Phase 4 (diff
   briefing), Phase 5 (de-founder pass), Phase 6 (wider test coverage).
@@ -197,6 +198,20 @@ Observed, not yet fixed:
 - The delta is prose-level. No lane or employer *ranking* moved, and follow-up obligations are
   not tracked — expected; that is Milestone 2 (Phase 2 structured outcomes, Phase 3
   propagation).
+
+## Product Signal — Resume Generation (founder-reported, 2026-09-11)
+
+The second account on the project was a family member's real job search, not a synthetic test.
+The part of CIP that delivered value there was **resume generation** — the drafts were good
+enough that it became what the app was actually used for. Implications for the plan:
+
+- Resume generation is the proven hook: the one feature a non-founder user has relied on.
+- It is already a Phase 3 propagation target ("resume lane recommendation"). Conversation
+  signals that move a lane should flag the matching resume draft for revision — the loop feeding
+  the feature people already trust.
+- That account is ready-made, real, non-founder data for the Phase 5 de-founder pass: re-run its
+  resume and analysis after the pass and confirm no founder assumptions (e.g. hardcoded
+  "Dartmouth" education parsing, founder-flavored fallback skills) leak into its output.
 
 ## Environment And Auth Changes (2026-09-11)
 
