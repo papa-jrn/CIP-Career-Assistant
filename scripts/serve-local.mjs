@@ -29,7 +29,10 @@ function run(command, args, options = {}) {
 }
 
 process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
-process.env.HOST ??= "127.0.0.1";
+// Bind "localhost" (not 127.0.0.1): PUBLIC_SITE_URL is http://localhost:4321 and
+// Astro's checkOrigin only accepts POSTs whose Origin matches that exact origin.
+// Serving under the same hostname removes the two-address lottery.
+process.env.HOST ??= "localhost";
 process.env.PORT ??= "4321";
 
 await run(npmCommand, ["run", "build"]);

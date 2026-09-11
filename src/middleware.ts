@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { defineMiddleware } from "astro:middleware";
+import { getTrustedSiteOrigin } from "./lib/security";
 
 // htmx is bundled locally and all page scripts are Astro-processed external
 // modules, so production needs no inline-script or CDN allowances. Dev keeps
@@ -34,6 +35,30 @@ const securityHeaders: Record<string, string> = {
 };
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  // Normalize the loopback host before anything else. Astro's checkOrigin does
+  // an exact Origin === request-URL-origin compare (re-enabled in commit
+  // 3a1805d), so a browser on http://127.0.0.1:4321 while PUBLIC_SITE_URL says
+  // http://localhost:4321 got a silent 403 on EVERY htmx POST — the Autumn
+  // 2026 "dead buttons" bug. GET/HEAD redirect to the trusted origin; other
+  // methods get an explicit explanation instead of a mystery 403.
+  const trustedOrigin = getTrustedSiteOrigin();
+  const trustedUrl = new URL(trustedOrigin);
+  if (trustedUrl.hostname === "localhost") {
+    const loopbackAlias = `127.0.0.1:${trustedUrl.port}`;
+    const hostHeader = context.request.headers.get("host") ?? "";
+    if (hostHeader === loopbackAlias) {
+      const requestUrl = new URL(context.request.url);
+      const normalized = `${trustedOrigin}${requestUrl.pathname}${requestUrl.search}`;
+      if (context.request.method === "GET" || context.request.method === "HEAD") {
+        return new Response(null, { status: 308, headers: { Location: normalized } });
+      }
+      return new Response(
+        `<!doctype html><html><body><h2>Open ${trustedOrigin}</h2><p>This app only accepts changes from <a href="${trustedOrigin}">${trustedOrigin}</a>, but this page was opened via http://${hostHeader}. Open ${normalized} and try again.</p></body></html>`,
+        { status: 403, headers: { "Content-Type": "text/html; charset=utf-8" } },
+      );
+    }
+  }
+
   const hasSupabaseEnv =
     Boolean(import.meta.env.PUBLIC_SUPABASE_URL) &&
     Boolean(import.meta.env.PUBLIC_SUPABASE_ANON_KEY);
