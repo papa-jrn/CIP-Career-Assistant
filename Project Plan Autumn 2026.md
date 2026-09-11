@@ -19,6 +19,8 @@ CIP does not currently fail because the prose is not good enough. It fails becau
 
 The Autumn 2026 rebuild turns CIP from a saturating funnel into a loop.
 
+The failure had a second face. The founder also expected CIP to go out and find new potential roles and employers every week when he ran it. It never did. Discovery depended on static job-board APIs (Adzuna plus configured Greenhouse/Lever slugs) that nothing ever scheduled and that pointed at the exact big-tech market he had already left. The app neither learned from him nor looked out for him. The Autumn rebuild retires the board pipeline and makes LLM-with-web-search the discovery engine, feeding the loop's memory.
+
 The app must beat the founder's current alternative: a monthly Claude-with-web-search check-in plus his own memory. That benchmark matters. Claude can search the web well and will keep improving. CIP should not try to beat frontier models at generic research prose. CIP should win where a monthly chat structurally struggles:
 
 - persistent structured memory
@@ -93,7 +95,7 @@ The implementation order matters.
 9. Add nonprofit/regional intelligence v0.
 10. Add game-dev lane v0.
 11. Add outcome tracking v0.
-12. Add employer-direct monitoring carefully.
+12. Retire job-board ingestion; add LLM web-search discovery and employer-direct monitoring.
 13. Prepare for invite-only beta.
 
 Each phase below lists the goal, implementation steps, acceptance criteria, and notes.
@@ -173,11 +175,18 @@ New conversations should reopen analysis. They should not push the user deeper i
    - Scenario: high evidence count + phase complete + new conversation weakening a lane.
    - Expected: analysis produces explicit delta and changed recommendation.
 
+6. Decide per-task model tiers.
+   - Model, provider, and token budget become per-pass configuration, not one global default.
+   - Cheap extraction and classification passes can run on small fast models; strategist synthesis, loop deltas, and discovery passes need stronger tiers.
+   - The current implicit default (`gpt-4.1-mini` everywhere) is a placeholder that was never actually chosen.
+   - Write the decision down and revisit it at beta pricing.
+
 ## Acceptance Criteria
 
 - New conversation input triggers analysis even when evidence is mature.
 - Evidence sufficiency no longer suppresses new strategic learning.
 - The advisor can say what changed, what weakened, what strengthened, and what to do next.
+- Per-pass model tier and provider are explicit, recorded configuration decisions.
 
 ## Notes
 
@@ -872,54 +881,54 @@ Keep this lightweight. The goal is loop learning, not applicant-tracking bloat.
 
 ---
 
-# Phase 13 — Employer-Direct Monitoring
+# Phase 13 — Discovery And Monitoring (LLM Web Search First)
 
 ## Goal
 
-Add reliable employer-owned job checks without pretending broad job boards are truth.
+Make the weekly pass actually go out and find new roles and employers — the expectation the founder had and never got — with an LLM-with-web-search as the discovery engine and employer-direct checks as verification.
+
+## Founder Finding
+
+The founder expected fresh, source-backed job and employer discovery every weekly run. What existed instead: Adzuna geographic/remote search and configured Greenhouse/Lever board slugs — static APIs, never scheduled, aimed at the big-tech market he had already left. Board ingestion is retired, not deferred.
 
 ## Principles
 
-- Employer career pages are the source of truth.
-- Broad boards are secondary.
-- Do not scrape legacy HTML.
-- Supported adapters must be honest.
-- Manual review is allowed and should be clearly labeled.
+- LLM web search is the discovery engine; memory is the differentiator. Discovery output must land in the loop (candidates, snapshots, briefing deltas), never as free-floating prose.
+- Provider-agnostic adapter: evaluate OpenAI Responses web_search (already proven in employer discovery), Z.ai (GLM) web search, or another frontier provider. Switching providers must be configuration, not a rewrite.
+- Employer career pages remain the source of truth for verification; ATS adapters confirm what discovery claims.
+- Do not scrape legacy HTML. Supported adapters must be honest. Manual review is labeled.
+- Every discovered role or target carries a source URL and a discovery date.
 
-## Initial Adapters
+## Board Retirement Steps
 
-Start where clean endpoints exist:
+1. Disable and remove the Adzuna ingestion paths (`adzuna-jobs.ts`, `remote-jobs.ts`, `/api/jobs/geographic`, `/api/jobs/remote`).
+2. Disable `ingestConfiguredSources` (Greenhouse/Lever slugs) in `labor-market.ts` and its `/api/labor-market/ingest` route.
+3. Retire or repurpose the Opportunities page: it may only ever show loop-derived matches (discovery runs, watched-employer checks). Archive board-era `opportunities` / `opportunity_matches` rows rather than silently deleting user history.
+4. Remove now-dead env vars from `.env.example` and documentation.
 
-- Greenhouse
-- Lever
-- Ashby
-- SmartRecruiters
-- Workable
+## Discovery Steps
 
-Investigate carefully:
+5. Build the discovery adapter interface (provider, model, search tool, token budget).
+6. Implement the first provider behind it.
+7. Schedule per-lane, per-geography discovery runs on the briefing rhythm (weekly or monthly): new roles at watched targets, new target organizations in the lane's categories, funding/leadership changes.
+8. Feed every discovery run through Phase 3 propagation: new employer candidates, role snapshots, briefing deltas.
+9. Surface "new since last run" in the briefing as the headline discovery section.
+10. Keep employer-direct adapter work as verification of what discovery claims.
 
-- iCIMS
-- Workday
+## Employer-Direct Adapters (verification layer)
 
-## Steps
-
-1. Add employer ATS detection fields.
-2. Build adapter interface.
-3. Implement one clean adapter.
-4. Add saved-employer job check.
-5. Store job check snapshots.
-6. Surface new / changed roles in briefing.
-7. Keep unsupported employers as manual review.
+Start where clean endpoints exist: Greenhouse, Lever, Ashby, SmartRecruiters, Workable. Investigate carefully: iCIMS, Workday.
 
 ## Acceptance Criteria
 
-- A watched employer with a supported ATS can show source-backed roles.
-- Unsupported employers are not faked.
-- The briefing can report new roles at watched employers.
+- A weekly run produces genuinely new, source-backed roles and/or targets since the last run — the experience the founder never had.
+- No code path renders board-API data as user-facing output.
+- A watched employer with a supported ATS can show source-backed roles; unsupported employers are not faked.
+- The discovery provider can be switched by configuration.
 
 ## Notes
 
-This comes after the loop and lane work. Do not let adapter work distract from the core restart.
+This comes after the loop and lane work. Discovery without the loop just rebuilds the old funnel with better prose. Do not let adapter work distract from the core restart.
 
 ---
 
@@ -986,7 +995,6 @@ These are not canceled. They are sequenced behind loop proof.
 - multi-tenant scaling work
 - additional ATS adapters
 - polished onboarding
-- broader job-board integrations
 - production marketing site
 - SaaS pricing experiments
 
@@ -1067,16 +1075,16 @@ Exit condition:
 
 - User can work from target organizations, relationship paths, briefs, and outcomes instead of generic job lists.
 
-## Milestone 7 — Employer Monitoring And Beta
+## Milestone 7 — Discovery, Monitoring, And Beta
 
 Includes:
 
-- Phase 13
+- Phase 13 (board retirement, LLM discovery adapter, employer-direct checks)
 - Phase 14
 
 Exit condition:
 
-- Small invite-only beta can begin without pretending unsupported features exist.
+- A weekly run yields new, source-backed discovery, and a small invite-only beta can begin without pretending unsupported features exist.
 
 ---
 
@@ -1092,6 +1100,7 @@ Exit condition:
 8. Do not bury uncertainty.
 9. Do not postpone tests around parsers and state transitions.
 10. Do not compete with frontier models at generic web research. Use them as components; win on memory, continuity, and action.
+11. Retired means retired: do not revive board-API job pipelines alongside LLM discovery. One discovery engine, feeding memory.
 
 ## Final Autumn 2026 Thesis
 

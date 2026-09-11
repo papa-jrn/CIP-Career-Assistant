@@ -2,10 +2,11 @@
 
 Last reviewed: 2026-09-10
 
-This document carries two independent review passes:
+This document carries three independent review passes:
 
 - **Round 1** — strategy-level review of product direction and gaps.
 - **Round 2** — code-level audit (same date) that verifies Round 1's claims against the source, names the founder-specific hardcoding to remove, and defines what must be true before a small beta.
+- **Round 3** — the founder-verified loop failure (the saturation gate), the monthly-Claude reframe, the fork decision, and the weekly-discovery finding.
 
 Where the rounds disagree, Round 2 wins because it is grounded in the code. The product goal confirmed by the founder: CIP becomes a real SaaS, and it must serve *parallel, structurally different* career lanes — nonprofit/public-interest work in the Upper Valley, and game development / indie game development.
 
@@ -618,3 +619,17 @@ conversation, and the app "pooped itself." It took over two months to feel ready
 This is recorded because it is real product data: the loop failure did not just produce a weak
 output, it produced *churn and discouragement in the ideal user*. Fixing the loop is therefore
 also the fix for the app's single worst retention event to date.
+
+## Addendum — The Weekly Discovery Expectation (founder-confirmed, 2026-09-10)
+
+The loop failure was not the only unmet expectation. The founder also expected CIP to go out
+and find new potential roles and employers every week when he ran it. It never did: discovery
+depended on static board APIs (Adzuna plus configured Greenhouse/Lever slugs), nothing ever
+scheduled a run, and the pipeline targeted the big-tech market he had already left.
+
+Decision, now recorded in Autumn plan Phase 13: board ingestion is **retired, not deferred**.
+LLM-with-web-search becomes the discovery engine — OpenAI Responses web search today, with
+Z.ai (GLM) or another frontier provider behind a swappable adapter — and every discovery run
+must feed the loop's memory (candidates, snapshots, briefing deltas) rather than emit
+free-floating prose. Discovery without memory would just be a monthly-Claude check-in with
+extra steps.
