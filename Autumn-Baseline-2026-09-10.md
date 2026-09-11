@@ -68,6 +68,19 @@ Joshua summary. Cause: intake/analysis context is "latest saved wins," so multip
 (or multiple framings of a profile) silently overwrite each other. Decide before Phase 2:
 single-person account (archive the other intake) or multi-profile support.
 
+**Correction (2026-09-11, smoke test):** the "profile stacking" finding above is most likely a
+script artifact, not an app bug. `scripts/phase0-baseline.mjs` uses the service-role key (which
+bypasses RLS) and none of its queries filter by `user_id`, so it read every account's rows
+interleaved. Every app query filters by `user_id`, and the founder's own Evidence page reports
+his latest analysis as **2026-05-15 15:30Z** (5 saved runs) — exactly where the "Jennifer"
+analyses begin in the unfiltered output. The 5/18 "complete" analysis and the "Jennifer" profile
+therefore almost certainly belong to a second account on the project (confirm under
+Authentication → Users). The record counts above (43 evidence responses, 28 watched employers,
+10 network analyses) are likewise all-account totals; the founder's Evidence page shows 41
+evidence answers. The core diagnosis is unchanged for the founder's account: both conversation
+outcomes (6/15, 8/6) postdate his 5/15 analysis and were never processed until the smoke test.
+Before reusing the script, scope every query to one user (`.eq("user_id", …)`).
+
 **Immediate implication with the repaired engine:** because both conversation notes are
 newer than the 2026-05-18 prior analysis, the very next "Re-analyze" on the Evidence page
 will process them as new signals (Vince Berk + the June notes), produce a "What changed"
@@ -123,7 +136,10 @@ that failed in August.
 ## Not yet done (per plan)
 
 - ~~Confirm DB phase values~~ — done 2026-09-11 (above).
-- Decide single-person vs multi-profile account handling (new finding; gate for Phase 2).
+- ~~Decide single-person vs multi-profile account handling~~ — likely moot; the "stacking" was
+  the unscoped baseline script reading two accounts (see correction above). Confirm the second
+  account exists, then drop this gate.
+- ~~Milestone 1 end-to-end proof~~ — passed on live data 2026-09-11 (see smoke test below).
 - Phase 2 (structured conversation outcomes), Phase 3 (propagation), Phase 4 (diff
   briefing), Phase 5 (de-founder pass), Phase 6 (wider test coverage).
 
@@ -153,3 +169,53 @@ Fixes applied:
   and error lines), plain-form POST fallback, and the prominent top-of-page re-analyze card.
 - `src/pages/api/evidence/analyze.ts` — analysis can no longer fail silently: the
   deterministic fallback saves even when the AI pass throws.
+
+## Milestone 1 Smoke Test — PASSED (2026-09-11)
+
+The exact action that failed in August — Re-analyze on the Evidence page, same account, same
+saved data — run on the repaired engine via `npm run dev` at `http://localhost:4321`.
+
+- Prior state: last analysis 2026-05-15 11:30 AM EDT, 5 saved runs, both conversation
+  outcomes newer than it.
+- Result: new analysis saved (41 evidence answers, evidence score 233). The readout named
+  **Vince Berk** and **Eric Kidd** — both conversations were processed as new signals.
+- "What changed since your last analysis" banner rendered first, with a real delta:
+  - Strengthened: leadership roles in nonprofit / educational / lifestyle companies over large
+    tech (cultural fit, job security); AI tools as a planned, overseen complement rather than
+    high-volume coding.
+  - Weakened: suitability for large high-stress tech sectors.
+  - Retired questions: market lanes and target organization types (the stale 5/18-era
+    opportunity-mapping question); pragmatic stance on AI coding limits.
+- Milestone 1 exit condition met: new conversation evidence produces visible delta output even
+  when evidence is mature.
+
+Observed, not yet fixed:
+
+- The "Last analysis / Saved re-analysis runs" line is server-rendered at page load and is not
+  refreshed by the htmx swap, so it shows the pre-run state until reload. Candidate fix: return
+  it as an out-of-band swap from `/api/evidence/analyze`.
+- The delta is prose-level. No lane or employer *ranking* moved, and follow-up obligations are
+  not tracked — expected; that is Milestone 2 (Phase 2 structured outcomes, Phase 3
+  propagation).
+
+## Environment And Auth Changes (2026-09-11)
+
+Made during the smoke test; none of these are in the repo, so they are recorded here.
+
+- **OneDrive and `node_modules`:** the repo lives under OneDrive with Files On-Demand. ~4,600
+  `node_modules` files were cloud-only placeholders and the build died with
+  `UNKNOWN: unknown error, read`. Fixed by pinning the folder ("Always keep on this device") and
+  forcing hydration. It can recur; the durable fix is moving the repo outside OneDrive.
+- **Supabase URL configuration:** Site URL changed from the default `http://localhost:3000` to
+  `http://localhost:4321`; `http://localhost:4321/**` added to Redirect URLs. Before this,
+  magic-link and recovery emails fell back to `localhost:3000`.
+- **Supabase custom SMTP:** auth email now sends through Google Workspace (`smtp.gmail.com:587`)
+  from `cip@beebalmproductions.com` (alias on the main Workspace user), authenticated with a
+  Google app password. The built-in sender's 2 emails/hour limit is gone; Supabase's limit is
+  now 30/hour (Authentication → Rate Limits).
+- **DNS (Bluehost) for beebalmproductions.com:** added SPF
+  (`v=spf1 include:_spf.google.com ~all`) and Google DKIM (`google._domainkey`, 2048-bit);
+  both verified live at the authoritative nameservers and at 8.8.8.8. Existing DMARC is
+  `p=none` (monitor only).
+- **Magic-link origin issue:** believed resolved by the loopback redirect in `src/middleware.ts`
+  plus the Supabase URL fix; password sign-in is the verified path.

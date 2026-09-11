@@ -306,17 +306,20 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
       </section>
     ) : null}
 
-    {staleNotice && staleNotice.newConversationCount > 0 ? (
-      <div class="mt-6 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
-        <p class="text-sm font-semibold text-[var(--accent-strong)]">
-          {staleNotice.newConversationCount} conversation {staleNotice.newConversationCount === 1 ? "note is" : "notes are"} waiting to be processed
-          {staleNotice.lastAnalysisAt ? ` — your last analysis ran ${staleNotice.lastAnalysisAt.slice(0, 10)}` : ""}
-        </p>
-        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
-          Run the re-analysis below: it processes the new notes, shows what changed, and retires questions they already answer. The report and briefing update from that new analysis — generating a snapshot first cannot reflect the notes.
-        </p>
-      </div>
-    ) : null}
+    {/* Always rendered so a successful re-analysis can clear it via an htmx out-of-band swap. */}
+    <div id="evidence-stale-notice">
+      {staleNotice && staleNotice.newConversationCount > 0 ? (
+        <div class="mt-6 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+          <p class="text-sm font-semibold text-[var(--accent-strong)]">
+            {staleNotice.newConversationCount} conversation {staleNotice.newConversationCount === 1 ? "note is" : "notes are"} waiting to be processed
+            {staleNotice.lastAnalysisAt ? ` — your last analysis ran ${staleNotice.lastAnalysisAt.slice(0, 10)}` : ""}
+          </p>
+          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+            Run the re-analysis below: it processes the new notes, shows what changed, and retires questions they already answer. The report and briefing update from that new analysis — generating a snapshot first cannot reflect the notes.
+          </p>
+        </div>
+      ) : null}
+    </div>
 
     <section class="mt-6 rounded-lg border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
@@ -326,7 +329,7 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
           <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
             This takes the latest intake, saved evidence answers, and any conversation notes saved since the last pass, then shows what changed: what strengthened, what weakened, and which questions are now answered. The result is saved as a new analysis record — the report and briefing read from it.
           </p>
-          <p class="mt-3 text-sm font-semibold text-[var(--muted)]">
+          <p id="evidence-analysis-status" class="mt-3 text-sm font-semibold text-[var(--muted)]">
             Last analysis: {latestAnalysisCreatedAt ? new Date(latestAnalysisCreatedAt).toLocaleString() : "never"}
             · Saved re-analysis runs: {sourceCounts.analysis}
           </p>

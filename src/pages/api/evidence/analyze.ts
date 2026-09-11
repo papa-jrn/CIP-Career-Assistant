@@ -178,10 +178,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       ];
     }
 
+    const savedAt = new Date().toISOString();
     const { error: saveError } = await supabase.from("career_sources").insert({
       user_id: user.id,
       source_type: "evidence_analysis",
-      title: `Evidence re-analysis ${new Date().toLocaleString()}`,
+      title: `Evidence re-analysis ${new Date(savedAt).toLocaleString()}`,
       url: null,
       extracted_text: JSON.stringify({
         intake_created_at: intakeRow?.created_at ?? null,
@@ -192,7 +193,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         new_evidence_count: newEvidenceCount,
         evidence_sufficiency: sufficiency,
         advisor,
-        created_at: new Date().toISOString(),
+        created_at: savedAt,
       }),
       trust_state: "system_generated",
     });
@@ -207,7 +208,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       `);
     }
 
-    return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}`);
+    // evidenceRound is the prior run count + 1, i.e. the count including this saved run.
+    return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}${renderPageStatusUpdate(savedAt, evidenceRound)}`);
   } catch (error) {
     return html(
       `<p class="text-sm font-semibold text-red-700">Evidence re-analysis failed: ${escapeHtml(error instanceof Error ? error.message : "Unexpected error.")}</p>`,
@@ -323,6 +325,18 @@ function renderEvidenceQuestionCardsUpdate(
     <section id="evidence-question-cards" hx-swap-oob="innerHTML">
       ${renderEvidenceCardsHtml(cards)}
     </section>
+  `;
+}
+
+// Out-of-band swaps for the server-rendered status on evidence.astro, so the
+// page reflects the run just saved without a reload: refresh the "Last analysis"
+// line and clear the "conversation notes waiting" notice (they were just processed).
+function renderPageStatusUpdate(savedAt: string, runCount: number) {
+  return `
+    <p id="evidence-analysis-status" hx-swap-oob="true" class="mt-3 text-sm font-semibold text-[var(--muted)]">
+      Last analysis: ${escapeHtml(new Date(savedAt).toLocaleString())} · Saved re-analysis runs: ${runCount}
+    </p>
+    <div id="evidence-stale-notice" hx-swap-oob="true"></div>
   `;
 }
 
