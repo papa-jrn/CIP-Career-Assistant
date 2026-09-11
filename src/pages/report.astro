@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
 import { createServer } from "../lib/supabase/server";
+import { getStaleSignalNotice, type StaleSignalNotice } from "../lib/cip/weekly-strategy";
 import {
   buildCareerReport,
   loadLatestSavedReport,
@@ -14,6 +15,7 @@ let signedIn = false;
 let report: CareerReport | null = null;
 let savedAt: string | null = null;
 let loadError = "";
+let staleNotice: StaleSignalNotice | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -29,6 +31,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       const saved = await loadLatestSavedReport(supabase, user.id);
       report = saved.report ?? (await buildCareerReport(supabase, user.id));
       savedAt = saved.savedAt;
+      staleNotice = await getStaleSignalNotice(supabase, user.id);
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load the report.";
@@ -96,6 +99,19 @@ const generatedLabel = savedAt
         </p>
       </div>
     </div>
+    <!-- ============ STALE SIGNAL NUDGE ============ -->
+    {staleNotice && staleNotice.newConversationCount > 0 ? (
+      <div class="cip-no-print mb-6 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+        <p class="text-sm font-semibold text-[var(--accent-strong)]">
+          {staleNotice.newConversationCount} conversation {staleNotice.newConversationCount === 1 ? "note was" : "notes were"} saved after your last analysis
+          {staleNotice.lastAnalysisAt ? ` (last analysis ${staleNotice.lastAnalysisAt.slice(0, 10)})` : ""}
+        </p>
+        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+          This report reuses your last saved analysis, so it cannot reflect new conversations yet.
+          <a class="font-semibold underline" href="/evidence">Re-analyze evidence</a> to process them, then regenerate the report.
+        </p>
+      </div>
+    ) : null}
     <!-- ============ HEADER ============ -->
     <section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)] md:p-8">
       <div class="flex flex-wrap items-start justify-between gap-4">

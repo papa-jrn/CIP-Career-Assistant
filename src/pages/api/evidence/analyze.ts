@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildAdvisorAnalysis, type AdvisorAnalysis, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
+import { buildAdvisorAnalysis, buildDeterministicAnalysis, type AdvisorAnalysis, type AdvisorAnalysisContext, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
 import { conversationNotesToEvidence } from "@/lib/cip/conversation-notes";
 import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-builder";
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
@@ -47,15 +47,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`<p class="text-sm font-semibold text-red-700">Could not load intake: ${escapeHtml(intakeError.message)}</p>`, 500);
     }
 
-    const intake = parseSavedIntake(intakeRow?.extracted_text ?? null);
-    if (!intake) {
+    const parsedIntake = parseIntakeRow(intakeRow?.extracted_text ?? null);
+    if (!parsedIntake) {
       return html('<p class="text-sm font-semibold text-red-700">Save an intake before re-analyzing evidence.</p>', 400);
     }
+    if ("validationError" in parsedIntake) {
+      // Distinguish "no intake" from "intake exists but fails schema" — the
+      // second case used to surface as a confusing dead-end inside a collapsed panel.
+      return html(`<p class="text-sm font-semibold text-red-700">The saved intake failed validation, so re-analysis stopped instead of guessing. Re-save the intake form, then re-analyze. Validation detail: ${escapeHtml(parsedIntake.validationError)}</p>`, 400);
+    }
+    const intake = parsedIntake.intake;
 
     const [
       { data: evidenceRows, error: evidenceError },
       { data: sourceRows, error: sourceError },
       { data: conversationRows },
+      { data: priorAnalysisRow },
       { count: analysisCount },
     ] = await Promise.all([
       supabase
@@ -81,6 +88,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         .limit(20),
       supabase
         .from("career_sources")
+        .select("created_at, extracted_text")
+        .eq("user_id", user.id)
+        .eq("source_type", "evidence_analysis")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("career_sources")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .eq("source_type", "evidence_analysis"),
@@ -94,34 +109,74 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`<p class="text-sm font-semibold text-red-700">Could not load source analysis: ${escapeHtml(sourceError.message)}</p>`, 500);
     }
 
+    // Everything since the last analysis counts as "new strategic input".
+    // Conversation notes are first-class signals now, but they must NOT inflate
+    // the evidence-sufficiency count (the old engine counted them toward the
+    // saturation threshold, so feeding it more made it less responsive).
+    const priorAnalysisAt = priorAnalysisRow?.created_at ?? null;
+    const priorAnalysis = parsePriorAdvisor(priorAnalysisRow?.extracted_text ?? null);
+
     const evidenceResponses = (evidenceRows ?? [])
-      .map((row) => parseEvidenceResponse(row.extracted_text))
-      .filter(Boolean) as AdvisorEvidenceResponse[];
+      .map((row) => {
+        const parsed = parseEvidenceResponse(row.extracted_text);
+        return parsed ? { ...parsed, savedAt: row.created_at } : null;
+      })
+      .filter(Boolean) as Array<AdvisorEvidenceResponse & { savedAt: string | null }>;
+    const newEvidenceCount = priorAnalysisAt
+      ? evidenceResponses.filter((item) => item.savedAt && item.savedAt > priorAnalysisAt).length
+      : evidenceResponses.length;
+
     const sourceEvidence = sourceAnalysesToEvidence(
       (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
     );
-    const conversationEvidence = conversationNotesToEvidence(
-      (conversationRows ?? [])
-        .map((row) => parseConversationNote(row.extracted_text))
-        .filter(Boolean) as Array<{ fileName?: string; text?: string; captured_at?: string }>,
-    );
-    const combinedEvidence = [...sourceEvidence, ...evidenceResponses, ...conversationEvidence];
 
-    if (!combinedEvidence.length) {
-      return html('<p class="text-sm font-semibold text-red-700">Save evidence or analyze linked sources before running re-analysis.</p>', 400);
+    const conversationNotes = (conversationRows ?? [])
+      .map((row) => {
+        const parsed = parseConversationNote(row.extracted_text);
+        return parsed ? { ...parsed, savedAt: row.created_at } : null;
+      })
+      .filter(Boolean) as Array<{ fileName?: string; text?: string; captured_at?: string; savedAt: string | null }>;
+    const newConversationNotes = priorAnalysisAt
+      ? conversationNotes.filter((note) => note.savedAt && note.savedAt > priorAnalysisAt)
+      : conversationNotes;
+    const conversationEvidence = conversationNotesToEvidence(conversationNotes);
+    const newSignals = conversationNotesToEvidence(newConversationNotes);
+
+    const analysisInputs = [...sourceEvidence, ...evidenceResponses];
+
+    if (!analysisInputs.length && !newSignals.length) {
+      return html('<p class="text-sm font-semibold text-red-700">Save evidence, analyze linked sources, or add conversation notes before running re-analysis.</p>', 400);
     }
 
     const draft = buildIdentityDraft(intake);
     const evidenceRound = (analysisCount ?? 0) + 1;
-    const sufficiency = calculateEvidenceSufficiency(intake, combinedEvidence, {
+    const sufficiency = calculateEvidenceSufficiency(intake, analysisInputs, {
       evidenceRound,
       sourceEvidenceCount: sourceEvidence.length,
     });
-    const advisor = await buildAdvisorAnalysis(intake, draft, combinedEvidence, {
+    const advisorContext: AdvisorAnalysisContext = {
       evidenceRound,
       sourceEvidenceCount: sourceEvidence.length,
       sufficiency,
-    });
+      priorAnalysis,
+      priorAnalysisAt,
+      newConversationSignals: newSignals,
+      newEvidenceCount,
+    };
+    let advisor: AdvisorAnalysis;
+    try {
+      advisor = await buildAdvisorAnalysis(intake, draft, analysisInputs, advisorContext);
+    } catch (error) {
+      // The loop must never silently vanish: if the AI pass throws (network,
+      // quota, provider outage), save the deterministic analysis instead. A
+      // failed round that saves nothing is what ended the first version.
+      advisor = buildDeterministicAnalysis(intake, draft, analysisInputs, advisorContext);
+      const reason = error instanceof Error ? error.message : "unknown error";
+      advisor.claimSafetyNotes = [
+        `The AI analysis pass failed (${reason}); this pass was saved by the deterministic fallback so your new signals could not be lost.`,
+        ...advisor.claimSafetyNotes,
+      ];
+    }
 
     const { error: saveError } = await supabase.from("career_sources").insert({
       user_id: user.id,
@@ -133,6 +188,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         evidence_count: evidenceResponses.length,
         source_evidence_count: sourceEvidence.length,
         conversation_note_count: conversationEvidence.length,
+        new_conversation_signal_count: newSignals.length,
+        new_evidence_count: newEvidenceCount,
         evidence_sufficiency: sufficiency,
         advisor,
         created_at: new Date().toISOString(),
@@ -144,13 +201,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-sm font-semibold text-[var(--warning)]">Re-analysis completed, but saving the analysis failed: ${escapeHtml(saveError.message)}</p>
-          ${renderAnalysis(advisor, combinedEvidence.length, sufficiency)}
+          ${renderAnalysis(advisor, analysisInputs.length, sufficiency)}
           ${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}
         </div>
       `);
     }
 
-    return html(`${renderAnalysis(advisor, combinedEvidence.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}`);
+    return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}`);
   } catch (error) {
     return html(
       `<p class="text-sm font-semibold text-red-700">Evidence re-analysis failed: ${escapeHtml(error instanceof Error ? error.message : "Unexpected error.")}</p>`,
@@ -159,15 +216,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 };
 
-function parseSavedIntake(value: string | null): IntakeForm | null {
+function parseIntakeRow(value: string | null): { intake: IntakeForm } | { validationError: string } | null {
   if (!value) return null;
+  let parsed: IntakeSource;
   try {
-    const parsed = JSON.parse(value) as IntakeSource;
-    const intake = intakeFormSchema.safeParse(parsed.intake);
-    return intake.success ? intake.data : null;
-  } catch {
-    return null;
+    parsed = JSON.parse(value) as IntakeSource;
+  } catch (error) {
+    return { validationError: error instanceof Error ? error.message : "intake JSON is unparseable" };
   }
+  const result = intakeFormSchema.safeParse(parsed.intake);
+  if (result.success) return { intake: result.data };
+  const issue = result.error.issues[0];
+  return { validationError: issue ? `${issue.path.join(".") || "intake"}: ${issue.message}` : "unknown validation failure" };
 }
 
 function parseConversationNote(value: string | null) {
@@ -224,6 +284,7 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number, suffici
         </div>
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(advisor.summary)}</p>
+      ${renderChangeLog(advisor.changeLog)}
       <div class="mt-5 grid gap-4 ${isComplete ? "lg:grid-cols-2" : "lg:grid-cols-3"}">
         ${renderList("Stronger positioning", advisor.positioning)}
         ${renderList("Remaining proof gaps", advisor.skillGaps)}
@@ -254,7 +315,10 @@ function renderEvidenceQuestionCardsUpdate(
   advisor: AdvisorAnalysis,
   sufficiency: EvidenceSufficiencyScore,
 ) {
-  const cards = buildEvidenceCards(intake, draft, advisor, { phase: sufficiency.phase });
+  const cards = buildEvidenceCards(intake, draft, advisor, {
+    phase: sufficiency.phase,
+    hasNewSignals: Boolean(advisor.changeLog?.hasChanges),
+  });
   return `
     <section id="evidence-question-cards" hx-swap-oob="innerHTML">
       ${renderEvidenceCardsHtml(cards)}
@@ -262,11 +326,55 @@ function renderEvidenceQuestionCardsUpdate(
   `;
 }
 
+function renderChangeLog(changeLog: AdvisorAnalysis["changeLog"] | undefined) {
+  if (!changeLog) return "";
+
+  if (!changeLog.hasChanges) {
+    return `
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+        <p class="text-sm font-semibold text-[var(--muted)]">No changes since your last analysis</p>
+        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">${escapeHtml(changeLog.summary)}</p>
+      </div>
+    `;
+  }
+
+  const changeList = (title: string, items: string[], tone: string) => `
+    <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3">
+      <p class="text-xs font-semibold uppercase ${tone}">${escapeHtml(title)}</p>
+      <ul class="mt-2 space-y-1 text-sm leading-6 text-[var(--muted)]">
+        ${items.slice(0, 6).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+
+  return `
+    <section class="mt-5 rounded-md border border-[var(--accent-strong)] bg-[var(--accent-soft)] p-4">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">What changed since your last analysis</p>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(changeLog.summary)}</p>
+      <div class="mt-3 grid gap-3 lg:grid-cols-3">
+        ${changeLog.strengthened.length ? changeList("Strengthened", changeLog.strengthened, "text-[var(--accent-strong)]") : ""}
+        ${changeLog.weakened.length ? changeList("Weakened", changeLog.weakened, "text-[var(--warning)]") : ""}
+        ${changeLog.newlyAnswered.length ? changeList("Questions this pass retires", changeLog.newlyAnswered, "text-[var(--muted)]") : ""}
+      </div>
+    </section>
+  `;
+}
+
+function parsePriorAdvisor(value: string | null): Partial<AdvisorAnalysis> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.advisor ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function renderSufficiencyNotice(sufficiency: EvidenceSufficiencyScore) {
   if (sufficiency.phase === "complete") {
     return `
       <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
-        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence phase complete</p>
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence readiness complete</p>
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(sufficiency.reason)}</p>
         <div class="mt-4 flex flex-wrap gap-3">
           <a class="cip-fancy-button" href="/opportunities"><span>Find opportunities</span></a>

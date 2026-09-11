@@ -82,6 +82,53 @@ export function formatRegion(region: string) {
     .join(" ");
 }
 
+export interface StaleSignalNotice {
+  newConversationCount: number;
+  lastAnalysisAt: string | null;
+  lastSignalAt: string | null;
+}
+
+/**
+ * Phase 1 UX guard (Autumn 2026): conversation notes saved after the latest
+ * evidence analysis are invisible to every downstream surface — snapshots and
+ * the report reuse the last saved analysis — until a re-analysis runs. The
+ * briefing and report pages show a nudge when this is true, so the user is
+ * never left pressing "Generate" and silently getting nothing new.
+ */
+export async function getStaleSignalNotice(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<StaleSignalNotice> {
+  const [{ data: analysisRow }, { data: signalRows }] = await Promise.all([
+    supabase
+      .from("career_sources")
+      .select("created_at")
+      .eq("user_id", userId)
+      .eq("source_type", "evidence_analysis")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("career_sources")
+      .select("created_at")
+      .eq("user_id", userId)
+      .eq("source_type", "conversation_outcome")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const lastAnalysisAt = analysisRow?.created_at ?? null;
+  const notes = signalRows ?? [];
+  const newNotes = lastAnalysisAt
+    ? notes.filter((note) => note.created_at > lastAnalysisAt)
+    : notes;
+  return {
+    newConversationCount: newNotes.length,
+    lastAnalysisAt,
+    lastSignalAt: newNotes[0]?.created_at ?? null,
+  };
+}
+
 function startOfWeek(date: Date) {
   const copy = new Date(date);
   const day = copy.getDay();

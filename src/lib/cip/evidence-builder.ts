@@ -21,6 +21,8 @@ export interface EvidenceResponsePayload {
 
 export interface EvidenceCardOptions {
   phase?: EvidenceSufficiencyPhase;
+  /** New conversation signals re-open question cards even when readiness is complete. */
+  hasNewSignals?: boolean;
 }
 
 export function buildEvidenceCards(
@@ -29,7 +31,9 @@ export function buildEvidenceCards(
   advisor?: Partial<AdvisorAnalysis>,
   options: EvidenceCardOptions = {},
 ): EvidenceCard[] {
-  if (options.phase === "complete") return [];
+  // Readiness "complete" no longer means "stop asking" (Autumn 2026 loop
+  // repair): fresh strategic signals re-open the question cards.
+  if (options.phase === "complete" && !options.hasNewSignals) return [];
 
   const cards: EvidenceCard[] = [];
   const enhancementOnly = options.phase === "enhancement";

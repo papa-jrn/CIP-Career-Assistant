@@ -1,5 +1,5 @@
 import type { IntakeForm } from "@/lib/cip/intake";
-import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
+import { calculateEvidenceSufficiency, type EvidenceSufficiencyPhase, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 
 export interface AdvisorAnalysis {
   mode: "ai" | "deterministic";
@@ -11,6 +11,21 @@ export interface AdvisorAnalysis {
   explorationAreas: ExplorationArea[];
   claimSafetyNotes: string[];
   roleBriefs: RoleBrief[];
+  changeLog: AdvisorChangeLog;
+}
+
+/**
+ * Explicit "what changed since the last analysis" record. Mandatory output for
+ * every re-analysis pass (Autumn 2026 Phase 1): even when nothing is new, the
+ * pass must say so honestly instead of re-rendering the same sections.
+ */
+export interface AdvisorChangeLog {
+  hasChanges: boolean;
+  summary: string;
+  strengthened: string[];
+  weakened: string[];
+  /** Prior follow-up questions the new inputs answer; those questions retire. */
+  newlyAnswered: string[];
 }
 
 export interface EvidenceLedgerItem {
@@ -52,6 +67,13 @@ export interface AdvisorAnalysisContext {
   evidenceRound?: number;
   sourceEvidenceCount?: number;
   sufficiency?: EvidenceSufficiencyScore;
+  /** The previous saved analysis, so this pass can diff against it. */
+  priorAnalysis?: Partial<AdvisorAnalysis> | null;
+  priorAnalysisAt?: string | null;
+  /** Conversation outcomes recorded since the prior analysis (loop-back notes). */
+  newConversationSignals?: AdvisorEvidenceResponse[];
+  /** Evidence answers saved since the prior analysis. */
+  newEvidenceCount?: number;
 }
 
 export async function buildAdvisorAnalysis(
@@ -82,9 +104,13 @@ async function tryBuildAiAnalysis(
   openAiKey: string,
 ) {
   const sufficiency = context.sufficiency ?? calculateEvidenceSufficiency(intake, evidenceResponses, context);
-  const shouldPivotToOpportunityMapping = shouldMoveToOpportunityMapping(sufficiency);
-  const shouldAskEnhancementQuestions = sufficiency.phase === "enhancement";
-  const isComplete = sufficiency.phase === "complete";
+  const newSignals = context.newConversationSignals ?? [];
+  const task = selectAnalysisTask({
+    phase: sufficiency.phase,
+    newConversationSignalCount: newSignals.length,
+    newEvidenceCount: context.newEvidenceCount ?? 0,
+    evidenceResponseCount: evidenceResponses.length,
+  });
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -98,29 +124,17 @@ async function tryBuildAiAnalysis(
         {
           role: "system",
           content:
-            "You are a careful career intelligence analyst and strategic thought partner. Your job is not to flatter the user. Dig for underused strengths, hidden career adjacencies, and proof gaps. Do not invent credentials, employers, metrics, or live job listings. Treat resume text, intake answers, saved evidence, and linked-source analysis as evidence. Cross-check them before asking follow-up questions. If a resume plus source analysis already establishes a role or contribution, do not ask the user to clarify that same involvement; ask only for missing metrics, outcomes, scope, or permission to use it publicly. Respect explicit exclusions and preferences already stated by the user. Produce concise, evidence-aware JSON only.",
+            "You are a careful career intelligence analyst and strategic thought partner. Your job is not to flatter the user. Dig for underused strengths, hidden career adjacencies, and proof gaps. Do not invent credentials, employers, metrics, or live job listings. Treat resume text, intake answers, saved evidence, and linked-source analysis as evidence. Cross-check them before asking follow-up questions. If a resume plus source analysis already establishes a role or contribution, do not ask the user to clarify that same involvement; ask only for missing metrics, outcomes, scope, or permission to use it publicly. Respect explicit exclusions and preferences already stated by the user. Every re-analysis must fill changeLog: state what changed since the prior analysis, grounded only in the supplied new inputs; when nothing is new, say so plainly instead of re-deriving the analysis. Produce concise, evidence-aware JSON only.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: shouldPivotToOpportunityMapping
-              ? isComplete
-                ? "The evidence phase is complete. Do not ask for more proof. Produce a final evidence-phase analysis and make follow-up questions about opportunity mapping only: target roles, target industries, geography/remote preferences, employer categories, network data the user can provide, and next search strategy."
-                : "The evidence score is saturated. Produce one final enhancement-oriented re-analysis. Follow-up questions must ask whether the user can strengthen already-promising positioning angles; do not ask generic proof questions, tiny metrics, or repeated involvement questions."
-              : evidenceResponses.length
-              ? "Re-analyze this career intake using saved evidence responses and linked-source analysis. Retire stale proof gaps and follow-up questions that are already answered by the resume, evidence, or source analysis. Promote stronger claims when the evidence supports them. Keep only genuinely unresolved gaps as follow-up questions."
-              : "Analyze this career intake and produce strategic follow-up questions, positioning, skill gaps, and role briefs.",
+            task,
             output_schema: {
-              summary: "One concise paragraph.",
+              summary: "One concise paragraph. Lead with what changed when new inputs exist.",
               positioning: ["3-5 source-grounded positioning points."],
-              followUpQuestions: shouldPivotToOpportunityMapping
-                ? shouldAskEnhancementQuestions
-                  ? ["3-5 final enhancement questions that ask whether anything would sharpen the strongest positioning angles before final analysis."]
-                  : ["4-6 opportunity-mapping questions about target roles, industries, geography/remote, target employer types, and network data. Do not ask for more proof."]
-                : ["4-6 questions that would improve analysis quality and are not already answered by supplied evidence."],
-              skillGaps: shouldPivotToOpportunityMapping
-                ? ["3-5 remaining go-to-market gaps such as target industries, geography, employer list, networking map, or LinkedIn data access."]
-                : ["3-5 genuinely remaining gaps; do not list exclusions, roles, tools, or projects already stated in evidence."],
+              followUpQuestions: ["4-6 questions appropriate to the task; retire questions the new inputs already answer."],
+              skillGaps: ["3-5 genuinely remaining gaps; do not list exclusions, roles, tools, or projects already stated in evidence."],
               evidenceLedger: [
                 {
                   claim: "Specific career claim or hypothesis.",
@@ -150,6 +164,16 @@ async function tryBuildAiAnalysis(
             intake,
             draft,
             evidenceResponses,
+            prior_analysis: context.priorAnalysis ? summarizePriorAnalysis(context.priorAnalysis) : null,
+            prior_analysis_at: context.priorAnalysisAt ?? null,
+            new_conversation_signals: newSignals.length ? newSignals : "none since last analysis",
+            new_evidence_count: context.newEvidenceCount ?? 0,
+            change_contract: [
+              "changeLog is a mandatory output on every pass.",
+              "When new_conversation_signals exist or new_evidence_count > 0, process ONLY what is new: name in changeLog what it strengthens, weakens, or answers, and retire follow-up questions the new inputs already answer.",
+              "When no new inputs exist, set changeLog.hasChanges to false and say so plainly; do not re-derive strategy from unchanged inputs.",
+              "The stale_question_guardrails below never override change detection.",
+            ],
             analysisContext: context,
             evidenceSufficiency: sufficiency,
             stale_question_guardrails: [
@@ -175,6 +199,7 @@ async function tryBuildAiAnalysis(
             additionalProperties: false,
             required: [
               "summary",
+              "changeLog",
               "positioning",
               "followUpQuestions",
               "skillGaps",
@@ -185,6 +210,18 @@ async function tryBuildAiAnalysis(
             ],
             properties: {
               summary: { type: "string" },
+              changeLog: {
+                type: "object",
+                additionalProperties: false,
+                required: ["hasChanges", "summary", "strengthened", "weakened", "newlyAnswered"],
+                properties: {
+                  hasChanges: { type: "boolean" },
+                  summary: { type: "string" },
+                  strengthened: { type: "array", items: { type: "string" }, maxItems: 8 },
+                  weakened: { type: "array", items: { type: "string" }, maxItems: 8 },
+                  newlyAnswered: { type: "array", items: { type: "string" }, maxItems: 8 },
+                },
+              },
               positioning: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
               followUpQuestions: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 6 },
               skillGaps: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
@@ -262,6 +299,7 @@ async function tryBuildAiAnalysis(
   try {
     const parsed = JSON.parse(text) as Omit<RoleBrief, "searchTargets"> & {
       summary: string;
+      changeLog?: AdvisorChangeLog;
       positioning: string[];
       followUpQuestions: string[];
       skillGaps: string[];
@@ -273,6 +311,7 @@ async function tryBuildAiAnalysis(
     return {
       mode: "ai" as const,
       summary: parsed.summary,
+      changeLog: normalizeChangeLog(parsed.changeLog, context, evidenceResponses),
       positioning: parsed.positioning,
       followUpQuestions: parsed.followUpQuestions,
       skillGaps: parsed.skillGaps,
@@ -312,7 +351,7 @@ function extractResponseText(payload: unknown) {
   return null;
 }
 
-function buildDeterministicAnalysis(
+export function buildDeterministicAnalysis(
   intake: IntakeForm,
   draft: Parameters<typeof buildAdvisorAnalysis>[1],
   evidenceResponses: AdvisorEvidenceResponse[] = [],
@@ -329,10 +368,31 @@ function buildDeterministicAnalysis(
     searchTargets: buildSearchTargets(role, intake),
   }));
 
+  const changeLog = buildDeterministicChangeLog(context, evidenceResponses);
+  const baseFollowUps = shouldPivot
+    ? sufficiency.phase === "enhancement"
+      ? buildEnhancementQuestions(intake, evidenceText, strongest)
+      : buildOpportunityMappingQuestions(intake, evidenceText)
+    : buildRemainingFollowUpQuestions(draft.nextQuestions, intake, evidenceText);
+  const followUpQuestions = changeLog.hasChanges
+    ? [
+        "New conversation signals arrived since the last analysis: which lane, employer, or next action does each one change?",
+        ...baseFollowUps,
+      ].slice(0, 6)
+    : baseFollowUps;
+  const signalLedger = (context.newConversationSignals ?? []).slice(0, 3).map((signal) => ({
+    claim: `New conversation signal since last pass: ${excerpt(signal.answer, 120)}`,
+    status: "stated_by_user" as const,
+    evidence: signal.sourceNote || excerpt(signal.answer),
+    whyItMatters: "First-hand market evidence from a real conversation should change strategy; deterministic mode flags it for the AI pass to interpret.",
+    nextValidationStep: "Confirm which lane or employer this affects and record the promised follow-up.",
+  }));
+
   return {
     mode: "deterministic",
-    summary:
-      evidenceResponses.length
+    summary: changeLog.hasChanges
+      ? `Change-detection pass: ${changeLog.summary}`
+      : evidenceResponses.length
         ? shouldPivot
           ? sufficiency.phase === "enhancement"
             ? `This profile has an evidence sufficiency score of ${sufficiency.score}. The evidence base is strong enough for one final enhancement pass focused on sharpening the best positioning angles before opportunity mapping.`
@@ -344,15 +404,11 @@ function buildDeterministicAnalysis(
       "Treat role hypotheses as research lanes until real postings and salary ranges are compared.",
       "Keep every public-facing claim tied to resume evidence, public links, or user-confirmed examples.",
     ],
-    followUpQuestions: shouldPivot
-      ? sufficiency.phase === "enhancement"
-        ? buildEnhancementQuestions(intake, evidenceText, strongest)
-        : buildOpportunityMappingQuestions(intake, evidenceText)
-      : buildRemainingFollowUpQuestions(draft.nextQuestions, intake, evidenceText),
+    followUpQuestions,
     skillGaps: shouldPivot
       ? buildOpportunityMappingGaps(intake, evidenceText)
       : buildRemainingSkillGaps(intake, evidenceText),
-    evidenceLedger: buildDeterministicEvidenceLedger(intake, draft, evidenceResponses),
+    evidenceLedger: [...signalLedger, ...buildDeterministicEvidenceLedger(intake, draft, evidenceResponses)].slice(0, 10),
     explorationAreas: buildDeterministicExplorationAreas(intake, draft),
     claimSafetyNotes: [
       "Do not use salary, leadership scope, or AI/technical maturity claims publicly until the user confirms specific examples.",
@@ -360,7 +416,136 @@ function buildDeterministicAnalysis(
       "Resume and LinkedIn rewrites should preserve the user's actual accomplishments and avoid invented metrics.",
     ],
     roleBriefs,
+    changeLog,
   };
+}
+
+/**
+ * Pure decision for what a re-analysis pass is FOR. New strategic inputs always
+ * win: they trigger a change-detection pass even when evidence readiness is
+ * "complete" (the Autumn 2026 loop failure). Phase only shapes question style
+ * when nothing new has arrived — it never stops the engine from engaging.
+ */
+export function selectAnalysisTask(args: {
+  phase: EvidenceSufficiencyPhase;
+  newConversationSignalCount: number;
+  newEvidenceCount: number;
+  evidenceResponseCount: number;
+}): string {
+  const hasNewSignals = args.newConversationSignalCount > 0 || args.newEvidenceCount > 0;
+  if (hasNewSignals) {
+    return [
+      "Change-detection re-analysis. New strategic inputs have arrived since the last analysis",
+      `(a new_conversation_signals list and/or ${args.newEvidenceCount} new evidence answers, supplied below).`,
+      "First process only what is new: what does it strengthen, weaken, confirm, or answer?",
+      "Update positioning, role briefs, skill gaps, and follow-up questions accordingly, and retire",
+      "follow-up questions the new inputs already answer. changeLog is mandatory: name what changed and why.",
+      "If the new inputs genuinely do not change strategy, set changeLog.hasChanges to false and say so plainly",
+      "instead of re-deriving the analysis from scratch.",
+    ].join(" ");
+  }
+  if (args.phase === "enhancement") {
+    return "Final enhancement re-analysis. The evidence base is mature, so ask only whether anything would sharpen the strongest positioning angles; do not ask generic proof questions.";
+  }
+  if (args.phase === "complete") {
+    return "Opportunity-mapping analysis. The evidence base is mature enough to act on and no new strategic inputs have arrived since the last analysis. Say so honestly in changeLog, and make follow-up questions about target roles, industries, geography/remote preferences, employer categories, and network data.";
+  }
+  return args.evidenceResponseCount
+    ? "Re-analyze this career intake using saved evidence responses and linked-source analysis. Retire stale proof gaps and follow-up questions that are already answered by the resume, evidence, or source analysis. Promote stronger claims when the evidence supports them. Keep only genuinely unresolved gaps as follow-up questions."
+    : "Analyze this career intake and produce strategic follow-up questions, positioning, skill gaps, and role briefs.";
+}
+
+function summarizePriorAnalysis(prior: Partial<AdvisorAnalysis>) {
+  return {
+    analyzed_at: null,
+    summary: prior.summary ?? null,
+    positioning: (prior.positioning ?? []).slice(0, 5),
+    roles: (prior.roleBriefs ?? []).map((brief) => brief.role).slice(0, 5),
+    followUpQuestions: (prior.followUpQuestions ?? []).slice(0, 8),
+    ledgerClaims: (prior.evidenceLedger ?? []).map((item) => item.claim).slice(0, 10),
+    priorChangeLog: prior.changeLog ?? null,
+  };
+}
+
+function normalizeChangeLog(
+  changeLog: AdvisorChangeLog | undefined,
+  context: AdvisorAnalysisContext,
+  evidenceResponses: AdvisorEvidenceResponse[],
+): AdvisorChangeLog {
+  if (changeLog && typeof changeLog.hasChanges === "boolean") {
+    const hasChanges = changeLog.hasChanges;
+    return {
+      hasChanges,
+      summary:
+        changeLog.summary ||
+        (hasChanges ? "Strategy updated from new inputs since the last analysis." : "No new strategic inputs since the last analysis; guidance is unchanged."),
+      strengthened: toStringArray(changeLog.strengthened),
+      weakened: toStringArray(changeLog.weakened),
+      newlyAnswered: toStringArray(changeLog.newlyAnswered),
+    };
+  }
+  return buildDeterministicChangeLog(context, evidenceResponses);
+}
+
+function buildDeterministicChangeLog(
+  context: AdvisorAnalysisContext,
+  _evidenceResponses: AdvisorEvidenceResponse[],
+): AdvisorChangeLog {
+  const newSignals = context.newConversationSignals ?? [];
+  const newEvidenceCount = context.newEvidenceCount ?? 0;
+  const hasChanges = newSignals.length > 0 || newEvidenceCount > 0;
+
+  if (!context.priorAnalysis) {
+    return {
+      hasChanges,
+      summary: hasChanges
+        ? "New inputs arrived, but there is no prior saved analysis to diff against; this pass establishes the baseline."
+        : "First analysis; there is no prior pass to diff against.",
+      strengthened: [],
+      weakened: [],
+      newlyAnswered: [],
+    };
+  }
+
+  if (!hasChanges) {
+    return {
+      hasChanges: false,
+      summary: `No new evidence answers or conversation signals have arrived since the last analysis${context.priorAnalysisAt ? ` (${context.priorAnalysisAt.slice(0, 10)})` : ""}, so strategic guidance is unchanged.`,
+      strengthened: [],
+      weakened: [],
+      newlyAnswered: [],
+    };
+  }
+
+  const priorQuestions = Array.isArray(context.priorAnalysis.followUpQuestions) ? context.priorAnalysis.followUpQuestions : [];
+  const newText = newSignals
+    .map((signal) => `${signal.question} ${signal.answer} ${signal.sourceNote ?? ""}`)
+    .join("\n")
+    .toLowerCase();
+  const newlyAnswered = newText ? priorQuestions.filter((question) => questionAppearsAnswered(question, newText)) : [];
+
+  return {
+    hasChanges: true,
+    summary: `${newSignals.length} new conversation signal${newSignals.length === 1 ? "" : "s"} and ${newEvidenceCount} new evidence answer${newEvidenceCount === 1 ? "" : "s"} arrived since the last analysis${context.priorAnalysisAt ? ` (${context.priorAnalysisAt.slice(0, 10)})` : ""}. Deterministic mode cannot infer direction; run an AI analysis pass to name what strengthened or weakened.`,
+    strengthened: [],
+    weakened: [],
+    newlyAnswered,
+  };
+}
+
+function questionAppearsAnswered(question: string, newText: string): boolean {
+  const words = question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 4 && !["which", "should", "would", "could", "there", "about", "before", "after", "these", "those", "industries", "employer", "employers"].includes(word));
+  if (!words.length) return false;
+  const hits = words.filter((word) => newText.includes(word)).length;
+  return hits / words.length >= 0.5;
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 function shouldMoveToOpportunityMapping(

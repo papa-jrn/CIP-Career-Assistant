@@ -21,23 +21,21 @@ export function calculateEvidenceSufficiency(
   const scoreYears = clamp(rawCareerYears, 5, 20);
   const usefulEvidenceCount = countUsefulEvidence(evidenceResponses);
   const score = Math.round((usefulEvidenceCount / scoreYears) * 100);
-  const evidenceRound = context.evidenceRound ?? 0;
 
   let phase: EvidenceSufficiencyPhase = "building";
   let reason = "The profile still needs core evidence before opportunity mapping.";
 
+  // Readiness rules are volume-based only. Analysis-round counts must never
+  // force "complete" (the Autumn 2026 loop failure: re-analysis passes used to
+  // shut the engine down after ~4 rounds, so new conversations produced no new
+  // output). Phase selects question style and UI readiness; it never stops the
+  // engine from engaging with new strategic input.
   if (usefulEvidenceCount >= 25) {
     phase = "complete";
-    reason = "The profile has a high volume of useful evidence. More standard proof questions are likely diminishing returns.";
-  } else if (evidenceRound >= 4) {
-    phase = "complete";
-    reason = "The user has completed several evidence-analysis rounds. The app should move forward unless a true contradiction blocks strategy.";
-  } else if (score >= 100 && evidenceRound >= 3) {
-    phase = "complete";
-    reason = "The evidence score is saturated and the final refinement pass has had enough room to run.";
+    reason = "The evidence base is mature enough to act on. This is readiness, not a stop sign: new conversation outcomes and evidence answers re-open analysis.";
   } else if (score >= 100) {
     phase = "enhancement";
-    reason = "The evidence score is saturated. Ask only one final enhancement round focused on strengthening the best positioning angles.";
+    reason = "The evidence score is saturated. Standard proof questions are low value now, but new conversations and linked sources still trigger a fresh strategic pass.";
   } else if (score >= 75) {
     phase = "strengthening";
     reason = "The profile has a solid evidence base. Ask only high-value questions that could change positioning or strategy.";

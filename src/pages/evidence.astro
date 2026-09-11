@@ -4,6 +4,7 @@ import { buildEvidenceCards, renderEvidenceCardsHtml, type EvidenceResponsePaylo
 import { calculateEvidenceSufficiency } from "../lib/cip/evidence-sufficiency";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "../lib/cip/source-analysis";
 import type { AdvisorAnalysis } from "../lib/cip/advisor";
+import { getStaleSignalNotice, type StaleSignalNotice } from "../lib/cip/weekly-strategy";
 import { createServer } from "../lib/supabase/server";
 
 type IntakeSource = {
@@ -28,6 +29,7 @@ let sourceCounts = {
   review: 0,
 };
 let loadState: "ready" | "signin" | "local" | "error" = "local";
+let staleNotice: StaleSignalNotice | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -112,6 +114,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         analysis: analysisCount ?? 0,
         review: reviewCount ?? 0,
       };
+      staleNotice = await getStaleSignalNotice(supabase, user.id);
       evidenceResponses = (responseData ?? [])
         .map((row) => parseEvidencePayload(row.extracted_text))
         .filter(Boolean)
@@ -303,6 +306,124 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
       </section>
     ) : null}
 
+    {staleNotice && staleNotice.newConversationCount > 0 ? (
+      <div class="mt-6 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+        <p class="text-sm font-semibold text-[var(--accent-strong)]">
+          {staleNotice.newConversationCount} conversation {staleNotice.newConversationCount === 1 ? "note is" : "notes are"} waiting to be processed
+          {staleNotice.lastAnalysisAt ? ` — your last analysis ran ${staleNotice.lastAnalysisAt.slice(0, 10)}` : ""}
+        </p>
+        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+          Run the re-analysis below: it processes the new notes, shows what changed, and retires questions they already answer. The report and briefing update from that new analysis — generating a snapshot first cannot reflect the notes.
+        </p>
+      </div>
+    ) : null}
+
+    <section class="mt-6 rounded-lg border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Run the loop</p>
+          <h2 class="mt-1 text-2xl font-semibold">Re-analyze with everything new</h2>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            This takes the latest intake, saved evidence answers, and any conversation notes saved since the last pass, then shows what changed: what strengthened, what weakened, and which questions are now answered. The result is saved as a new analysis record — the report and briefing read from it.
+          </p>
+          <p class="mt-3 text-sm font-semibold text-[var(--muted)]">
+            Last analysis: {latestAnalysisCreatedAt ? new Date(latestAnalysisCreatedAt).toLocaleString() : "never"}
+            · Saved re-analysis runs: {sourceCounts.analysis}
+          </p>
+          <p id="htmx-health" class="mt-2 text-xs font-semibold text-[var(--muted)]">Checking request engine…</p>
+        </div>
+        <form id="evidence-analyze-form" method="post" action="/api/evidence/analyze" hx-post="/api/evidence/analyze" hx-target="#evidence-analysis-result" hx-swap="innerHTML" hx-indicator="#evidence-analysis-loading">
+          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.intake === 0}>
+            <span>Re-analyze evidence</span>
+          </button>
+        </form>
+      </div>
+      <div id="evidence-analysis-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
+        <div class="cip-thinking-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence analysis in progress</p>
+          <div class="cip-thinking-lines" aria-hidden="true">
+            <span>Loading saved intake and evidence answers...</span>
+            <span>Detecting conversation signals since the last analysis...</span>
+            <span>Separating strong claims from weak proof...</span>
+            <span>Updating proof gaps and exploration lanes...</span>
+            <span>Saving the new analysis artifact...</span>
+          </div>
+          <p class="sr-only">Re-reading saved evidence and updating the advisor analysis.</p>
+          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>
+      <div id="evidence-analysis-result" class="mt-5" aria-live="polite"></div>
+    </section>
+
+    <script>
+      // Loop diagnostics (Autumn 2026): the request engine must prove it is
+      // alive, every step is logged visibly, and a dead engine can no longer
+      // look like a quiet page reload.
+      const result = document.getElementById("evidence-analysis-result");
+      const health = document.getElementById("htmx-health");
+      const form = document.getElementById("evidence-analyze-form");
+      let engineAlive = false;
+
+      function logLoop(message: string, isError = false) {
+        if (!result) return;
+        const line = document.createElement("p");
+        line.textContent = `${new Date().toLocaleTimeString()} — ${message}`;
+        line.className = isError
+          ? "text-sm font-semibold text-red-700"
+          : "text-sm text-[var(--muted)]";
+        result.appendChild(line);
+      }
+
+      function setHealth(alive: boolean, detail = "") {
+        engineAlive = alive;
+        if (!health) return;
+        health.textContent = alive
+          ? "Request engine: ready."
+          : `Request engine FAILED to load — the button cannot send anything. ${detail}`;
+        health.className = alive
+          ? "text-xs font-semibold text-[var(--accent-strong)]"
+          : "text-xs font-semibold text-red-700";
+      }
+
+      document.body.addEventListener("htmx:load", () => {
+        if (!engineAlive) {
+          setHealth(true);
+          logLoop("Request engine loaded. The Re-analyze button is live.");
+        }
+      });
+
+      for (const type of ["htmx:responseError", "htmx:sendError", "htmx:swapError"] as const) {
+        document.body.addEventListener(type, (event) => {
+          const detail = (event as CustomEvent<{ xhr?: { status: number }; error?: string }>).detail ?? {};
+          const statusText = detail.xhr ? `HTTP ${detail.xhr.status}` : "network failure";
+          logLoop(`${type} — ${statusText}. ${detail.error ?? ""}`.trim(), true);
+        });
+      }
+
+      form?.addEventListener("submit", (event) => {
+        if (!engineAlive) {
+          // Without the engine, submitting would just reload this page and
+          // look like nothing happened. Say so instead of failing silently.
+          if (form.getAttribute("hx-post")) event.preventDefault();
+          setHealth(false, "Submit was blocked because htmx never initialized. Open the browser console (F12) for the underlying script error and report it.");
+          logLoop("Submit blocked: the htmx request engine never initialized, so this form would only reload the page.", true);
+          return;
+        }
+        logLoop("Request sent. The AI pass can take up to a minute — results appear here when it finishes.");
+      });
+
+      const confirmDead = () => {
+        if (!engineAlive) setHealth(false, "No request-engine activity detected since page load.");
+      };
+      if (document.readyState === "complete") setTimeout(confirmDead, 800);
+      else window.addEventListener("load", () => setTimeout(confirmDead, 800));
+    </script>
+
     <details class={readyForOpportunityMapping ? "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" : "contents"} open={!readyForOpportunityMapping}>
       {readyForOpportunityMapping ? (
         <summary class="text-lg font-semibold text-[var(--accent-strong)]">Add more information for analysis</summary>
@@ -344,44 +465,6 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
         </div>
       </div>
       <div id="source-analysis-result" class="mt-5" aria-live="polite"></div>
-      </section>
-
-      <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Next advisor pass</p>
-          <h2 class="mt-1 text-2xl font-semibold">Re-analyze with saved evidence</h2>
-          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            This takes the latest intake plus saved evidence answers and asks the advisor to update the ledger, proof gaps, exploration lanes, and positioning. The new analysis is saved as another source record.
-          </p>
-          <p class="mt-3 text-sm font-semibold text-[var(--muted)]">Saved re-analysis runs: {sourceCounts.analysis}</p>
-        </div>
-        <form hx-post="/api/evidence/analyze" hx-target="#evidence-analysis-result" hx-swap="innerHTML" hx-indicator="#evidence-analysis-loading">
-          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.evidence === 0 || sourceCounts.intake === 0}>
-            <span>Re-analyze evidence</span>
-          </button>
-        </form>
-      </div>
-      <div id="evidence-analysis-loading" class="htmx-indicator cip-thinking-panel mt-5" role="status" aria-live="polite">
-        <div class="cip-thinking-orbit" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Evidence analysis in progress</p>
-          <div class="cip-thinking-lines" aria-hidden="true">
-            <span>Loading saved intake and evidence answers...</span>
-            <span>Separating strong claims from weak proof...</span>
-            <span>Updating proof gaps and exploration lanes...</span>
-            <span>Rebuilding the advisor evidence ledger...</span>
-            <span>Saving the new analysis artifact...</span>
-          </div>
-          <p class="sr-only">Re-reading saved evidence and updating the advisor analysis.</p>
-          <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
-        </div>
-      </div>
-      <div id="evidence-analysis-result" class="mt-5" aria-live="polite"></div>
       </section>
 
       <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>

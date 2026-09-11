@@ -10,7 +10,8 @@
     "start": "node ./dist/server/entry.mjs",
     "preview": "astro preview",
     "astro": "astro",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/node": "^10.1.0",
@@ -28,6 +29,7 @@
     "@types/node": "^20.19.0",
     "eslint": "^9.39.0",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
   }
 }

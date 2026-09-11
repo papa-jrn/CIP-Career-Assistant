@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
 import { briefingItems } from "../lib/cip/data";
-import { formatRegion } from "../lib/cip/weekly-strategy";
+import { formatRegion, getStaleSignalNotice, type StaleSignalNotice } from "../lib/cip/weekly-strategy";
 import { createServer } from "../lib/supabase/server";
 
 type Snapshot = {
@@ -20,6 +20,7 @@ type Snapshot = {
 let signedIn = false;
 let snapshots: Snapshot[] = [];
 let loadError = "";
+let staleNotice: StaleSignalNotice | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -30,15 +31,19 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     signedIn = Boolean(user);
 
     if (user) {
-      const { data, error } = await supabase
-        .from("career_strategy_snapshots")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("week_start", { ascending: false })
-        .limit(8);
+      const [{ data, error }, notice] = await Promise.all([
+        supabase
+          .from("career_strategy_snapshots")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("week_start", { ascending: false })
+          .limit(8),
+        getStaleSignalNotice(supabase, user.id),
+      ]);
 
       if (error) loadError = error.message;
       else snapshots = (data ?? []) as Snapshot[];
+      staleNotice = notice;
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load briefings.";
@@ -79,6 +84,19 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         </div>
       </div>
       <div id="briefing-result" class="mt-5"></div>
+
+      {staleNotice && staleNotice.newConversationCount > 0 ? (
+        <div class="mt-5 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-4">
+          <p class="text-sm font-semibold text-[var(--accent-strong)]">
+            {staleNotice.newConversationCount} conversation {staleNotice.newConversationCount === 1 ? "note was" : "notes were"} saved after your last analysis
+            {staleNotice.lastAnalysisAt ? ` (last analysis ${staleNotice.lastAnalysisAt.slice(0, 10)})` : ""}
+          </p>
+          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+            Snapshots and the report reuse your last saved analysis, so they cannot reflect new conversations yet.
+            <a class="font-semibold underline" href="/evidence">Re-analyze evidence</a> to process them, then generate the snapshot again.
+          </p>
+        </div>
+      ) : null}
 
       {loadError ? (
         <p class="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>

@@ -47,7 +47,18 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     <script>
-      import "htmx.org";
+      import htmx from "htmx.org";
+      // The ESM build auto-inits on DOMContentLoaded, but a deferred/async
+      // bundled module can execute after that event in some load orders, which
+      // would leave every hx- attribute on the site dead (buttons that "do
+      // nothing"). processNode is idempotent, so booting explicitly is safe
+      // whether or not the auto-init already ran.
+      const bootHtmx = () => htmx.process(document.body);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootHtmx);
+      } else {
+        bootHtmx();
+      }
     </script>
   </head>
   <body class="min-h-full flex flex-col">
