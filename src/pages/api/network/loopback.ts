@@ -3,6 +3,14 @@ import {
   parseConversationNotesForm,
   type ParsedConversationNote,
 } from "@/lib/cip/conversation-notes";
+import {
+  buildConversationOutcome,
+  conversationOutcomeCareerSourcePayload,
+  saveConversationOutcome,
+  type ConversationConfidence,
+  type ConversationSignalDirection,
+  type ConversationSignalType,
+} from "@/lib/cip/conversation-outcomes";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -30,6 +38,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const form = await request.formData();
     const notes = await parseConversationNotesForm(form);
+    const metadata = readStructuredMetadata(form);
 
     if (!notes.length) {
       return html('<p class="text-sm font-semibold text-red-700">Add at least one notes file (.txt, .md, .docx, .rtf, .json) or paste conversation notes.</p>', 400);
@@ -39,19 +48,39 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const capturedAt = new Date().toISOString();
     let saved = 0;
     let saveError = "";
+    let structuredTableError = "";
 
-    for (const note of parsedNotes) {
+    for (const [index, note] of parsedNotes.entries()) {
+      const outcome = buildConversationOutcome({
+        contactName: metadata.contactName || contactNameFromNote(note.text) || note.fileName,
+        conversationDate: metadata.conversationDate || capturedAt.slice(0, 10),
+        sourceRef: `loopback:${normalize(note.fileName)}:${capturedAt}:${index}`,
+        relatedLane: metadata.relatedLane,
+        relatedEmployer: metadata.relatedEmployer,
+        signalType: metadata.signalType,
+        signalDirection: metadata.signalDirection,
+        confidence: metadata.confidence,
+        marketSignal: note.text,
+        nextAction: metadata.nextAction,
+        rawNoteExcerpt: note.text,
+        createdAt: capturedAt,
+      });
+      const structured = await saveConversationOutcome(supabase, user.id, outcome);
+      if (structured.error) {
+        structuredTableError = structured.error.message;
+      }
+      const payload = {
+        ...conversationOutcomeCareerSourcePayload(structured.payload),
+        fileName: note.fileName,
+        kind: note.kind,
+      };
+
       const { error } = await supabase.from("career_sources").insert({
         user_id: user.id,
         source_type: "conversation_outcome",
-        title: `Conversation notes: ${note.fileName}`,
+        title: `Conversation outcome: ${note.fileName}`,
         url: null,
-        extracted_text: JSON.stringify({
-          fileName: note.fileName,
-          kind: note.kind,
-          text: note.text,
-          captured_at: capturedAt,
-        }),
+        extracted_text: JSON.stringify(payload),
         trust_state: "user_supplied",
       });
 
@@ -77,9 +106,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
         <p class="text-sm font-semibold text-[var(--accent-strong)]">Saved ${saved} conversation note record${saved === 1 ? "" : "s"}.</p>
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-          These notes are additive evidence. The next network analysis and the next evidence re-analysis will both read them, so what your advisors told you updates lanes, employer targets, and the evidence ledger.
+          These notes are additive structured evidence. The next network analysis and the next evidence re-analysis will both read them, so what your advisors told you updates lanes, employer targets, and the evidence ledger.
         </p>
         ${saveError ? `<p class="mt-2 text-sm font-semibold text-red-700">Some notes failed to save: ${escapeHtml(saveError)}</p>` : ""}
+        ${structuredTableError ? `<p class="mt-2 text-sm leading-6 text-[var(--muted)]">Saved to the evidence stream. The dedicated structured table also reported: ${escapeHtml(structuredTableError)}</p>` : ""}
         ${renderNoteSummary(notes)}
         <div class="mt-4 flex flex-wrap gap-2">
           <a class="cip-fancy-button cip-fancy-button-secondary" href="/evidence"><span>Run evidence re-analysis</span></a>
@@ -108,6 +138,33 @@ function renderNoteSummary(notes: ParsedConversationNote[]) {
         .join("")}
     </ul>
   `;
+}
+
+function readStructuredMetadata(form: FormData) {
+  return {
+    contactName: getText(form, "conversation_contact_name"),
+    conversationDate: getText(form, "conversation_date"),
+    relatedLane: getText(form, "related_lane"),
+    relatedEmployer: getText(form, "related_employer"),
+    signalType: getText(form, "signal_type") as ConversationSignalType,
+    signalDirection: getText(form, "signal_direction") as ConversationSignalDirection,
+    confidence: getText(form, "signal_confidence") as ConversationConfidence,
+    nextAction: getText(form, "next_action"),
+  };
+}
+
+function contactNameFromNote(text: string) {
+  const match = text.match(/(?:conversation|call|chat|met)\s+(?:with\s+)?([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3})/);
+  return match?.[1]?.trim() ?? "";
+}
+
+function getText(form: FormData, key: string) {
+  const value = form.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, "-") || "note";
 }
 
 function escapeHtml(value: string) {

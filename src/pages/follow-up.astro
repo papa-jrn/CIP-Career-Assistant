@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { signalConfidences, signalDirections, signalTypes } from "../lib/cip/conversation-outcomes";
 import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
 
@@ -18,12 +19,26 @@ type SavedFeedback = {
   contactName: string;
   feedbackType: string;
   note: string;
+  contactOrganization?: string;
+  contactTitle?: string;
   conversationStatus?: string;
   followUpDate?: string;
   followUpIntent?: string;
   decisionReason?: string;
+  relatedLane?: string;
+  relatedEmployer?: string;
+  signalType?: string;
+  signalDirection?: string;
+  signalConfidence?: string;
+  compensationSignal?: string;
+  workModelSignal?: string;
+  cultureSignal?: string;
+  hiringSignal?: string;
   marketSignals?: string;
   newLeads?: string;
+  warnings?: string;
+  promisedFollowUp?: string;
+  nextAction?: string;
   laneImpact?: string;
   createdAt: string;
 };
@@ -199,12 +214,26 @@ function parseSavedFeedback(value: string | null, createdAt: string): SavedFeedb
       contactName: String(feedback.contactName),
       feedbackType: String(feedback.feedbackType || "context"),
       note: String(feedback.note || ""),
+      contactOrganization: stringOrUndefined(feedback.contactOrganization),
+      contactTitle: stringOrUndefined(feedback.contactTitle),
       conversationStatus: stringOrUndefined(feedback.conversationStatus),
       followUpDate: stringOrUndefined(feedback.followUpDate),
       followUpIntent: stringOrUndefined(feedback.followUpIntent),
       decisionReason: stringOrUndefined(feedback.decisionReason),
+      relatedLane: stringOrUndefined(feedback.relatedLane),
+      relatedEmployer: stringOrUndefined(feedback.relatedEmployer),
+      signalType: stringOrUndefined(feedback.signalType),
+      signalDirection: stringOrUndefined(feedback.signalDirection),
+      signalConfidence: stringOrUndefined(feedback.signalConfidence),
+      compensationSignal: stringOrUndefined(feedback.compensationSignal),
+      workModelSignal: stringOrUndefined(feedback.workModelSignal),
+      cultureSignal: stringOrUndefined(feedback.cultureSignal),
+      hiringSignal: stringOrUndefined(feedback.hiringSignal),
       marketSignals: stringOrUndefined(feedback.marketSignals),
       newLeads: stringOrUndefined(feedback.newLeads),
+      warnings: stringOrUndefined(feedback.warnings),
+      promisedFollowUp: stringOrUndefined(feedback.promisedFollowUp),
+      nextAction: stringOrUndefined(feedback.nextAction),
       laneImpact: stringOrUndefined(feedback.laneImpact),
       createdAt,
     };
@@ -435,6 +464,8 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     <td class="px-4 py-3">
                       <form class="flex items-center gap-2" hx-post="/api/network/feedback" hx-target={`#roster-result-${id}`} hx-swap="innerHTML">
                         <input type="hidden" name="contact_name" value={person.contact.name} />
+                        <input type="hidden" name="contact_organization" value={person.contact.company ?? ""} />
+                        <input type="hidden" name="contact_title" value={person.contact.title ?? ""} />
                         <select name="conversation_status" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-1.5 text-xs">
                           {conversationStatuses.map((status) => <option value={status} selected={selected(saved?.conversationStatus, status)}>{status}</option>)}
                         </select>
@@ -548,6 +579,8 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
 
                 <form class="mt-4 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4" hx-post="/api/network/feedback" hx-target={`#follow-up-result-${id}`} hx-swap="innerHTML">
                   <input type="hidden" name="contact_name" value={person.contact.name} />
+                  <input type="hidden" name="contact_organization" value={person.contact.company ?? ""} />
+                  <input type="hidden" name="contact_title" value={person.contact.title ?? ""} />
                   <div class="grid gap-3 md:grid-cols-3">
                     <label class="grid gap-1">
                       <span class="text-xs font-semibold uppercase text-[var(--muted)]">Decision</span>
@@ -577,25 +610,79 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     </label>
                   </div>
                   <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
-                    <p class="text-sm font-semibold text-[var(--foreground)]">Capture the conversation</p>
+                    <p class="text-sm font-semibold text-[var(--foreground)]">Capture the structured conversation outcome</p>
                     <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-                      Fill this in after you talk. When the connection status is Met, Follow-up, or Intro offered, what you record here is saved as first-hand market evidence and feeds the next network and evidence re-analysis.
+                      Fill this in after you talk. When the connection status is Met, Follow-up, or Intro offered, what you record here is saved as a typed strategic signal and as first-hand market evidence for the next network and evidence re-analysis.
                     </p>
-                    <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                    <div class="mt-3 grid gap-3 lg:grid-cols-3">
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
+                        <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" value={saved?.relatedLane ?? ""} placeholder="e.g. Upper Valley nonprofits" />
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
+                        <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" value={saved?.relatedEmployer ?? ""} placeholder="Specific org, employer type, or target" />
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
+                        <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                          {signalDirections.map((option) => <option value={option.value} selected={selected(saved?.signalDirection, option.value)}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
+                        <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                          {signalTypes.map((option) => <option value={option.value} selected={selected(saved?.signalType, option.value)}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
+                        <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                          {signalConfidences.map((option) => <option value={option.value} selected={selected(saved?.signalConfidence, option.value)}>{option.label}</option>)}
+                        </select>
+                      </label>
                       <label class="grid gap-1">
                         <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
                         <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points">{saved?.marketSignals ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Compensation signal</span>
+                        <textarea name="compensation_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Pay range, seniority, funding or budget reality">{saved?.compensationSignal ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Work model signal</span>
+                        <textarea name="work_model_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Remote, hybrid, commute, schedule, travel">{saved?.workModelSignal ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Culture / fit signal</span>
+                        <textarea name="culture_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Mission fit, pace, politics, management style, cautions">{saved?.cultureSignal ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Hiring signal</span>
+                        <textarea name="hiring_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Hiring process, titles to search, who owns the work">{saved?.hiringSignal ?? ""}</textarea>
                       </label>
                       <label class="grid gap-1">
                         <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
                         <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned">{saved?.newLeads ?? ""}</textarea>
                       </label>
                       <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact</span>
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Warnings / dealbreakers</span>
+                        <textarea name="warnings" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Risks, no-go signals, reasons to slow down">{saved?.warnings ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Promised follow-up</span>
+                        <textarea name="promised_follow_up" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What you or they promised to do next">{saved?.promisedFollowUp ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact / redirect</span>
                         <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects">{saved?.laneImpact ?? ""}</textarea>
                       </label>
                       <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes / next step</span>
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action</span>
+                        <textarea name="next_action" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Concrete action this creates">{saved?.nextAction ?? ""}</textarea>
+                      </label>
+                      <label class="grid gap-1 lg:col-span-3">
+                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes</span>
                         <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What was said, reply details, what you agreed, or why this should wait">{saved?.note ?? ""}</textarea>
                       </label>
                     </div>

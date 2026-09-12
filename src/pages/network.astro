@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
+import { signalConfidences, signalDirections, signalTypes } from "../lib/cip/conversation-outcomes";
 import type { NetworkAnalysis } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
 
@@ -891,6 +892,52 @@ const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
         hx-target="#loopback-result"
         hx-swap="innerHTML"
       >
+        <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
+          <p class="text-sm font-semibold text-[var(--foreground)]">Optional structure for these notes</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+            Use these fields when the notes are from one conversation or one clear source. CIP will save the raw note and these tags together, so the next analysis can tell whether the conversation strengthens, weakens, or redirects a lane.
+          </p>
+          <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact / source</span>
+              <input name="conversation_contact_name" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Who you talked to" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation date</span>
+              <input name="conversation_date" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" type="date" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
+              <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. Upper Valley nonprofits" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
+              <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
+              <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalDirections.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
+              <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalTypes.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
+              <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalConfidences.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1 md:col-span-2">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action this creates</span>
+              <input name="next_action" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
+            </label>
+          </div>
+        </div>
         <label class="grid gap-2">
           <span class="text-sm font-semibold">Upload notes files (.txt, .md, .docx, .rtf, .json)</span>
           <input name="note_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />

@@ -1,17 +1,40 @@
 import type { APIRoute } from "astro";
+import {
+  buildConversationOutcome,
+  conversationOutcomeCareerSourcePayload,
+  outcomeHasStrategicContent,
+  saveConversationOutcome,
+  type ConversationConfidence,
+  type ConversationSignalDirection,
+  type ConversationSignalType,
+} from "@/lib/cip/conversation-outcomes";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
 type StructuredFeedback = {
   contactName: string;
+  contactOrganization: string;
+  contactTitle: string;
   feedbackType: string;
   note: string;
   conversationStatus: string;
   followUpDate: string;
   followUpIntent: string;
   decisionReason: string;
+  relatedLane: string;
+  relatedEmployer: string;
+  signalType: ConversationSignalType;
+  signalDirection: ConversationSignalDirection;
+  signalConfidence: ConversationConfidence;
+  compensationSignal: string;
+  workModelSignal: string;
+  cultureSignal: string;
+  hiringSignal: string;
   marketSignals: string;
   newLeads: string;
+  warnings: string;
+  promisedFollowUp: string;
+  nextAction: string;
   laneImpact: string;
 };
 
@@ -38,14 +61,28 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const incoming = {
+    contactOrganization: getText(form, "contact_organization"),
+    contactTitle: getText(form, "contact_title"),
     feedbackType: getText(form, "feedback_type"),
     note: getText(form, "feedback_note"),
     conversationStatus: getText(form, "conversation_status"),
     followUpDate: getText(form, "follow_up_date"),
     followUpIntent: getText(form, "follow_up_intent"),
     decisionReason: getText(form, "decision_reason"),
+    relatedLane: getText(form, "related_lane"),
+    relatedEmployer: getText(form, "related_employer"),
+    signalType: getText(form, "signal_type") as ConversationSignalType,
+    signalDirection: getText(form, "signal_direction") as ConversationSignalDirection,
+    signalConfidence: getText(form, "signal_confidence") as ConversationConfidence,
+    compensationSignal: getText(form, "compensation_signal"),
+    workModelSignal: getText(form, "work_model_signal"),
+    cultureSignal: getText(form, "culture_signal"),
+    hiringSignal: getText(form, "hiring_signal"),
     marketSignals: getText(form, "market_signals"),
     newLeads: getText(form, "new_leads"),
+    warnings: getText(form, "warnings"),
+    promisedFollowUp: getText(form, "promised_follow_up"),
+    nextAction: getText(form, "next_action"),
     laneImpact: getText(form, "lane_impact"),
   };
 
@@ -64,14 +101,28 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const previous = await loadLatestFeedback(supabase, user.id, contactName);
     const feedback: StructuredFeedback = {
       contactName,
+      contactOrganization: pick(incoming.contactOrganization, previous?.contactOrganization),
+      contactTitle: pick(incoming.contactTitle, previous?.contactTitle),
       feedbackType: incoming.feedbackType || previous?.feedbackType || "context",
       note: pick(incoming.note, previous?.note),
       conversationStatus: pick(incoming.conversationStatus, previous?.conversationStatus),
       followUpDate: pick(incoming.followUpDate, previous?.followUpDate),
       followUpIntent: pick(incoming.followUpIntent, previous?.followUpIntent),
       decisionReason: pick(incoming.decisionReason, previous?.decisionReason),
+      relatedLane: pick(incoming.relatedLane, previous?.relatedLane),
+      relatedEmployer: pick(incoming.relatedEmployer, previous?.relatedEmployer),
+      signalType: incoming.signalType || previous?.signalType || "market_signal",
+      signalDirection: incoming.signalDirection || previous?.signalDirection || "unclear",
+      signalConfidence: incoming.signalConfidence || previous?.signalConfidence || "medium",
+      compensationSignal: pick(incoming.compensationSignal, previous?.compensationSignal),
+      workModelSignal: pick(incoming.workModelSignal, previous?.workModelSignal),
+      cultureSignal: pick(incoming.cultureSignal, previous?.cultureSignal),
+      hiringSignal: pick(incoming.hiringSignal, previous?.hiringSignal),
       marketSignals: pick(incoming.marketSignals, previous?.marketSignals),
       newLeads: pick(incoming.newLeads, previous?.newLeads),
+      warnings: pick(incoming.warnings, previous?.warnings),
+      promisedFollowUp: pick(incoming.promisedFollowUp, previous?.promisedFollowUp),
+      nextAction: pick(incoming.nextAction, previous?.nextAction),
       laneImpact: pick(incoming.laneImpact, previous?.laneImpact),
     };
 
@@ -145,14 +196,28 @@ async function loadLatestFeedback(
       if (parsed?.contactName && normalize(String(parsed.contactName)) === target) {
         return {
           contactName: String(parsed.contactName),
+          contactOrganization: String(parsed.contactOrganization || ""),
+          contactTitle: String(parsed.contactTitle || ""),
           feedbackType: String(parsed.feedbackType || "context"),
           note: String(parsed.note || ""),
           conversationStatus: String(parsed.conversationStatus || ""),
           followUpDate: String(parsed.followUpDate || ""),
           followUpIntent: String(parsed.followUpIntent || ""),
           decisionReason: String(parsed.decisionReason || ""),
+          relatedLane: String(parsed.relatedLane || ""),
+          relatedEmployer: String(parsed.relatedEmployer || ""),
+          signalType: String(parsed.signalType || "market_signal") as ConversationSignalType,
+          signalDirection: String(parsed.signalDirection || "unclear") as ConversationSignalDirection,
+          signalConfidence: String(parsed.signalConfidence || "medium") as ConversationConfidence,
+          compensationSignal: String(parsed.compensationSignal || ""),
+          workModelSignal: String(parsed.workModelSignal || ""),
+          cultureSignal: String(parsed.cultureSignal || ""),
+          hiringSignal: String(parsed.hiringSignal || ""),
           marketSignals: String(parsed.marketSignals || ""),
           newLeads: String(parsed.newLeads || ""),
+          warnings: String(parsed.warnings || ""),
+          promisedFollowUp: String(parsed.promisedFollowUp || ""),
+          nextAction: String(parsed.nextAction || ""),
           laneImpact: String(parsed.laneImpact || ""),
         };
       }
@@ -164,7 +229,8 @@ async function loadLatestFeedback(
 }
 
 function shouldLogConversation(feedback: StructuredFeedback) {
-  const hasContent = Boolean(feedback.marketSignals || feedback.newLeads || feedback.laneImpact || feedback.note);
+  const outcome = outcomeFromFeedback(feedback);
+  const hasContent = outcomeHasStrategicContent(outcome);
   return hasContent && CONVERSATION_HELD.has(feedback.conversationStatus);
 }
 
@@ -175,17 +241,7 @@ async function replaceConversationOutcome(
   now: string,
 ): Promise<boolean> {
   const title = `Follow-up conversation: ${feedback.contactName}`;
-  const text = [
-    `Conversation with ${feedback.contactName}.`,
-    feedback.conversationStatus ? `Status: ${feedback.conversationStatus}.` : "",
-    feedback.followUpIntent ? `Intent: ${feedback.followUpIntent}.` : "",
-    feedback.marketSignals ? `Market signals: ${feedback.marketSignals}` : "",
-    feedback.newLeads ? `New leads: ${feedback.newLeads}` : "",
-    feedback.laneImpact ? `Lane impact: ${feedback.laneImpact}` : "",
-    feedback.note ? `Notes: ${feedback.note}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const outcome = outcomeFromFeedback(feedback, now);
 
   // Replace the prior auto-maintained log for this contact only; user-uploaded
   // loop-back notes use different titles and are never touched.
@@ -196,21 +252,54 @@ async function replaceConversationOutcome(
     .eq("source_type", "conversation_outcome")
     .eq("title", title);
 
+  // The structured table is additive by design, but for the auto-maintained
+  // follow-up card we keep one current row per contact/source_ref so repeated
+  // saves do not create a pile of duplicates during smoke testing.
+  await supabase
+    .from("conversation_outcomes")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source_ref", outcome.sourceRef);
+
+  const structured = await saveConversationOutcome(supabase, userId, outcome);
+
   const { error } = await supabase.from("career_sources").insert({
     user_id: userId,
     source_type: "conversation_outcome",
     title,
     url: null,
-    extracted_text: JSON.stringify({
-      fileName: `Follow-up conversation with ${feedback.contactName}`,
-      kind: "follow_up",
-      text,
-      captured_at: now,
-    }),
+    extracted_text: JSON.stringify(conversationOutcomeCareerSourcePayload(structured.payload)),
     trust_state: "user_supplied",
   });
 
-  return !error;
+  return !error || !structured.error;
+}
+
+function outcomeFromFeedback(feedback: StructuredFeedback, createdAt?: string) {
+  return buildConversationOutcome({
+    contactName: feedback.contactName,
+    contactOrganization: feedback.contactOrganization,
+    contactTitle: feedback.contactTitle,
+    conversationDate: new Date().toISOString().slice(0, 10),
+    sourceRef: `follow-up:${normalize(feedback.contactName)}`,
+    relatedLane: feedback.relatedLane || feedback.laneImpact,
+    relatedEmployer: feedback.relatedEmployer,
+    signalType: feedback.signalType,
+    signalDirection: feedback.signalDirection,
+    confidence: feedback.signalConfidence,
+    compensationSignal: feedback.compensationSignal,
+    workModelSignal: feedback.workModelSignal,
+    cultureSignal: feedback.cultureSignal,
+    hiringSignal: feedback.hiringSignal,
+    marketSignal: feedback.marketSignals,
+    newLeads: feedback.newLeads,
+    warnings: feedback.warnings,
+    promisedFollowUp: feedback.promisedFollowUp,
+    followUpDueDate: feedback.followUpDate,
+    nextAction: feedback.nextAction || feedback.note,
+    rawNoteExcerpt: feedback.note,
+    createdAt,
+  });
 }
 
 function addBusinessDays(days: number) {

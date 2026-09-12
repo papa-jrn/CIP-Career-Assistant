@@ -1,4 +1,9 @@
 import type { AdvisorEvidenceResponse } from "@/lib/cip/advisor";
+import {
+  conversationOutcomesToEvidence,
+  parseConversationOutcome,
+  type ConversationOutcome,
+} from "@/lib/cip/conversation-outcomes";
 import { readZipEntries } from "@/lib/cip/network-intelligence";
 
 // Loop-back conversation notes: after market-read conversations with
@@ -193,14 +198,29 @@ function decodeXmlEntities(text: string) {
 // Convert saved conversation_outcome records into advisor evidence items so
 // market-read learnings update the evidence ledger and sufficiency score.
 export function conversationNotesToEvidence(
-  records: Array<{ fileName?: string; text?: string; captured_at?: string }>,
+  records: Array<{ fileName?: string; text?: string; captured_at?: string; structured_outcome?: unknown }>,
 ): AdvisorEvidenceResponse[] {
-  return records
-    .filter((record) => record.text?.trim())
-    .map((record) => ({
+  const structured: ConversationOutcome[] = [];
+  const unstructured: typeof records = [];
+
+  for (const record of records) {
+    const outcome = parseConversationOutcome(record);
+    if (outcome && record.structured_outcome) {
+      structured.push(outcome);
+    } else {
+      unstructured.push(record);
+    }
+  }
+
+  return [
+    ...conversationOutcomesToEvidence(structured),
+    ...unstructured
+      .filter((record) => record.text?.trim())
+      .map((record) => ({
       question: `What did the conversation captured in "${record.fileName ?? "conversation notes"}" teach you about your market, lanes, or targets?`,
       answer: String(record.text).slice(0, 6_000),
       confidence: "first-hand conversation notes",
       sourceNote: `Loop-back conversation notes${record.captured_at ? ` saved ${record.captured_at}` : ""}. Treat as the user's own report of an advisor/market-read conversation.`,
-    }));
+    })),
+  ];
 }
