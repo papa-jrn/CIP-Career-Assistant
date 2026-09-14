@@ -13,6 +13,7 @@ import {
 } from "@/lib/cip/conversation-outcomes";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
+import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
@@ -111,6 +112,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       `, saveError ? 500 : 400);
     }
 
+    const propagation = await propagateStrategicStateAfterChange(supabase, user.id);
+
     return html(`
       <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
         <p class="text-sm font-semibold text-[var(--accent-strong)]">Saved ${saved} conversation note record${saved === 1 ? "" : "s"}.</p>
@@ -119,6 +122,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         </p>
         ${saveError ? `<p class="mt-2 text-sm font-semibold text-red-700">Some notes failed to save: ${escapeHtml(saveError)}</p>` : ""}
         ${structuredTableError ? `<p class="mt-2 text-sm leading-6 text-[var(--muted)]">Saved to the evidence stream. The dedicated structured table also reported: ${escapeHtml(structuredTableError)}</p>` : ""}
+        ${renderPropagationNote(propagation)}
         ${renderNoteSummary(notes)}
         <div class="mt-4 flex flex-wrap gap-2">
           <a class="cip-fancy-button cip-fancy-button-secondary" href="/evidence"><span>Run evidence re-analysis</span></a>
@@ -147,6 +151,12 @@ function renderNoteSummary(notes: ParsedConversationNote[]) {
         .join("")}
     </ul>
   `;
+}
+
+function renderPropagationNote(propagation: Awaited<ReturnType<typeof propagateStrategicStateAfterChange>>) {
+  return propagation.ok
+    ? '<p class="mt-2 text-sm leading-6 text-[var(--muted)]">Strategic snapshot refreshed from this update.</p>'
+    : `<p class="mt-2 text-sm leading-6 text-[var(--muted)]">Saved, but automatic propagation needs a manual briefing refresh: ${escapeHtml(propagation.errorMessage)}</p>`;
 }
 
 function readStructuredMetadata(form: FormData) {

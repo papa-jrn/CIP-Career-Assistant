@@ -5,6 +5,7 @@ import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "@/lib/cip/source-analysis";
+import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -208,8 +209,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       `);
     }
 
+    const propagation = await propagateStrategicStateAfterChange(supabase, user.id);
+
     // evidenceRound is the prior run count + 1, i.e. the count including this saved run.
-    return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}${renderPageStatusUpdate(savedAt, evidenceRound)}`);
+    return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderPropagationNotice(propagation)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}${renderPageStatusUpdate(savedAt, evidenceRound)}`);
   } catch (error) {
     return html(
       `<p class="text-sm font-semibold text-red-700">Evidence re-analysis failed: ${escapeHtml(error instanceof Error ? error.message : "Unexpected error.")}</p>`,
@@ -230,6 +233,20 @@ function parseIntakeRow(value: string | null): { intake: IntakeForm } | { valida
   if (result.success) return { intake: result.data };
   const issue = result.error.issues[0];
   return { validationError: issue ? `${issue.path.join(".") || "intake"}: ${issue.message}` : "unknown validation failure" };
+}
+
+function renderPropagationNotice(propagation: Awaited<ReturnType<typeof propagateStrategicStateAfterChange>>) {
+  return propagation.ok
+    ? `
+      <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm font-semibold text-[var(--accent-strong)]">
+        Strategic snapshot refreshed from this re-analysis.
+      </p>
+    `
+    : `
+      <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm leading-6 text-[var(--muted)]">
+        Re-analysis saved, but automatic propagation needs a manual briefing refresh: ${escapeHtml(propagation.errorMessage)}
+      </p>
+    `;
 }
 
 function parseConversationNote(value: string | null) {

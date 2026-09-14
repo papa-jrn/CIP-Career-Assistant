@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { buildTargetLanes, parseAnalysisAdvisor, parseIntakeSource } from "../lib/cip/resume-asset-context";
+import { loadStrategicState, type StrategicLaneScore } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
 
 type WatchedEmployerRow = {
@@ -23,6 +24,7 @@ let signedIn = false;
 let watchedEmployers: WatchedEmployerRow[] = [];
 let loadError = "";
 let suggestedTerms: string[] = [];
+let propagatedLanes: StrategicLaneScore[] = [];
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -45,7 +47,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 
       // Suggested search terms from the user's validated lanes, so the search
       // starts from "the work that fits you" instead of a blank box.
-      const [{ data: intakeRow }, { data: analysisRow }] = await Promise.all([
+      const [{ data: intakeRow }, { data: analysisRow }, strategicState] = await Promise.all([
         supabase
           .from("career_sources")
           .select("extracted_text")
@@ -62,6 +64,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        loadStrategicState(supabase, user.id),
       ]);
 
       const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
@@ -69,7 +72,8 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       const hasRealLanes = Boolean(latestAdvisor?.roleBriefs?.length || latestSource?.draft?.possibleRoles?.length);
       const targetTitle = typeof latestSource?.intake?.target_title === "string" ? latestSource.intake.target_title : "";
       const laneRoles = hasRealLanes ? buildTargetLanes(latestSource, latestAdvisor).map((lane) => lane.role) : [];
-      suggestedTerms = [...new Set([targetTitle, ...laneRoles].map((term) => term.trim()).filter(Boolean))].slice(0, 6);
+      propagatedLanes = strategicState.lanes;
+      suggestedTerms = [...new Set([targetTitle, ...strategicState.lanes.map((lane) => lane.lane), ...laneRoles].map((term) => term.trim()).filter(Boolean))].slice(0, 8);
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load opportunities.";
@@ -149,6 +153,17 @@ function monitoringStatus(employer: WatchedEmployerRow) {
               <button type="button" class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" data-lane-term={term}>{term}</button>
             ))}
           </div>
+          {propagatedLanes.length ? (
+            <div class="mt-4 grid gap-2 md:grid-cols-3">
+              {propagatedLanes.slice(0, 3).map((lane) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                  <p class="text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
+                  <p class="mt-1 text-sm font-semibold">{lane.lane}</p>
+                  <p class="mt-2 text-xs font-semibold text-[var(--accent-strong)]">{lane.score} / {lane.direction}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

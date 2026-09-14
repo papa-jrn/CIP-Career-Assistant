@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { scoreEmployer } from "@/lib/cip/watched-employers";
+import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -75,10 +76,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
   }
 
+  const propagation = promoted
+    ? await propagateStrategicStateAfterChange(supabase, user.id)
+    : null;
+
   return html(`
     <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
       <p class="text-sm font-semibold text-[var(--accent-strong)]">${promoted} employer candidates promoted to watched employers.</p>
-      <p class="mt-2 text-sm text-[var(--muted)]">Refresh this page to see the updated watched list.</p>
+      <p class="mt-2 text-sm text-[var(--muted)]">
+        Refresh this page to see the updated watched list.
+        ${propagation?.ok ? "The strategic snapshot was refreshed too." : propagation ? `Automatic propagation needs a manual briefing refresh: ${escapeHtml(propagation.errorMessage)}` : ""}
+      </p>
     </div>
   `);
 };

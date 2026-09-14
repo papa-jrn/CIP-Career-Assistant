@@ -1,8 +1,15 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
-import { signalConfidences, signalDirections, signalTypes } from "../lib/cip/conversation-outcomes";
+import {
+  parseConversationOutcome,
+  signalConfidences,
+  signalDirections,
+  signalTypes,
+  type ConversationOutcome,
+} from "../lib/cip/conversation-outcomes";
 import type { NetworkAnalysis } from "../lib/cip/network-intelligence";
+import { loadStrategicState, type StrategicState } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
 
 let signedIn = false;
@@ -14,7 +21,10 @@ let latestNetworkAnalysis: NetworkAnalysis | null = null;
 let latestNetworkAnalysisAt: string | null = null;
 let loadError = "";
 let recentConversationNotes: Array<{ title: string | null; created_at: string }> = [];
+let recentConversationOutcomes: ConversationOutcome[] = [];
 let conversationNoteCount = 0;
+let strategicState: StrategicState | null = null;
+let latestConversationAt: string | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -52,6 +62,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       };
       latestNetworkAnalysis = parseNetworkAnalysis(analysisRow?.extracted_text ?? null);
       latestNetworkAnalysisAt = analysisRow?.created_at ?? null;
+      strategicState = await loadStrategicState(supabase, user.id);
 
       const [{ count: noteCount }, { data: noteRows }] = await Promise.all([
         supabase
@@ -61,7 +72,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .eq("source_type", "conversation_outcome"),
         supabase
           .from("career_sources")
-          .select("title, created_at")
+          .select("title, extracted_text, created_at")
           .eq("user_id", user.id)
           .eq("source_type", "conversation_outcome")
           .order("created_at", { ascending: false })
@@ -69,6 +80,10 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       ]);
       conversationNoteCount = noteCount ?? 0;
       recentConversationNotes = noteRows ?? [];
+      latestConversationAt = noteRows?.[0]?.created_at ?? null;
+      recentConversationOutcomes = (noteRows ?? [])
+        .map((row) => parseSavedConversationOutcome(row.extracted_text, row.created_at))
+        .filter(Boolean) as ConversationOutcome[];
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load network intelligence state.";
@@ -80,6 +95,17 @@ function parseNetworkAnalysis(value: string | null): NetworkAnalysis | null {
   try {
     const parsed = JSON.parse(value);
     return parsed?.analysis ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseSavedConversationOutcome(value: string | null, createdAt: string): ConversationOutcome | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    const outcome = parseConversationOutcome(parsed);
+    return outcome ? { ...outcome, createdAt: outcome.createdAt ?? createdAt } : null;
   } catch {
     return null;
   }
@@ -324,18 +350,33 @@ const conversationOpeners = [
   },
 ];
 
-// Personalized lanes: surface the user's own lanes (with their AI-recommended
-// validation ask) when network analysis has run. Falls back to nothing — the
-// generic opener bank above is always shown so the primer is useful pre-analysis.
-const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
-  .slice(0, 3)
-  .map((lane) => ({
-    name: lane.lane,
-    status: lane.status.replace("_", " "),
-    recommendedAsk: lane.recommendedValidationAsk,
-    missingEvidence: lane.missingEvidence[0] ?? null,
-    namedPeople: lane.namedPeople.slice(0, 3),
-  }));
+// Personalized lanes: prefer the propagated strategic state because it includes
+// newer conversation outcomes. The older network analysis is retained below as
+// an import snapshot, not treated as the current source of truth.
+const personalLanes = strategicState?.lanes?.length
+  ? strategicState.lanes.slice(0, 3).map((lane) => ({
+      name: lane.lane,
+      status: lane.direction,
+      recommendedAsk: `Ask someone in this lane what title language, scope, and proof would make this direction credible right now.`,
+      missingEvidence: lane.reasons[1] ?? null,
+      namedPeople: lane.reasons
+        .map((reason) => reason.split(":")[0]?.trim())
+        .filter((name) => /^[A-Z][A-Za-z'.-]+(\s+[A-Z][A-Za-z'.-]+)+$/.test(name))
+        .slice(0, 3),
+    }))
+  : (latestNetworkAnalysis?.laneValidations ?? []).slice(0, 3).map((lane) => ({
+      name: lane.lane,
+      status: lane.status.replace("_", " "),
+      recommendedAsk: lane.recommendedValidationAsk,
+      missingEvidence: lane.missingEvidence[0] ?? null,
+      namedPeople: lane.namedPeople.slice(0, 3),
+    }));
+
+const networkAnalysisIsStale = Boolean(
+  latestNetworkAnalysisAt &&
+  latestConversationAt &&
+  new Date(latestConversationAt).getTime() > new Date(latestNetworkAnalysisAt).getTime(),
+);
 ---
 
 <Layout title="CIP Network Intelligence">
@@ -436,7 +477,7 @@ const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
         <div class="mt-5 rounded-md border border-[var(--accent-soft)] bg-[var(--accent-soft)] p-4">
           <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Your lanes right now</p>
           <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
-            From your latest network analysis. Each one carries the question CIP thinks is most worth asking first.
+            From your current strategy memory. This includes saved conversation outcomes when they have changed the lane picture.
           </p>
           <div class="mt-3 grid gap-3 md:grid-cols-3">
             {personalLanes.map((lane) => (
@@ -968,14 +1009,108 @@ const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
       <div id="loopback-result" class="mt-4" aria-live="polite"></div>
     </section>
 
+    {strategicState ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Current network memory</p>
+            <h2 class="mt-1 text-2xl font-semibold">What saved conversations are changing now</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              This readout is built from the propagated strategic state, so it includes conversation outcomes, current evidence analysis, watched employers, and the older network import when useful. Treat it as the current working view.
+            </p>
+          </div>
+          <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
+            {strategicState.conversationOutcomeCount} conversation signals
+          </span>
+        </div>
+
+        {strategicState.lanes.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Current lane validation</h3>
+            <div class="mt-3 grid gap-3">
+              {strategicState.lanes.slice(0, 6).map((lane) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{lane.lane}</h4>
+                      <p class="mt-1 text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {lane.score} · {lane.direction}
+                    </span>
+                  </div>
+                  {lane.reasons.length ? (
+                    <ul class="mt-3 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
+                      {lane.reasons.slice(0, 3).map((reason) => <li>{reason}</li>)}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {recentConversationOutcomes.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Recent conversation signals</h3>
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              {recentConversationOutcomes.map((outcome) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{outcome.contactName}</h4>
+                      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+                        {[outcome.contactTitle, outcome.contactOrganization].filter(Boolean).join(" at ") || "Conversation source"}
+                      </p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {outcome.signalDirection}
+                    </span>
+                  </div>
+                  <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+                    {[outcome.relatedLane, outcome.relatedEmployer].filter(Boolean).join(" · ") || outcome.signalType.replace("_", " ")}
+                  </p>
+                  {(outcome.marketSignal || outcome.newLeads || outcome.nextAction) ? (
+                    <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{outcome.marketSignal || outcome.newLeads || outcome.nextAction}</p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {strategicState.employers.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Watched employer movement</h3>
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              {strategicState.employers.slice(0, 4).map((employer) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{employer.name}</h4>
+                      <p class="mt-1 text-xs text-[var(--muted)]">{employer.region || "Region not set"}</p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {employer.score} · {employer.direction}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{employer.nextMove}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    ) : null}
+
     {latestNetworkAnalysis ? (
       <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Latest saved network analysis</p>
-            <h2 class="mt-1 text-2xl font-semibold">Most recent saved readout</h2>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Saved import-based network analysis</p>
+            <h2 class="mt-1 text-2xl font-semibold">Older contact-import snapshot</h2>
             <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-              This section shows the newest analysis saved before this page loaded. After a fresh import, review the new full-width result above or reload the page to refresh this saved view.
+              This section shows the newest saved network import analysis. It can be useful for old relationship context, but newer conversation outcomes are shown in Current network memory above.
             </p>
           </div>
           {latestNetworkAnalysisAt ? (
@@ -984,6 +1119,11 @@ const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
             </span>
           ) : null}
         </div>
+        {networkAnalysisIsStale ? (
+          <p class="mt-4 rounded-md border border-[var(--brass-soft)] bg-[var(--brass-soft)] p-3 text-sm leading-6 text-[var(--warning)]">
+            This import snapshot predates newer saved conversations. Use Current network memory above for current lane movement.
+          </p>
+        ) : null}
         <p class="mt-4 text-sm leading-6 text-[var(--muted)]">{latestNetworkAnalysis.summary}</p>
         {latestNetworkAnalysis.sourceInventory?.length ? (
           <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">

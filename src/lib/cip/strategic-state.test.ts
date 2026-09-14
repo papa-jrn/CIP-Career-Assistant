@@ -94,4 +94,25 @@ describe("strategic state propagation", () => {
     expect(state.deltas.join(" ")).toMatch(/moved down/);
     expect(state.conversationOutcomeCount).toBe(1);
   });
+
+  it("keeps a conversation-only lane visible before advisor analysis promotes it", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: advisor,
+      conversationOutcomes: [
+        buildConversationOutcome({
+          contactName: "Alex Herzog",
+          relatedLane: "Entrepreneurship teacher and workforce development leader",
+          signalDirection: "strengthens",
+          signalType: "new_target",
+          confidence: "medium",
+          marketSignal: "Vermont State University teaching or think-tank opportunity may be worth exploring.",
+        }),
+      ],
+    });
+
+    expect(lanes.some((lane) => lane.lane === "Entrepreneurship teacher and workforce development leader")).toBe(true);
+    const alexLane = lanes.find((lane) => lane.lane.includes("Entrepreneurship"));
+    expect(alexLane?.label).toBe("Conversation research lane");
+    expect(alexLane?.reasons.join(" ")).toMatch(/Alex Herzog/);
+  });
 });

@@ -10,6 +10,7 @@ import {
 } from "@/lib/cip/conversation-outcomes";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
+import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 
 type StructuredFeedback = {
   contactName: string;
@@ -157,13 +158,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (shouldLogConversation(feedback)) {
       conversationLogged = await replaceConversationOutcome(supabase, user.id, feedback, now);
     }
+    const propagation = conversationLogged
+      ? await propagateStrategicStateAfterChange(supabase, user.id)
+      : null;
 
     return html(`
       <div class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3">
         <p class="text-sm font-semibold text-[var(--accent-strong)]">Saved review for ${escapeHtml(contactName)}.</p>
         <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
           ${conversationLogged
-            ? "Conversation captured. The next network and evidence re-analysis will read it as first-hand market evidence."
+            ? propagation?.ok
+              ? "Conversation captured and the strategic snapshot was refreshed."
+              : `Conversation captured. Refresh the briefing manually if needed: ${escapeHtml(propagation?.errorMessage ?? "propagation skipped")}.`
             : "Future network analyses will use this decision and relationship context."}
         </p>
       </div>

@@ -148,7 +148,10 @@ export function buildStrategicState(inputs: StrategicStateInputs): StrategicStat
 }
 
 export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
-  const targetLanes = buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null);
+  const targetLanes = [
+    ...buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null),
+    ...conversationOnlyLanes(inputs),
+  ];
   const networkByLane = new Map(
     (inputs.latestNetworkAnalysis?.laneValidations ?? [])
       .filter((lane) => lane.lane)
@@ -187,6 +190,29 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       reasons: reasons.slice(0, 5),
     };
   });
+}
+
+function conversationOnlyLanes(inputs: StrategicStateInputs) {
+  const existing = new Set(
+    buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null)
+      .map((lane) => normalize(lane.role)),
+  );
+  const seen = new Set<string>();
+  return (inputs.conversationOutcomes ?? [])
+    .filter((outcome) => outcome.relatedLane)
+    .map((outcome) => ({
+      label: "Conversation research lane",
+      role: outcome.relatedLane,
+      rationale: `${outcome.contactName} surfaced this as a lane or market signal.`,
+      missing: "Needs evidence re-analysis before it becomes a resume or search priority.",
+    }))
+    .filter((lane) => {
+      const key = normalize(lane.role);
+      if (!key || existing.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
 }
 
 export function scoreEmployers(inputs: StrategicStateInputs): StrategicEmployerScore[] {

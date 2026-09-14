@@ -100,6 +100,26 @@ export async function buildWeeklyStrategySnapshot(
   return { error, summary, nextActions };
 }
 
+export async function propagateStrategicStateAfterChange(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  try {
+    const result = await buildWeeklyStrategySnapshot(supabase, userId);
+    return {
+      ok: !result.error,
+      errorMessage: result.error?.message ?? "",
+      summary: result.summary,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorMessage: error instanceof Error ? error.message : "Unknown propagation error.",
+      summary: "",
+    };
+  }
+}
+
 export function formatRegion(region: string) {
   return region
     .split("_")

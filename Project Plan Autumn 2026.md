@@ -388,10 +388,27 @@ First implementation slice:
 - Weekly briefing snapshots now save propagated lane/employer movement into the evidence payload.
 - Briefing page now surfaces "What changed" from propagated state.
 
-Next slice:
+Second implementation slice:
 
 - Trigger propagation immediately after key saves instead of only when generating a briefing.
+- Conversation loop-back saves refresh the strategic snapshot.
+- Follow-up conversation outcome saves refresh the strategic snapshot.
+- Evidence re-analysis saves refresh the strategic snapshot.
+- Employer promotion into watched employers refreshes the strategic snapshot.
+- Conversation-origin lanes now remain visible as research lanes even before advisor analysis promotes them.
+- Opportunities now reads propagated lanes as well as raw advisor lanes, so emerging lane search chips line up with briefing state.
+
+Third implementation slice:
+
+- Follow-Up now turns saved conversation outcomes with named contacts into queue contacts, so people like Alex Herzog do not disappear just because they entered through conversation notes instead of an import.
+- Network now shows a current conversation-informed strategy memory above the older saved import analysis.
+- Network lane prompts now prefer propagated strategic lanes, not stale `network_analysis` lane validations.
+- The older saved network analysis is explicitly labeled as an import-based snapshot, with a stale-data warning when newer conversations exist.
+
+Next slice:
+
 - Add employer-candidate recommendation movement, follow-up obligations, and resume lane recommendation movement.
+- Add a clearer explanation of strategic lane scores so the numbers feel interpretable rather than arbitrary.
 - Store richer movement history once the current snapshot shape proves useful in smoke testing.
 
 ---

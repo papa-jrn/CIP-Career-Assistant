@@ -1,6 +1,12 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { signalConfidences, signalDirections, signalTypes } from "../lib/cip/conversation-outcomes";
+import {
+  parseConversationOutcome,
+  signalConfidences,
+  signalDirections,
+  signalTypes,
+  type ConversationOutcome,
+} from "../lib/cip/conversation-outcomes";
 import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
 
@@ -113,6 +119,7 @@ let importedContactCount = 0;
 let analysisContactCount = 0;
 let feedbackCount = 0;
 let conversationNoteCount = 0;
+let conversationContactCount = 0;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -127,7 +134,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         { data: analysisRows, error: analysisError },
         { data: importRows, error: importError },
         { data: feedbackRows, error: feedbackError },
-        { count: notesCount },
+        { data: conversationRows, error: conversationError, count: notesCount },
       ] = await Promise.all([
         supabase
           .from("career_sources")
@@ -152,19 +159,27 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .limit(300),
         supabase
           .from("career_sources")
-          .select("id", { count: "exact", head: true })
+          .select("extracted_text, created_at", { count: "exact" })
           .eq("user_id", user.id)
-          .eq("source_type", "conversation_outcome"),
+          .eq("source_type", "conversation_outcome")
+          .order("created_at", { ascending: false })
+          .limit(120),
       ]);
 
       if (analysisError) loadError = analysisError.message;
       if (importError) loadError = importError.message;
       if (feedbackError) loadError = feedbackError.message;
+      if (conversationError) loadError = conversationError.message;
 
       const analyses = (analysisRows ?? [])
         .map((row) => parseNetworkAnalysis(row.extracted_text ?? null))
         .filter(Boolean) as NetworkAnalysis[];
       const importedContacts = (importRows ?? []).flatMap((row) => parseNetworkImportContacts(row.extracted_text ?? null));
+      const conversationContacts = (conversationRows ?? [])
+        .map((row) => parseSavedConversationOutcome(row.extracted_text, row.created_at))
+        .filter(Boolean)
+        .map((outcome) => conversationOutcomeToContact(outcome as ConversationOutcome))
+        .filter(Boolean) as NetworkContact[];
       const feedback = (feedbackRows ?? [])
         .map((row) => parseSavedFeedback(row.extracted_text, row.created_at))
         .filter(Boolean) as SavedFeedback[];
@@ -172,10 +187,11 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       latestAnalysisAt = analysisRows?.[0]?.created_at ?? null;
       latestImportAt = importRows?.[0]?.created_at ?? null;
       importedContactCount = dedupeContacts(importedContacts.filter(isFollowUpImportContact)).length;
+      conversationContactCount = dedupeContacts(conversationContacts).length;
       analysisContactCount = dedupeContacts(analyses.flatMap((analysis) => analysis.contactMatches.map((match) => match.contact))).length;
       feedbackCount = feedback.length;
       conversationNoteCount = notesCount ?? 0;
-      const built = buildQueue(importedContacts, analyses, feedback);
+      const built = buildQueue([...conversationContacts, ...importedContacts], analyses, feedback);
       queue = built.active;
       excludedQueue = built.excluded;
     }
@@ -202,6 +218,37 @@ function parseNetworkImportContacts(value: string | null): NetworkContact[] {
   } catch {
     return [];
   }
+}
+
+function parseSavedConversationOutcome(value: string | null, createdAt: string): ConversationOutcome | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    const outcome = parseConversationOutcome(parsed);
+    return outcome ? { ...outcome, createdAt: outcome.createdAt ?? createdAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+function conversationOutcomeToContact(outcome: ConversationOutcome): NetworkContact | null {
+  if (!outcome.contactName || outcome.contactName === "Unknown contact") return null;
+  const notes = [
+    outcome.relatedLane ? `Related lane: ${outcome.relatedLane}` : "",
+    outcome.relatedEmployer ? `Related employer: ${outcome.relatedEmployer}` : "",
+    outcome.marketSignal || outcome.newLeads || outcome.nextAction || outcome.rawNoteExcerpt,
+  ].filter(Boolean).join("\n");
+
+  return {
+    name: outcome.contactName,
+    company: outcome.contactOrganization || outcome.relatedEmployer || "",
+    title: outcome.contactTitle || "Conversation source",
+    profileUrl: "",
+    email: "",
+    connectedOn: outcome.conversationDate || outcome.createdAt || "",
+    source: "Conversation outcome",
+    notes,
+  };
 }
 
 function parseSavedFeedback(value: string | null, createdAt: string): SavedFeedback | null {
@@ -294,7 +341,7 @@ function buildQueue(contacts: NetworkContact[], analyses: NetworkAnalysis[], fee
 }
 
 function isFollowUpImportContact(contact: NetworkContact) {
-  return contact.source === "Structured warm connections";
+  return contact.source === "Structured warm connections" || contact.source === "Conversation outcome";
 }
 
 function isLikelyPersonName(value: string) {
@@ -368,6 +415,9 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes</p>
           <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{conversationNoteCount}</p>
+          {conversationContactCount ? (
+            <p class="mt-1 text-xs text-[var(--muted)]">{conversationContactCount} named contacts</p>
+          ) : null}
         </div>
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-xs font-semibold uppercase text-[var(--muted)]">Latest source</p>
