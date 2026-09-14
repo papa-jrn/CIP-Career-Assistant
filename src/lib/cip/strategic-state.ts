@@ -14,11 +14,34 @@ export interface StrategicLaneScore {
   score: number;
   direction: "up" | "down" | "steady";
   reasons: string[];
+  explanation: string;
 }
 
 export interface StrategicEmployerScore {
   name: string;
   region: string;
+  source: "watched" | "candidate";
+  score: number;
+  direction: "up" | "down" | "steady";
+  reasons: string[];
+  explanation: string;
+  nextMove: string;
+}
+
+export interface StrategicFollowUpObligation {
+  contactName: string;
+  relatedLane: string;
+  relatedEmployer: string;
+  promisedFollowUp: string;
+  followUpDueDate: string;
+  nextAction: string;
+  urgency: "overdue" | "due_soon" | "scheduled" | "unscheduled";
+  reasons: string[];
+}
+
+export interface StrategicResumeLaneRecommendation {
+  lane: string;
+  label: string;
   score: number;
   direction: "up" | "down" | "steady";
   reasons: string[];
@@ -29,6 +52,9 @@ export interface StrategicState {
   generatedAt: string;
   lanes: StrategicLaneScore[];
   employers: StrategicEmployerScore[];
+  employerCandidates: StrategicEmployerScore[];
+  followUpObligations: StrategicFollowUpObligation[];
+  resumeLaneRecommendation: StrategicResumeLaneRecommendation | null;
   deltas: string[];
   conversationOutcomeCount: number;
 }
@@ -41,6 +67,11 @@ export interface WatchedEmployerLike {
   fit_summary?: string | null;
   target_roles?: string[] | null;
   careers_url?: string | null;
+}
+
+export interface EmployerCandidateLike extends WatchedEmployerLike {
+  review_state?: string | null;
+  confidence?: string | null;
 }
 
 export interface NetworkAnalysisLike {
@@ -57,6 +88,7 @@ export interface StrategicStateInputs {
   latestAdvisor?: Partial<AdvisorAnalysis> | null;
   conversationOutcomes?: ConversationOutcome[];
   watchedEmployers?: WatchedEmployerLike[];
+  employerCandidates?: EmployerCandidateLike[];
   latestNetworkAnalysis?: NetworkAnalysisLike | null;
 }
 
@@ -67,8 +99,10 @@ export async function loadStrategicState(
   const [
     { data: intakeRow },
     { data: analysisRow },
+    { data: structuredConversationRows },
     { data: conversationRows },
     { data: employerRows },
+    { data: candidateRows },
     { data: networkRow },
   ] = await Promise.all([
     supabase
@@ -88,6 +122,12 @@ export async function loadStrategicState(
       .limit(1)
       .maybeSingle(),
     supabase
+      .from("conversation_outcomes")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(40),
+    supabase
       .from("career_sources")
       .select("extracted_text, created_at")
       .eq("user_id", userId)
@@ -100,6 +140,13 @@ export async function loadStrategicState(
       .eq("user_id", userId)
       .order("fit_score", { ascending: false }),
     supabase
+      .from("employer_candidates")
+      .select("name,region,priority,fit_score,fit_summary,target_roles,careers_url,review_state,confidence")
+      .eq("user_id", userId)
+      .neq("review_state", "promoted")
+      .order("fit_score", { ascending: false })
+      .limit(30),
+    supabase
       .from("career_sources")
       .select("extracted_text")
       .eq("user_id", userId)
@@ -111,15 +158,21 @@ export async function loadStrategicState(
 
   const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
   const latestAdvisor = parseAnalysisAdvisor(analysisRow?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
-  const conversationOutcomes = (conversationRows ?? [])
-    .map((row) => parseSavedConversation(row.extracted_text, row.created_at))
-    .filter(Boolean) as ConversationOutcome[];
+  const conversationOutcomes = dedupeConversationOutcomes([
+    ...(structuredConversationRows ?? [])
+      .map((row) => parseStructuredConversationRow(row))
+      .filter(Boolean) as ConversationOutcome[],
+    ...(conversationRows ?? [])
+      .map((row) => parseSavedConversation(row.extracted_text, row.created_at))
+      .filter(Boolean) as ConversationOutcome[],
+  ]);
 
   return buildStrategicState({
     latestSource,
     latestAdvisor,
     conversationOutcomes,
     watchedEmployers: (employerRows ?? []) as WatchedEmployerLike[],
+    employerCandidates: (candidateRows ?? []) as EmployerCandidateLike[],
     latestNetworkAnalysis: parseNetworkAnalysis(networkRow?.extracted_text ?? null),
   });
 }
@@ -127,21 +180,35 @@ export async function loadStrategicState(
 export function buildStrategicState(inputs: StrategicStateInputs): StrategicState {
   const lanes = scoreLanes(inputs);
   const employers = scoreEmployers(inputs);
+  const employerCandidates = scoreEmployerCandidates(inputs);
+  const followUpObligations = buildFollowUpObligations(inputs.conversationOutcomes ?? []);
+  const resumeLaneRecommendation = buildResumeLaneRecommendation(lanes);
   const deltas = [
     ...lanes
       .filter((lane) => lane.direction !== "steady")
       .slice(0, 4)
-      .map((lane) => `${lane.label}: ${lane.lane} moved ${lane.direction} to ${lane.score}. ${lane.reasons[0] ?? ""}`.trim()),
+      .map((lane) => `${lane.label}: ${lane.lane} moved ${lane.direction} to ${lane.score}. ${lane.explanation}`.trim()),
     ...employers
       .filter((employer) => employer.direction !== "steady")
       .slice(0, 4)
-      .map((employer) => `${employer.name} moved ${employer.direction} to ${employer.score}. ${employer.reasons[0] ?? ""}`.trim()),
+      .map((employer) => `${employer.name} moved ${employer.direction} to ${employer.score}. ${employer.explanation}`.trim()),
+    ...employerCandidates
+      .filter((candidate) => candidate.direction !== "steady")
+      .slice(0, 4)
+      .map((candidate) => `Candidate ${candidate.name} moved ${candidate.direction} to ${candidate.score}. ${candidate.explanation}`.trim()),
+    ...followUpObligations
+      .filter((obligation) => obligation.urgency === "overdue" || obligation.urgency === "due_soon")
+      .slice(0, 3)
+      .map((obligation) => `Follow-up due: ${obligation.contactName}. ${obligation.nextAction || obligation.promisedFollowUp}`.trim()),
   ];
 
   return {
     generatedAt: new Date().toISOString(),
     lanes,
     employers,
+    employerCandidates,
+    followUpObligations,
+    resumeLaneRecommendation,
     deltas,
     conversationOutcomeCount: inputs.conversationOutcomes?.length ?? 0,
   };
@@ -149,7 +216,7 @@ export function buildStrategicState(inputs: StrategicStateInputs): StrategicStat
 
 export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
   const targetLanes = [
-    ...buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null),
+    ...buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null, { limit: 5 }),
     ...conversationOnlyLanes(inputs),
   ];
   const networkByLane = new Map(
@@ -159,9 +226,14 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
   );
 
   return targetLanes.map((lane, index) => {
-    const base = 74 - index * 8;
+    const conversationResearchLane = lane.label === "Conversation research lane";
+    const base = conversationResearchLane ? 42 : 74 - index * 8;
     let score = base;
-    const reasons = [`Baseline from current advisor lane order: ${base}.`];
+    const reasons = [
+      conversationResearchLane
+        ? `Baseline for a conversation-only research lane: ${base}.`
+        : `Baseline from current advisor lane order: ${base}.`,
+    ];
     const network = bestMatch(lane.role, [...networkByLane.keys()]);
     if (network) {
       const networkLane = networkByLane.get(network);
@@ -181,6 +253,12 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       reasons.push(`${outcome.contactName}: ${outcome.signalDirection} ${outcome.signalType} (${adjustment >= 0 ? "+" : ""}${adjustment}).`);
     }
 
+    const cap = exploratoryLaneCap(lane, inputs.conversationOutcomes ?? []);
+    if (cap && score > cap) {
+      score = cap;
+      reasons.push(`Capped as research because current support is only a light new-target signal; needs a real role, employer, or current-work evidence before ranking higher.`);
+    }
+
     const finalScore = clamp(score);
     return {
       lane: lane.role,
@@ -188,13 +266,19 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       score: finalScore,
       direction: finalScore > base + 3 ? "up" : finalScore < base - 3 ? "down" : "steady",
       reasons: reasons.slice(0, 5),
+      explanation: scoreExplanation(finalScore, reasons),
     };
-  });
+  })
+    .sort((a, b) => lanePriorityScore(b) - lanePriorityScore(a))
+    .map((lane, index) => ({
+      ...lane,
+      label: rankedLaneLabel(lane, index),
+    }));
 }
 
 function conversationOnlyLanes(inputs: StrategicStateInputs) {
   const existing = new Set(
-    buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null)
+    buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null, { limit: 5 })
       .map((lane) => normalize(lane.role)),
   );
   const seen = new Set<string>();
@@ -216,12 +300,66 @@ function conversationOnlyLanes(inputs: StrategicStateInputs) {
 }
 
 export function scoreEmployers(inputs: StrategicStateInputs): StrategicEmployerScore[] {
-  return (inputs.watchedEmployers ?? []).map((employer) => {
+  return scoreEmployerLike(inputs.watchedEmployers ?? [], inputs.conversationOutcomes ?? [], "watched");
+}
+
+export function scoreEmployerCandidates(inputs: StrategicStateInputs): StrategicEmployerScore[] {
+  const candidates = (inputs.employerCandidates ?? []).filter((candidate) => candidate.review_state !== "cleared");
+  return scoreEmployerLike(candidates, inputs.conversationOutcomes ?? [], "candidate");
+}
+
+export function buildFollowUpObligations(outcomes: ConversationOutcome[]): StrategicFollowUpObligation[] {
+  return outcomes
+    .filter((outcome) => outcome.promisedFollowUp || outcome.followUpDueDate || outcome.nextAction || outcome.signalType === "follow_up_obligation")
+    .map((outcome) => {
+      const urgency = followUpUrgency(outcome.followUpDueDate);
+      const reasons = [
+        outcome.promisedFollowUp ? `Promised follow-up: ${outcome.promisedFollowUp}` : "",
+        outcome.followUpDueDate ? `Due ${outcome.followUpDueDate}.` : "No due date captured yet.",
+        outcome.relatedLane ? `Related lane: ${outcome.relatedLane}.` : "",
+        outcome.relatedEmployer ? `Related employer: ${outcome.relatedEmployer}.` : "",
+      ].filter(Boolean);
+      return {
+        contactName: outcome.contactName,
+        relatedLane: outcome.relatedLane,
+        relatedEmployer: outcome.relatedEmployer,
+        promisedFollowUp: outcome.promisedFollowUp,
+        followUpDueDate: outcome.followUpDueDate,
+        nextAction: outcome.nextAction || outcome.promisedFollowUp || "Decide the next follow-up step.",
+        urgency,
+        reasons,
+      };
+    })
+    .sort((a, b) => followUpSortValue(a) - followUpSortValue(b))
+    .slice(0, 12);
+}
+
+export function buildResumeLaneRecommendation(lanes: StrategicLaneScore[]): StrategicResumeLaneRecommendation | null {
+  const lane = lanes.find((item) => item.label !== "Conversation research lane") ?? lanes[0];
+  if (!lane) return null;
+  return {
+    lane: lane.lane,
+    label: lane.label,
+    score: lane.score,
+    direction: lane.direction,
+    reasons: lane.reasons.slice(0, 4),
+    nextMove: lane.direction === "down"
+      ? "Recheck this lane before generating or refreshing the resume."
+      : "Use this as the next resume variant to generate or refresh.",
+  };
+}
+
+function scoreEmployerLike(
+  employers: WatchedEmployerLike[],
+  conversationOutcomes: ConversationOutcome[],
+  source: "watched" | "candidate",
+): StrategicEmployerScore[] {
+  return employers.map((employer) => {
     const base = clamp(Number(employer.fit_score ?? 50));
     let score = base;
-    const reasons = [`Baseline watched-employer fit score: ${base}.`];
+    const reasons = [`Baseline ${source === "watched" ? "watched-employer" : "employer-candidate"} fit score: ${base}.`];
 
-    for (const outcome of inputs.conversationOutcomes ?? []) {
+    for (const outcome of conversationOutcomes) {
       const relatedEmployer = outcome.relatedEmployer || "";
       const employerMatch = matchesText(employer.name, relatedEmployer);
       const roleMatch = (employer.target_roles ?? []).some((role) => matchesText(role, outcome.relatedLane));
@@ -237,9 +375,11 @@ export function scoreEmployers(inputs: StrategicStateInputs): StrategicEmployerS
     return {
       name: employer.name,
       region: employer.region ?? "",
+      source,
       score: finalScore,
       direction: finalScore > base + 3 ? "up" : finalScore < base - 3 ? "down" : "steady",
       reasons: reasons.slice(0, 5),
+      explanation: scoreExplanation(finalScore, reasons),
       nextMove: nextEmployerMove(employer, finalScore),
     };
   }).sort((a, b) => b.score - a.score);
@@ -276,10 +416,67 @@ function conversationAdjustment(outcome: ConversationOutcome) {
   }[outcome.signalDirection] ?? 0;
   const confidence = {
     high: 1,
-    medium: 0.75,
-    low: 0.5,
+    medium: 0.5,
+    low: 0.25,
   }[outcome.confidence] ?? 0.75;
-  return Math.round(base * confidence);
+  const typeWeight = outcome.signalType === "new_target" ? 0.75 : 1;
+  return Math.round(base * confidence * typeWeight);
+}
+
+function exploratoryLaneCap(
+  lane: ReturnType<typeof buildTargetLanes>[number],
+  outcomes: ConversationOutcome[],
+) {
+  const matching = outcomes.filter((outcome) => matchesText(lane.role, outcome.relatedLane));
+  const laneText = normalize([lane.role, lane.rationale, lane.missing].join(" "));
+  const speculativeAdvisorLane = (
+    lane.label !== "Primary lane" &&
+    (
+      /\bentrepreneur(ship|ial)?\b/.test(laneText) ||
+      /\bworkforce development\b/.test(laneText) ||
+      /\b(explor|possible|potential|prior|past|old|stale|fresh evidence|current posting|real posting|worth exploring|needs validation|needs evidence)\b/.test(laneText)
+    )
+  );
+
+  const positive = matching.filter((outcome) => outcome.signalDirection === "strengthens");
+  const strongSupport = matching.some((outcome) =>
+    outcome.confidence === "high" ||
+    outcome.signalType === "lane_fit" ||
+    outcome.signalType === "employer_fit" ||
+    outcome.signalType === "compensation" ||
+    outcome.signalType === "hiring_process" ||
+    outcome.relatedEmployer ||
+    outcome.promisedFollowUp ||
+    outcome.followUpDueDate,
+  );
+  const onlyLightNewTargets = positive.length > 0 && matching.every((outcome) =>
+    (outcome.signalType === "new_target" || outcome.signalType === "market_signal") &&
+    outcome.confidence !== "high",
+  );
+
+  if (onlyLightNewTargets && !strongSupport) return 54;
+  if (speculativeAdvisorLane && !strongSupport) return 58;
+  return null;
+}
+
+function rankedLaneLabel(lane: StrategicLaneScore, index: number) {
+  if (lane.label === "Conversation research lane") return lane.label;
+  if (index === 0) return "Primary lane";
+  if (index === 1 && lane.score >= 70) return "Strong alternate";
+  return "Research lane";
+}
+
+function lanePriorityScore(lane: StrategicLaneScore) {
+  const text = normalize([lane.lane, lane.label, lane.explanation, ...lane.reasons].join(" "));
+  const unsupportedExploratory =
+    lane.score < 70 &&
+    (
+      text.includes("entrepreneur") ||
+      text.includes("workforce development") ||
+      text.includes("only a light new target signal") ||
+      text.includes("needs a real role")
+    );
+  return unsupportedExploratory ? lane.score - 25 : lane.score;
 }
 
 function nextEmployerMove(employer: WatchedEmployerLike, score: number) {
@@ -287,6 +484,62 @@ function nextEmployerMove(employer: WatchedEmployerLike, score: number) {
   if (score >= 75) return "Find the careers page or a current hiring source.";
   if (score >= 60) return "Keep watching and look for one market-read contact.";
   return "Hold as context until stronger evidence appears.";
+}
+
+function parseStructuredConversationRow(value: unknown) {
+  const outcome = parseConversationOutcome(value);
+  return outcome ?? null;
+}
+
+function dedupeConversationOutcomes(outcomes: ConversationOutcome[]) {
+  const seen = new Set<string>();
+  return outcomes.filter((outcome) => {
+    const key = [
+      outcome.sourceRef,
+      outcome.contactName,
+      outcome.conversationDate,
+      outcome.relatedLane,
+      outcome.relatedEmployer,
+    ].join("|").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function scoreExplanation(score: number, reasons: string[]) {
+  const band = score >= 80
+    ? "high-confidence"
+    : score >= 65
+      ? "promising"
+      : score >= 50
+        ? "watch"
+        : "low-priority";
+  const movement = reasons.length > 1
+    ? reasons.slice(1, 3).join(" ")
+    : reasons[0] ?? "";
+  return `${band} score based on ${movement}`.trim();
+}
+
+function followUpUrgency(date: string) {
+  if (!date) return "unscheduled";
+  const today = new Date().toISOString().slice(0, 10);
+  if (date < today) return "overdue";
+  const days = Math.ceil((new Date(`${date}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86400000);
+  return days <= 7 ? "due_soon" : "scheduled";
+}
+
+function followUpSortValue(obligation: StrategicFollowUpObligation) {
+  const urgencyOrder = {
+    overdue: 0,
+    due_soon: 1,
+    scheduled: 2,
+    unscheduled: 3,
+  }[obligation.urgency];
+  const dateValue = obligation.followUpDueDate
+    ? new Date(`${obligation.followUpDueDate}T00:00:00`).getTime()
+    : Number.MAX_SAFE_INTEGER;
+  return urgencyOrder * 10_000_000_000_000 + dateValue;
 }
 
 function bestMatch(value: string, candidates: string[]) {

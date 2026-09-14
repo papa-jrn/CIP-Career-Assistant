@@ -14,11 +14,15 @@ import {
   type ResumeAssetContext,
   type ResumeAssetDraft,
 } from "../lib/cip/resume-assets";
+import { loadStrategicState, type StrategicLaneScore, type StrategicResumeLaneRecommendation } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
+
+type TargetLane = ReturnType<typeof buildTargetLanes>[number];
 
 let assetState: "ready" | "signin" | "empty" | "local" | "error" = "local";
 let savedDraftsByLane: SavedResumeDraftByLane = {};
 let targetLanes = buildTargetLanes(null, null);
+let researchLanes: Array<TargetLane & { score?: number; explanation?: string }> = [];
 let positioningInputs = buildPositioningInputs(null, null);
 let proofItems = buildProofItems(null, null);
 let resumeContext: ResumeAssetContext = {
@@ -28,6 +32,7 @@ let resumeContext: ResumeAssetContext = {
   positioning: positioningInputs,
   proofItems,
 };
+let resumeLaneRecommendation: StrategicResumeLaneRecommendation | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -41,11 +46,16 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         loadResumeAssetContext(supabase, user.id),
         loadSavedResumeDrafts(supabase, user.id),
       ]);
-      targetLanes = loaded.targetLanes;
+      const strategicState = await loadStrategicState(supabase, user.id);
+      const lanePool = buildTargetLanes(loaded.latestSource, loaded.latestAdvisor, { limit: 5 });
+      const selectedLanes = selectAssetLanes(lanePool, strategicState.lanes);
+      targetLanes = selectedLanes.targetLanes;
+      researchLanes = selectedLanes.researchLanes;
       positioningInputs = loaded.positioningInputs;
       proofItems = loaded.proofItems;
-      resumeContext = loaded.context;
+      resumeContext = { ...loaded.context, targetLanes };
       savedDraftsByLane = draftByLane;
+      resumeLaneRecommendation = strategicState.resumeLaneRecommendation;
       assetState = loaded.latestSource || loaded.latestAdvisor ? "ready" : "empty";
     } else {
       assetState = "signin";
@@ -102,6 +112,60 @@ const resumeGuardrails = [
   "Vary sentence structure, action verbs, and bullet length so the resume reads like a specific human career, not a template.",
   "Keep sensitive or private evidence in the strategy layer unless the user approves it for public use.",
 ];
+
+function selectAssetLanes(baseLanes: TargetLane[], strategicLanes: StrategicLaneScore[]) {
+  if (!strategicLanes.length) return { targetLanes: baseLanes, researchLanes: [] };
+  const scored = baseLanes.map((lane, index) => {
+    const strategic = strategicLanes.find((item) => normalizeLane(item.lane) === normalizeLane(lane.role));
+    return {
+      ...lane,
+      score: strategic?.score ?? 74 - index * 8,
+      direction: strategic?.direction ?? "steady",
+      explanation: strategic?.explanation ?? "",
+    };
+  });
+
+  const ranked = scored.sort((a, b) => effectiveLaneSlotScore(b) - effectiveLaneSlotScore(a));
+  const primary = ranked[0];
+  const strongAlternate = ranked.find((lane) => lane !== primary && lane.score >= 70 && !isExploratoryLane(lane));
+  const targetLanes = [primary, strongAlternate]
+    .filter(Boolean)
+    .map((lane, index) => ({
+      ...lane,
+      label: index === 0 ? "Primary lane" : "Strong alternate",
+      rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
+    }));
+
+  const selected = new Set(targetLanes.map((lane) => normalizeLane(lane.role)));
+  const researchLanes = ranked
+    .filter((lane) => !selected.has(normalizeLane(lane.role)))
+    .slice(0, 3)
+    .map((lane) => ({
+      ...lane,
+      label: "Research lane",
+      rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
+    }));
+
+  return { targetLanes, researchLanes };
+}
+
+function effectiveLaneSlotScore(lane: TargetLane & { score: number; explanation: string }) {
+  return isExploratoryLane(lane) && lane.score < 70 ? lane.score - 25 : lane.score;
+}
+
+function isExploratoryLane(lane: TargetLane & { score?: number; explanation?: string }) {
+  const text = normalizeLane([lane.role, lane.rationale, lane.missing, lane.explanation].join(" "));
+  return (
+    text.includes("entrepreneur") ||
+    text.includes("workforce development") ||
+    text.includes("needs a real posting") ||
+    text.includes("current support is only a light new target signal")
+  );
+}
+
+function normalizeLane(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
 ---
 
 <Layout title="CIP Career Lanes">
@@ -128,7 +192,7 @@ const resumeGuardrails = [
             <h2 class="mt-1 text-2xl font-semibold">Positioning brief</h2>
           </div>
           <span class="rounded-md bg-[rgba(32,120,87,0.12)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-            3 lanes recommended
+            {targetLanes.length} validated lane{targetLanes.length === 1 ? "" : "s"}
           </span>
         </div>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
@@ -148,8 +212,20 @@ const resumeGuardrails = [
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Target lanes</p>
         <h2 class="mt-1 text-2xl font-semibold">Choose focus before generating variants.</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Three lanes are enough for the first asset pass: one primary, one strong alternate, and one research lane. Five lanes can be stored later, but the first resume should not try to be five different people at once.
+          Keep the resume and job-search assets focused on lanes with enough current evidence. We can still track research lanes, but they should not crowd out the main strategy unless a real role, employer, conversation, or proof point strengthens them.
         </p>
+        {resumeLaneRecommendation ? (
+          <div class="mt-4 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-4">
+            <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">Propagated resume lane recommendation</p>
+            <h3 class="mt-1 font-semibold">{resumeLaneRecommendation.lane}</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Score {resumeLaneRecommendation.score} / {resumeLaneRecommendation.direction}. {resumeLaneRecommendation.nextMove}
+            </p>
+            {resumeLaneRecommendation.reasons.length ? (
+              <p class="mt-2 text-xs leading-5 text-[var(--muted)]">{resumeLaneRecommendation.reasons[0]}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div class="mt-5 space-y-3">
           {targetLanes.map((lane) => (
             <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -159,7 +235,36 @@ const resumeGuardrails = [
               <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{lane.missing}</p>
             </article>
           ))}
+          {!targetLanes.some((lane) => lane.label === "Strong alternate") ? (
+            <article class="rounded-md border border-dashed border-[var(--line)] bg-[var(--background)] p-4">
+              <p class="text-xs font-semibold uppercase text-[var(--muted)]">Strong alternate</p>
+              <h3 class="mt-1 font-semibold">No validated secondary lane yet.</h3>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+                CIP needs stronger current-work evidence, postings, compensation fit, or high-confidence conversations before treating another lane as worth resume/job-search focus.
+              </p>
+            </article>
+          ) : null}
         </div>
+        {researchLanes.length ? (
+          <div class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <p class="text-xs font-semibold uppercase text-[var(--muted)]">Research queue</p>
+            <h3 class="mt-1 font-semibold">Directions to investigate, not prioritize yet.</h3>
+            <div class="mt-3 grid gap-3">
+              {researchLanes.map((lane) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h4 class="font-semibold">{lane.role}</h4>
+                    {typeof lane.score === "number" ? (
+                      <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Score {lane.score}</span>
+                    ) : null}
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{lane.rationale}</p>
+                  <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{lane.missing}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
 

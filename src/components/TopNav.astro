@@ -76,3 +76,20 @@ const isProcessCurrent = processItems.some((item) => isCurrent(item.href));
     </div>
   </div>
 </header>
+
+<script>
+  const closeOpenNavMenus = () => {
+    document.querySelectorAll(".cip-nav-menu[open]").forEach((menu) => {
+      menu.removeAttribute("open");
+    });
+  };
+
+  document.querySelectorAll(".cip-nav-menu a").forEach((link) => {
+    link.addEventListener("click", closeOpenNavMenus);
+  });
+
+  document.addEventListener("astro:before-swap", closeOpenNavMenus);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeOpenNavMenus();
+  });
+</script>

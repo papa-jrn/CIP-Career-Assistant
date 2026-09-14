@@ -226,11 +226,16 @@ export function summarizeAnalysisReview(value: string | null) {
   }
 }
 
-export function buildTargetLanes(source: IntakeSource | null, advisor: Partial<AdvisorAnalysis> | null) {
+export function buildTargetLanes(
+  source: IntakeSource | null,
+  advisor: Partial<AdvisorAnalysis> | null,
+  options: { limit?: number } = {},
+) {
+  const limit = options.limit ?? 3;
   const briefs = Array.isArray(advisor?.roleBriefs) ? advisor.roleBriefs : [];
   if (briefs.length) {
-    return briefs.slice(0, 3).map((brief, index) => ({
-      label: index === 0 ? "Primary lane" : index === 1 ? "Strong alternate" : "Research lane",
+    return briefs.slice(0, limit).map((brief, index) => ({
+      label: defaultLaneLabel(index, brief.role, brief.whyItFits, brief.evidenceNeeded),
       role: brief.role,
       rationale: brief.whyItFits,
       missing: brief.evidenceNeeded,
@@ -239,8 +244,8 @@ export function buildTargetLanes(source: IntakeSource | null, advisor: Partial<A
 
   const roles = source?.draft?.possibleRoles ?? [];
   if (roles.length) {
-    return roles.slice(0, 3).map((role, index) => ({
-      label: index === 0 ? "Primary lane" : index === 1 ? "Strong alternate" : "Research lane",
+    return roles.slice(0, limit).map((role, index) => ({
+      label: defaultLaneLabel(index, role),
       role,
       rationale: "Pulled from the saved intake draft. Run evidence analysis before turning this into final resume positioning.",
       missing: "Needs proof, salary fit, target industry comparison, and real posting validation.",
@@ -267,6 +272,21 @@ export function buildTargetLanes(source: IntakeSource | null, advisor: Partial<A
       missing: "Needs employer and job-board validation.",
     },
   ];
+}
+
+function defaultLaneLabel(index: number, role: string, rationale = "", missing = "") {
+  if (index === 0) return "Primary lane";
+  const laneText = [role, rationale, missing].join(" ").toLowerCase();
+  if (isExploratoryLaneText(laneText)) return "Research lane";
+  return index === 1 ? "Strong alternate" : "Research lane";
+}
+
+function isExploratoryLaneText(value: string) {
+  return (
+    /\bentrepreneur(ship|ial)?\b/.test(value) ||
+    /\bworkforce development\b/.test(value) ||
+    /\b(explor|possible|potential|prior|past|old|stale|fresh evidence|current posting|real posting|worth exploring|needs validation|needs evidence)\b/.test(value)
+  );
 }
 
 export function buildPositioningInputs(source: IntakeSource | null, advisor: Partial<AdvisorAnalysis> | null) {

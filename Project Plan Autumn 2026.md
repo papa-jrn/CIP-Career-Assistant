@@ -405,10 +405,32 @@ Third implementation slice:
 - Network lane prompts now prefer propagated strategic lanes, not stale `network_analysis` lane validations.
 - The older saved network analysis is explicitly labeled as an import-based snapshot, with a stale-data warning when newer conversations exist.
 
+Fourth implementation slice:
+
+- Strategic state now scores unsaved employer candidates, not just watched employers.
+- Strategic state now extracts promised follow-ups and due dates into explicit follow-up obligations.
+- Strategic state now chooses a propagated resume lane recommendation from the current lane scores.
+- Weekly briefing snapshots now persist candidate scores, follow-up obligations, resume lane recommendation, and clearer score explanations.
+- Employers now shows propagated candidate movement in the candidate queue.
+- Assets now shows the propagated resume lane recommendation before resume generation.
+
+Smoke test notes:
+
+- Propagation is visibly happening across surfaces.
+- Briefing did not feel noticeably different from the prior smoke test; it needs sharper delta presentation once richer movement history exists.
+- Employer candidate movement became more visible after running a Lyndon, VT employer search and promoting five candidates.
+- Assets did move lanes, but a single medium-confidence conversation appeared to push the entrepreneurship teacher / workforce development lane too strongly.
+- Follow-Up needs a single merged person view. The all-connections roster and detailed cards made people appear twice.
+- Parked people should leave the active list. Parking someone is a deliberate "not pursuing" decision, not a temporary reminder.
+- Follow-up UI polish remains necessary across several pages after the propagation engine stabilizes.
+- Employer discovery can find and save organizations, but matching live roles/jobs inside those employers is a later phase; current frontier chat tools still beat CIP at broad live role research.
+- Follow-Up's AI draft note is useful, but it should be one shared utility with contact/purpose selectors, not repeated under every person.
+- Career Lanes / Assets naming should be aligned more cleanly; the nav says Career Lanes while the route is still `/assets`.
+- Process dropdown can stick across navigation and needs route-change cleanup.
+
 Next slice:
 
-- Add employer-candidate recommendation movement, follow-up obligations, and resume lane recommendation movement.
-- Add a clearer explanation of strategic lane scores so the numbers feel interpretable rather than arbitrary.
+- Smoke test the candidate, follow-up, and resume-lane propagation against live saved data.
 - Store richer movement history once the current snapshot shape proves useful in smoke testing.
 
 ---

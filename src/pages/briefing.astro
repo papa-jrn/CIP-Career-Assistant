@@ -26,15 +26,44 @@ type StrategicStateEvidence = {
     score: number;
     direction: "up" | "down" | "steady";
     reasons: string[];
+    explanation?: string;
   }>;
   employer_scores?: Array<{
     name: string;
     score: number;
     direction: "up" | "down" | "steady";
     reasons: string[];
+    explanation?: string;
     nextMove?: string;
     next_move?: string;
   }>;
+  employer_candidate_scores?: Array<{
+    name: string;
+    score: number;
+    direction: "up" | "down" | "steady";
+    reasons: string[];
+    explanation?: string;
+    nextMove?: string;
+    next_move?: string;
+  }>;
+  follow_up_obligations?: Array<{
+    contactName: string;
+    relatedLane: string;
+    relatedEmployer: string;
+    promisedFollowUp: string;
+    followUpDueDate: string;
+    nextAction: string;
+    urgency: "overdue" | "due_soon" | "scheduled" | "unscheduled";
+    reasons: string[];
+  }>;
+  resume_lane_recommendation?: {
+    lane: string;
+    label: string;
+    score: number;
+    direction: "up" | "down" | "steady";
+    reasons: string[];
+    nextMove: string;
+  } | null;
   deltas?: string[];
 };
 
@@ -161,6 +190,7 @@ function movementClass(direction: string) {
                             <p class="text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
                             <p class="mt-1 text-sm font-semibold">{lane.lane}</p>
                             <p class={`mt-2 text-xs font-semibold ${movementClass(lane.direction)}`}>{lane.score} / {lane.direction}</p>
+                            <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{lane.explanation ?? lane.reasons?.[0]}</p>
                           </div>
                         ))}
                       </div>
@@ -175,12 +205,56 @@ function movementClass(direction: string) {
                                 <p class="text-sm font-semibold">{employer.name}</p>
                                 <span class={`text-xs font-semibold ${movementClass(employer.direction)}`}>{employer.score} / {employer.direction}</span>
                               </div>
-                              <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{employer.nextMove ?? employer.next_move ?? employer.reasons?.[0]}</p>
+                              <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{employer.explanation ?? employer.nextMove ?? employer.next_move ?? employer.reasons?.[0]}</p>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : null}
+                    <div class="mt-4 grid gap-3 lg:grid-cols-3">
+                      {state.employer_candidate_scores?.length ? (
+                        <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                          <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Candidate movement</h4>
+                          <div class="mt-2 space-y-2">
+                            {state.employer_candidate_scores.slice(0, 3).map((candidate) => (
+                              <div>
+                                <div class="flex items-center justify-between gap-2">
+                                  <p class="text-sm font-semibold">{candidate.name}</p>
+                                  <span class={`text-xs font-semibold ${movementClass(candidate.direction)}`}>{candidate.score} / {candidate.direction}</span>
+                                </div>
+                                <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{candidate.explanation ?? candidate.nextMove ?? candidate.next_move ?? candidate.reasons?.[0]}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {state.follow_up_obligations?.length ? (
+                        <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                          <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up obligations</h4>
+                          <div class="mt-2 space-y-2">
+                            {state.follow_up_obligations.slice(0, 3).map((obligation) => (
+                              <div>
+                                <div class="flex items-center justify-between gap-2">
+                                  <p class="text-sm font-semibold">{obligation.contactName}</p>
+                                  <span class={`text-xs font-semibold ${obligation.urgency === "overdue" ? "text-[var(--warning)]" : "text-[var(--accent-strong)]"}`}>{obligation.urgency.replace("_", " ")}</span>
+                                </div>
+                                <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{obligation.nextAction || obligation.promisedFollowUp}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {state.resume_lane_recommendation ? (
+                        <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+                          <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Resume lane</h4>
+                          <p class="mt-2 text-sm font-semibold">{state.resume_lane_recommendation.lane}</p>
+                          <p class={`mt-2 text-xs font-semibold ${movementClass(state.resume_lane_recommendation.direction)}`}>
+                            {state.resume_lane_recommendation.score} / {state.resume_lane_recommendation.direction}
+                          </p>
+                          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{state.resume_lane_recommendation.nextMove}</p>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null;
               })()}

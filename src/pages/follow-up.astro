@@ -19,7 +19,8 @@ type QueuePerson = {
 
 // Decisions that take a person out of the active queue. They are not deleted —
 // they move to a recoverable "Removed / not pursuing" section.
-const EXCLUDED_DECISIONS = new Set(["remove", "deceased", "no_memory", "retired", "ethical_concern"]);
+const EXCLUDED_DECISIONS = new Set(["park", "remove", "deceased", "no_memory", "retired", "ethical_concern"]);
+const EXCLUDED_STATUSES = new Set(["Parked", "Removed"]);
 
 type SavedFeedback = {
   contactName: string;
@@ -335,9 +336,14 @@ function buildQueue(contacts: NetworkContact[], analyses: NetworkAnalysis[], fee
       return a.contact.name.localeCompare(b.contact.name);
     });
 
-  const excluded = everyone.filter((person) => EXCLUDED_DECISIONS.has(person.latestFeedback?.feedbackType ?? ""));
-  const active = everyone.filter((person) => !EXCLUDED_DECISIONS.has(person.latestFeedback?.feedbackType ?? "")).slice(0, 80);
+  const excluded = everyone.filter(isExcludedPerson);
+  const active = everyone.filter((person) => !isExcludedPerson(person)).slice(0, 80);
   return { active, excluded };
+}
+
+function isExcludedPerson(person: QueuePerson) {
+  const saved = person.latestFeedback;
+  return EXCLUDED_DECISIONS.has(saved?.feedbackType ?? "") || EXCLUDED_STATUSES.has(saved?.conversationStatus ?? "");
 }
 
 function isFollowUpImportContact(contact: NetworkContact) {
@@ -482,61 +488,172 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
           </p>
         )}
 
+        <section class="mt-8 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Conversation outcome</p>
+              <h3 class="mt-1 text-xl font-semibold">Capture one strategic conversation.</h3>
+              <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+                Use this after a real conversation changes a lane, employer, compensation assumption, hiring signal, or follow-up obligation. The regular contact cards below are for triage and relationship status.
+              </p>
+            </div>
+          </div>
+          <form class="mt-4 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4" hx-post="/api/network/feedback" hx-target="#conversation-outcome-result" hx-swap="innerHTML">
+            <input type="hidden" name="feedback_type" value="follow_up" />
+            <input type="hidden" name="conversation_status" value="Met" />
+            <div class="grid gap-3 lg:grid-cols-3">
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact</span>
+                <select name="contact_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                  {queue.map((person) => <option value={person.contact.name}>{person.contact.name}</option>)}
+                </select>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Organization</span>
+                <input name="contact_organization" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Optional organization or employer" />
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Title</span>
+                <input name="contact_title" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Optional title or relationship context" />
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
+                <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="e.g. Upper Valley nonprofits" />
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
+                <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up date</span>
+                <input name="follow_up_date" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="date" />
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
+                <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                  {signalDirections.map((option) => <option value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
+                <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                  {signalTypes.map((option) => <option value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
+                <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                  {signalConfidences.map((option) => <option value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
+                <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Compensation signal</span>
+                <textarea name="compensation_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Pay range, seniority, funding or budget reality"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Work model signal</span>
+                <textarea name="work_model_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Remote, hybrid, commute, schedule, travel"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Culture / fit signal</span>
+                <textarea name="culture_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Mission fit, pace, politics, management style, cautions"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Hiring signal</span>
+                <textarea name="hiring_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Hiring process, titles to search, who owns the work"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
+                <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Warnings / dealbreakers</span>
+                <textarea name="warnings" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Risks, no-go signals, reasons to slow down"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Promised follow-up</span>
+                <textarea name="promised_follow_up" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="What you or they promised to do next"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact / redirect</span>
+                <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects"></textarea>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action</span>
+                <textarea name="next_action" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Concrete action this creates"></textarea>
+              </label>
+              <label class="grid gap-1 lg:col-span-3">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes</span>
+                <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="What was said, reply details, what you agreed, or why this should wait"></textarea>
+              </label>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn || !queue.length}>
+                Save conversation outcome
+              </button>
+              <div id="conversation-outcome-result" class="text-sm" aria-live="polite"></div>
+            </div>
+          </form>
+        </section>
+
+        <section class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Draft an outreach note</p>
+              <h3 class="mt-1 text-xl font-semibold">Create one starting note when you need it.</h3>
+              <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+                Pick a person and purpose here instead of carrying a draft box under every contact. CIP drafts the note; you still edit and send it yourself.
+              </p>
+            </div>
+          </div>
+          <form class="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4" hx-post="/api/network/draft-message" hx-target="#draft-outreach-result" hx-swap="innerHTML" hx-indicator="#draft-outreach-loading">
+            <input type="hidden" name="contact_title" value={queue[0]?.contact.title ?? ""} data-draft-contact-title />
+            <input type="hidden" name="contact_company" value={queue[0]?.contact.company ?? ""} data-draft-contact-company />
+            <input type="hidden" name="contact_notes" value={queue[0]?.contact.notes ?? ""} data-draft-contact-notes />
+            <input type="hidden" name="first_ask" value={queue[0]?.match?.recommendedFirstAsk ?? ""} data-draft-contact-first-ask />
+            <label class="grid min-w-56 gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Name of person</span>
+              <select name="contact_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" data-draft-contact-select>
+                {queue.map((person) => (
+                  <option
+                    value={person.contact.name}
+                    data-title={person.contact.title ?? ""}
+                    data-company={person.contact.company ?? ""}
+                    data-notes={person.contact.notes ?? ""}
+                    data-first-ask={person.match?.recommendedFirstAsk ?? ""}
+                  >
+                    {person.contact.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label class="grid min-w-56 gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Purpose</span>
+              <select name="intent" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                {followUpIntents.map((intent) => <option value={intent}>{intent}</option>)}
+              </select>
+            </label>
+            <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn || !queue.length}>Draft note</button>
+            <span id="draft-outreach-loading" class="htmx-indicator text-xs font-semibold text-[var(--accent-strong)]">Drafting...</span>
+          </form>
+          <div id="draft-outreach-result" class="mt-3 text-sm" aria-live="polite"></div>
+        </section>
+
         <div class="mt-8 flex items-center justify-between gap-3">
-          <h3 class="text-sm font-semibold uppercase text-[var(--accent-strong)]">All connections</h3>
-          <span class="text-xs text-[var(--muted)]">Set status inline, or open a card for a deeper dive.</span>
-        </div>
-        <div class="mt-3 overflow-hidden rounded-md border border-[var(--line)]">
-          <table class="w-full border-collapse text-sm">
-            <thead>
-              <tr class="bg-[var(--background)] text-left text-xs font-semibold uppercase text-[var(--muted)]">
-                <th class="px-4 py-3">Connection</th>
-                <th class="px-4 py-3">Current decision</th>
-                <th class="px-4 py-3">Connection status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queue.map((person) => {
-                const id = slug(person.contact.name);
-                const saved = person.latestFeedback;
-                return (
-                  <tr class="border-t border-[var(--line)] align-middle">
-                    <td class="px-4 py-3">
-                      <a class="font-semibold text-[var(--accent-strong)] hover:underline" href={`#follow-up-${id}`}>{person.contact.name}</a>
-                      {needsNudge(saved) ? (
-                        <span class="ml-2 rounded-md bg-[var(--warning)] px-1.5 py-0.5 text-xs font-semibold text-white">Nudge due</span>
-                      ) : null}
-                      <p class="mt-0.5 text-xs text-[var(--muted)]">{[person.contact.title, person.contact.company].filter(Boolean).join(" at ") || "Needs review"}</p>
-                    </td>
-                    <td class="px-4 py-3 text-xs text-[var(--muted)]">
-                      {saved?.feedbackType ? saved.feedbackType.replace("_", " ") : "Not set"}
-                    </td>
-                    <td class="px-4 py-3">
-                      <form class="flex items-center gap-2" hx-post="/api/network/feedback" hx-target={`#roster-result-${id}`} hx-swap="innerHTML">
-                        <input type="hidden" name="contact_name" value={person.contact.name} />
-                        <input type="hidden" name="contact_organization" value={person.contact.company ?? ""} />
-                        <input type="hidden" name="contact_title" value={person.contact.title ?? ""} />
-                        <select name="conversation_status" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-1.5 text-xs">
-                          {conversationStatuses.map((status) => <option value={status} selected={selected(saved?.conversationStatus, status)}>{status}</option>)}
-                        </select>
-                        <button class="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>Set</button>
-                        <span id={`roster-result-${id}`} class="text-xs text-[var(--muted)]" aria-live="polite"></span>
-                      </form>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <h3 class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Active connections</h3>
+          <span class="text-xs text-[var(--muted)]">Each person appears once with status, decision, and notes together.</span>
         </div>
 
-        <div class="mt-6 grid gap-4">
+        <div class="mt-3 grid gap-4">
           {queue.map((person) => {
             const id = slug(person.contact.name);
             const saved = person.latestFeedback;
             return (
-              <details id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-                <summary class="cursor-pointer list-none">
+              <article id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold">{person.contact.name}</h3>
@@ -570,7 +687,6 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     </a>
                   ) : null}
                 </div>
-                </summary>
                 <div class="mt-4">
 
                 {person.match?.recommendedFirstAsk ? (
@@ -592,25 +708,6 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     ) : null}
                   </div>
                 ) : null}
-
-                <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
-                  <form class="flex flex-wrap items-end gap-2" hx-post="/api/network/draft-message" hx-target={`#draft-result-${id}`} hx-swap="innerHTML" hx-indicator={`#draft-loading-${id}`}>
-                    <input type="hidden" name="contact_name" value={person.contact.name} />
-                    <input type="hidden" name="contact_title" value={person.contact.title ?? ""} />
-                    <input type="hidden" name="contact_company" value={person.contact.company ?? ""} />
-                    <input type="hidden" name="contact_notes" value={person.contact.notes ?? ""} />
-                    <input type="hidden" name="first_ask" value={person.match?.recommendedFirstAsk ?? ""} />
-                    <label class="grid gap-1">
-                      <span class="text-xs font-semibold uppercase text-[var(--muted)]">Draft an outreach note</span>
-                      <select name="intent" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
-                        {followUpIntents.map((intent) => <option value={intent} selected={selected(saved?.followUpIntent, intent)}>{intent}</option>)}
-                      </select>
-                    </label>
-                    <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>Draft note</button>
-                    <span id={`draft-loading-${id}`} class="htmx-indicator text-xs font-semibold text-[var(--accent-strong)]">Drafting...</span>
-                  </form>
-                  <div id={`draft-result-${id}`} class="mt-3 text-sm" aria-live="polite"></div>
-                </div>
 
                 {person.history?.length ? (
                   <details class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
@@ -659,84 +756,10 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                       <input name="decision_reason" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" value={saved?.decisionReason ?? ""} placeholder="Why use, park, remove, or revisit this person?" />
                     </label>
                   </div>
-                  <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
-                    <p class="text-sm font-semibold text-[var(--foreground)]">Capture the structured conversation outcome</p>
-                    <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-                      Fill this in after you talk. When the connection status is Met, Follow-up, or Intro offered, what you record here is saved as a typed strategic signal and as first-hand market evidence for the next network and evidence re-analysis.
-                    </p>
-                    <div class="mt-3 grid gap-3 lg:grid-cols-3">
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
-                        <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" value={saved?.relatedLane ?? ""} placeholder="e.g. Upper Valley nonprofits" />
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
-                        <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" value={saved?.relatedEmployer ?? ""} placeholder="Specific org, employer type, or target" />
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
-                        <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                          {signalDirections.map((option) => <option value={option.value} selected={selected(saved?.signalDirection, option.value)}>{option.label}</option>)}
-                        </select>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
-                        <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                          {signalTypes.map((option) => <option value={option.value} selected={selected(saved?.signalType, option.value)}>{option.label}</option>)}
-                        </select>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
-                        <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                          {signalConfidences.map((option) => <option value={option.value} selected={selected(saved?.signalConfidence, option.value)}>{option.label}</option>)}
-                        </select>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market signals captured</span>
-                        <textarea name="market_signals" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Salary, remote/hybrid, title reality, hiring process, proof points">{saved?.marketSignals ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Compensation signal</span>
-                        <textarea name="compensation_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Pay range, seniority, funding or budget reality">{saved?.compensationSignal ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Work model signal</span>
-                        <textarea name="work_model_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Remote, hybrid, commute, schedule, travel">{saved?.workModelSignal ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Culture / fit signal</span>
-                        <textarea name="culture_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Mission fit, pace, politics, management style, cautions">{saved?.cultureSignal ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Hiring signal</span>
-                        <textarea name="hiring_signal" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Hiring process, titles to search, who owns the work">{saved?.hiringSignal ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">New leads</span>
-                        <textarea name="new_leads" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="People, employers, teams, roles, or communities they mentioned">{saved?.newLeads ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Warnings / dealbreakers</span>
-                        <textarea name="warnings" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Risks, no-go signals, reasons to slow down">{saved?.warnings ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Promised follow-up</span>
-                        <textarea name="promised_follow_up" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What you or they promised to do next">{saved?.promisedFollowUp ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Lane impact / redirect</span>
-                        <textarea name="lane_impact" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What this strengthens, weakens, or redirects">{saved?.laneImpact ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action</span>
-                        <textarea name="next_action" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Concrete action this creates">{saved?.nextAction ?? ""}</textarea>
-                      </label>
-                      <label class="grid gap-1 lg:col-span-3">
-                        <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation notes</span>
-                        <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What was said, reply details, what you agreed, or why this should wait">{saved?.note ?? ""}</textarea>
-                      </label>
-                    </div>
-                  </div>
+                  <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact note</span>
+                    <textarea name="feedback_note" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" placeholder="Status notes, reply details, why this should wait, or what you changed">{saved?.note ?? ""}</textarea>
+                  </label>
                   <div class="flex flex-wrap items-center gap-3">
                     <button class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10" type="submit" disabled={!signedIn}>
                       Save follow-up review
@@ -745,7 +768,7 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                   </div>
                 </form>
                 </div>
-              </details>
+              </article>
             );
           })}
         </div>
@@ -799,13 +822,31 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
   </main>
 
   <script>
-    // Auto-open the collapsed card a roster or worklist link points at.
+    const draftContactSelect = document.querySelector("[data-draft-contact-select]");
+    const draftContactTitle = document.querySelector("[data-draft-contact-title]");
+    const draftContactCompany = document.querySelector("[data-draft-contact-company]");
+    const draftContactNotes = document.querySelector("[data-draft-contact-notes]");
+    const draftContactFirstAsk = document.querySelector("[data-draft-contact-first-ask]");
+
+    function syncDraftContactContext() {
+      if (!(draftContactSelect instanceof HTMLSelectElement)) return;
+      const selectedOption = draftContactSelect.selectedOptions[0];
+      if (!selectedOption) return;
+      if (draftContactTitle instanceof HTMLInputElement) draftContactTitle.value = selectedOption.dataset.title || "";
+      if (draftContactCompany instanceof HTMLInputElement) draftContactCompany.value = selectedOption.dataset.company || "";
+      if (draftContactNotes instanceof HTMLInputElement) draftContactNotes.value = selectedOption.dataset.notes || "";
+      if (draftContactFirstAsk instanceof HTMLInputElement) draftContactFirstAsk.value = selectedOption.dataset.firstAsk || "";
+    }
+
+    draftContactSelect?.addEventListener("change", syncDraftContactContext);
+    syncDraftContactContext();
+
+    // Scroll to the single contact card a worklist link points at.
     function openTargetCard() {
       const id = decodeURIComponent(location.hash.slice(1));
       if (!id) return;
       const target = document.getElementById(id);
-      if (target && target.tagName.toLowerCase() === "details") {
-        (target as HTMLDetailsElement).open = true;
+      if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }

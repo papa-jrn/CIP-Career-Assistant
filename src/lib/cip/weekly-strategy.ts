@@ -31,6 +31,9 @@ export async function buildWeeklyStrategySnapshot(
   const topLane = strategicState.lanes[0];
   const movedLane = strategicState.lanes.find((lane) => lane.direction !== "steady");
   const movedEmployer = strategicState.employers.find((employer) => employer.direction !== "steady");
+  const movedCandidate = strategicState.employerCandidates.find((candidate) => candidate.direction !== "steady");
+  const urgentFollowUp = strategicState.followUpObligations.find((obligation) => obligation.urgency === "overdue" || obligation.urgency === "due_soon");
+  const resumeLane = strategicState.resumeLaneRecommendation;
 
   const nextActions = [
     movedLane
@@ -43,6 +46,19 @@ export async function buildWeeklyStrategySnapshot(
       : topEmployers.length
         ? `Review career pages for ${topEmployers.slice(0, 3).map((employer) => employer.name).join(", ")}.`
       : "Build a watched-employer map from the Employers page.",
+    movedCandidate
+      ? `Re-rank employer candidate ${movedCandidate.name}: it moved ${movedCandidate.direction}. ${movedCandidate.nextMove}`
+      : strategicState.employerCandidates.length
+        ? `Review top employer candidate ${strategicState.employerCandidates[0].name} for promotion.`
+        : "Run employer discovery to build the next candidate queue.",
+    urgentFollowUp
+      ? `Follow up with ${urgentFollowUp.contactName}: ${urgentFollowUp.nextAction}`
+      : strategicState.followUpObligations.length
+        ? `Schedule follow-up timing for ${strategicState.followUpObligations[0].contactName}.`
+        : "Capture promised follow-ups after meaningful conversations.",
+    resumeLane
+      ? `Resume lane to work next: ${resumeLane.lane}. ${resumeLane.nextMove}`
+      : "Run evidence analysis before refreshing career assets.",
     adapterBacklog.length
       ? `Prioritize adapters or manual review for ${adapterBacklog.slice(0, 3).map((employer) => employer.name).join(", ")}.`
       : "Keep supported employer feeds fresh and watch for new matches.",
@@ -65,6 +81,9 @@ export async function buildWeeklyStrategySnapshot(
       conversation_outcome_count: strategicState.conversationOutcomeCount,
       lane_scores: strategicState.lanes,
       employer_scores: strategicState.employers.slice(0, 8),
+      employer_candidate_scores: strategicState.employerCandidates.slice(0, 8),
+      follow_up_obligations: strategicState.followUpObligations,
+      resume_lane_recommendation: strategicState.resumeLaneRecommendation,
       deltas: strategicState.deltas,
     },
     ...topEmployers.map((employer) => ({
