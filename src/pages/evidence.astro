@@ -433,6 +433,58 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
       ) : null}
 
       <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
+      <div>
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">New proof and work updates</p>
+        <h2 class="mt-1 text-2xl font-semibold">Add GitHub repos, portfolio links, grants, team scope, or corrected resume facts</h2>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          Use this when something important changed after intake: new GitHub projects, stronger work evidence, a grant, people supervised, annual-report context, or a better description of current responsibilities. Save here first; then run linked-source analysis for URLs and evidence re-analysis for the career readout.
+        </p>
+      </div>
+      <form class="mt-5 grid gap-4" hx-post="/api/evidence/save" hx-target="#strategic-update-result" hx-swap="innerHTML">
+        <input type="hidden" name="question_id" value="strategic-update" />
+        <input type="hidden" name="question" value="What new project, proof, work update, or corrected career fact should CIP use in future analysis?" />
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Update details</span>
+          <textarea
+            name="answer"
+            required
+            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            placeholder={`Examples:\n- GitHub repo links and what each project proves.\n- CCTV: currently supervise 4 people; one is shifting to occasional mentoring after leaving for college.\n- CCTV: worked with Board Chair to secure a $10K NH Charitable Foundation grant.\n- Annual report numbers or income/expense context that should strengthen leadership scope.`}
+          ></textarea>
+        </label>
+        <div class="grid gap-4 md:grid-cols-3">
+          <label class="grid gap-2">
+            <span class="text-sm font-semibold">Confidence</span>
+            <select name="confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+              <option value="known">I know this</option>
+              <option value="needs_metric">Need exact metric</option>
+              <option value="needs_source">Need source</option>
+              <option value="not_sure">Not sure yet</option>
+            </select>
+          </label>
+          <label class="grid gap-2 md:col-span-2">
+            <span class="text-sm font-semibold">Links or source names</span>
+            <textarea
+              name="proof_url"
+              class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+              placeholder="GitHub repo URLs, annual report URL/file name, grant announcement, board chair/private verifier, or document name"
+            ></textarea>
+          </label>
+        </div>
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Use carefully</span>
+          <input name="source_note" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private source; okay for strategy but not public resume copy until verified." />
+        </label>
+        <div class="flex flex-wrap items-center gap-3">
+          <button class="cip-fancy-button" type="submit" disabled={sourceCounts.intake === 0}>
+            <span>Save update as evidence</span>
+          </button>
+          <div id="strategic-update-result" class="text-sm text-[var(--muted)]" aria-live="polite"></div>
+        </div>
+      </form>
+      </section>
+
+      <section class={readyForOpportunityMapping ? "mt-5 rounded-lg border border-[var(--line)] bg-[var(--background)] p-5" : "mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6"}>
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Source evidence</p>

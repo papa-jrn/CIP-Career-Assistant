@@ -936,6 +936,14 @@ const personalLanes = (latestNetworkAnalysis?.laneValidations ?? [])
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action this creates</span>
               <input name="next_action" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
             </label>
+            <label class="grid gap-1 lg:col-span-3">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Summary / what changed</span>
+              <textarea
+                name="structured_summary"
+                class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm"
+                placeholder="Short version is enough: what did this source confirm, weaken, redirect, or add?"
+              ></textarea>
+            </label>
           </div>
         </div>
         <label class="grid gap-2">

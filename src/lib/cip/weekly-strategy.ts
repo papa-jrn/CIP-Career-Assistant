@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadStrategicState } from "@/lib/cip/strategic-state";
 
 export async function buildWeeklyStrategySnapshot(
   supabase: SupabaseClient,
   userId: string,
 ) {
-  const [{ data: employers }, { data: matches }] = await Promise.all([
+  const [{ data: employers }, { data: matches }, strategicState] = await Promise.all([
     supabase
       .from("watched_employers")
       .select("name,region,priority,fit_score,adapter_status,target_roles,careers_url")
@@ -16,18 +17,31 @@ export async function buildWeeklyStrategySnapshot(
       .eq("user_id", userId)
       .order("match_score", { ascending: false })
       .limit(10),
+    loadStrategicState(supabase, userId),
   ]);
 
   const watched = employers ?? [];
   const opportunityMatches = matches ?? [];
-  const topEmployers = watched.slice(0, 5);
+  const topEmployers = strategicState.employers.length
+    ? strategicState.employers.slice(0, 5)
+    : watched.slice(0, 5);
   const adapterBacklog = watched.filter((employer) => employer.adapter_status !== "supported").slice(0, 5);
   const regionFocus = [...new Set(watched.map((employer) => employer.region).filter(Boolean))];
   const weekStart = startOfWeek(new Date());
+  const topLane = strategicState.lanes[0];
+  const movedLane = strategicState.lanes.find((lane) => lane.direction !== "steady");
+  const movedEmployer = strategicState.employers.find((employer) => employer.direction !== "steady");
 
   const nextActions = [
-    topEmployers.length
-      ? `Review career pages for ${topEmployers.slice(0, 3).map((employer) => employer.name).join(", ")}.`
+    movedLane
+      ? `Respond to the lane movement: ${movedLane.lane} moved ${movedLane.direction}. ${movedLane.reasons[0] ?? ""}`
+      : topLane
+        ? `Keep testing the strongest lane: ${topLane.lane}.`
+        : "Run evidence analysis to establish target lanes.",
+    movedEmployer
+      ? `Review ${movedEmployer.name}: it moved ${movedEmployer.direction}. ${movedEmployer.nextMove}`
+      : topEmployers.length
+        ? `Review career pages for ${topEmployers.slice(0, 3).map((employer) => employer.name).join(", ")}.`
       : "Build a watched-employer map from the Employers page.",
     adapterBacklog.length
       ? `Prioritize adapters or manual review for ${adapterBacklog.slice(0, 3).map((employer) => employer.name).join(", ")}.`
@@ -38,17 +52,28 @@ export async function buildWeeklyStrategySnapshot(
     "Turn one strong employer-role pair into a targeted networking or portfolio action.",
   ];
 
-  const summary = watched.length
-    ? `This week focuses on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${opportunityMatches.length} ranked opportunity matches.`
-    : "This week starts by creating a trusted employer map before searching for individual roles.";
+  const summary = strategicState.deltas.length
+    ? `This snapshot includes ${strategicState.conversationOutcomeCount} conversation outcomes. ${strategicState.deltas.slice(0, 2).join(" ")}`
+    : watched.length
+      ? `This week focuses on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${opportunityMatches.length} ranked opportunity matches.`
+      : "This week starts by creating a trusted employer map before searching for individual roles.";
 
   const evidence = [
+    {
+      type: "strategic_state",
+      generated_at: strategicState.generatedAt,
+      conversation_outcome_count: strategicState.conversationOutcomeCount,
+      lane_scores: strategicState.lanes,
+      employer_scores: strategicState.employers.slice(0, 8),
+      deltas: strategicState.deltas,
+    },
     ...topEmployers.map((employer) => ({
-      type: "watched_employer",
+      type: "propagated_employer",
       name: employer.name,
-      priority: employer.priority,
-      fit_score: employer.fit_score,
-      careers_url: employer.careers_url,
+      score: "score" in employer ? employer.score : employer.fit_score,
+      direction: "direction" in employer ? employer.direction : "steady",
+      reasons: "reasons" in employer ? employer.reasons : [],
+      next_move: "nextMove" in employer ? employer.nextMove : employer.careers_url,
     })),
     ...opportunityMatches.map((match) => ({
       type: "opportunity_match",

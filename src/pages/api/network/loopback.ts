@@ -39,9 +39,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const form = await request.formData();
     const notes = await parseConversationNotesForm(form);
     const metadata = readStructuredMetadata(form);
+    if (!notes.length && hasStructuredMetadata(metadata)) {
+      notes.push({
+        fileName: metadata.contactName ? `Structured summary: ${metadata.contactName}` : "Structured conversation summary",
+        kind: "pasted",
+        status: "parsed",
+        detail: "Captured structured summary fields without an attached notes file.",
+        text: renderStructuredSummary(metadata),
+      });
+    }
 
     if (!notes.length) {
-      return html('<p class="text-sm font-semibold text-red-700">Add at least one notes file (.txt, .md, .docx, .rtf, .json) or paste conversation notes.</p>', 400);
+      return html('<p class="text-sm font-semibold text-red-700">Add a summary, paste notes, or upload at least one notes file (.txt, .md, .docx, .rtf, .json).</p>', 400);
     }
 
     const parsedNotes = notes.filter((note) => note.status === "parsed");
@@ -150,7 +159,32 @@ function readStructuredMetadata(form: FormData) {
     signalDirection: getText(form, "signal_direction") as ConversationSignalDirection,
     confidence: getText(form, "signal_confidence") as ConversationConfidence,
     nextAction: getText(form, "next_action"),
+    summary: getText(form, "structured_summary"),
   };
+}
+
+function hasStructuredMetadata(metadata: ReturnType<typeof readStructuredMetadata>) {
+  return Boolean(
+    metadata.contactName ||
+      metadata.relatedLane ||
+      metadata.relatedEmployer ||
+      metadata.nextAction ||
+      metadata.summary,
+  );
+}
+
+function renderStructuredSummary(metadata: ReturnType<typeof readStructuredMetadata>) {
+  return [
+    metadata.contactName ? `Source: ${metadata.contactName}` : "",
+    metadata.conversationDate ? `Date: ${metadata.conversationDate}` : "",
+    metadata.relatedLane ? `Related lane: ${metadata.relatedLane}` : "",
+    metadata.relatedEmployer ? `Related employer: ${metadata.relatedEmployer}` : "",
+    metadata.signalDirection ? `Signal direction: ${metadata.signalDirection}` : "",
+    metadata.signalType ? `Signal type: ${metadata.signalType}` : "",
+    metadata.confidence ? `Confidence: ${metadata.confidence}` : "",
+    metadata.summary ? `Summary: ${metadata.summary}` : "",
+    metadata.nextAction ? `Next action: ${metadata.nextAction}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function contactNameFromNote(text: string) {

@@ -281,6 +281,22 @@ Signal type should include:
 
 The UI should stay small. The user should not feel like they are filling out a CRM after every conversation. Start with a compact "what changed?" form and optional details.
 
+## Autumn 2026 Status
+
+Phase 2 is complete and smoke tested.
+
+Implemented:
+
+- Dedicated `conversation_outcomes` table and migration.
+- Shared structured conversation outcome model.
+- Follow-Up capture for lane, employer, signal type, signal direction, confidence, market/comp/work/culture/hiring signals, warnings, promised follow-up, and next action.
+- Network loop-back capture for advisor conversations and structured summaries.
+- Evidence-page capture for GitHub repositories, project proof, CCTV updates, grants, annual-report context, and other corrected work facts.
+- Conversation outcomes now feed evidence re-analysis as first-hand strategic signals.
+- Smoke-test fix: structured summaries save even when the user has no separate pasted/uploaded full notes.
+
+Remaining polish can move into later phases: compact editing controls, AI-assisted extraction from old unstructured notes, and richer conversation-history displays.
+
 ---
 
 # Phase 3 — Propagation Engine
@@ -359,6 +375,24 @@ Initial propagation targets:
 ## Notes
 
 This is where CIP starts to beat the monthly Claude routine. Claude can search; CIP remembers and updates.
+
+## Autumn 2026 Status
+
+Started.
+
+First implementation slice:
+
+- Shared strategic-state module.
+- Lane scoring from advisor lanes, network validation, and structured conversation outcomes.
+- Employer scoring from watched-employer fit plus conversation outcomes.
+- Weekly briefing snapshots now save propagated lane/employer movement into the evidence payload.
+- Briefing page now surfaces "What changed" from propagated state.
+
+Next slice:
+
+- Trigger propagation immediately after key saves instead of only when generating a briefing.
+- Add employer-candidate recommendation movement, follow-up obligations, and resume lane recommendation movement.
+- Store richer movement history once the current snapshot shape proves useful in smoke testing.
 
 ---
 
