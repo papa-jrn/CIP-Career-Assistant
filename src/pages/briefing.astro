@@ -198,6 +198,12 @@ function movementClass(direction: string) {
                 const state = strategicState(snapshot);
                 const changedItems = diff?.displayChanged?.length ? diff.displayChanged : diff?.changed ?? [];
                 const assumptionItems = diff?.displayAssumptions?.length ? diff.displayAssumptions : diff?.staleAssumptions ?? [];
+                // The action queue is built by promoting items out of the lists below,
+                // so anything already in the queue would otherwise appear twice.
+                const notQueued = (item: string) => !(diff?.recommendedActions ?? []).some((action) => action.includes(item));
+                const followUpItems = [...(diff?.overduePromises ?? []), ...(diff?.contactsNeedingFollowUp ?? [])].filter(notQueued).slice(0, 4);
+                const assumptionPanelItems = [...assumptionItems, ...(diff?.evidenceGaps ?? [])].filter(notQueued).slice(0, 4);
+                const checkItems = [...(diff?.jobEmployerChecks ?? []), ...(diff?.assetChangesNeeded ?? [])].filter(notQueued).slice(0, 4);
                 return diff ? (
                   <div class="mb-5 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-4">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -230,27 +236,27 @@ function movementClass(direction: string) {
                       )}
                     </div>
                     <div class="mt-3 grid gap-3 lg:grid-cols-3">
-                      {diff.contactsNeedingFollowUp.length || diff.overduePromises.length ? (
+                      {followUpItems.length ? (
                         <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                           <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Follow-up pressure</h4>
                           <ul class="mt-2 space-y-2 text-xs leading-5 text-[var(--muted)]">
-                            {[...diff.overduePromises, ...diff.contactsNeedingFollowUp].slice(0, 4).map((item) => <li>{item}</li>)}
+                            {followUpItems.map((item) => <li>{item}</li>)}
                           </ul>
                         </div>
                       ) : null}
-                      {diff.staleAssumptions.length || diff.evidenceGaps.length ? (
+                      {assumptionPanelItems.length ? (
                         <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                           <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Assumptions to test</h4>
                           <ul class="mt-2 space-y-2 text-xs leading-5 text-[var(--muted)]">
-                            {[...assumptionItems, ...diff.evidenceGaps].slice(0, 4).map((item) => <li>{item}</li>)}
+                            {assumptionPanelItems.map((item) => <li>{item}</li>)}
                           </ul>
                         </div>
                       ) : null}
-                      {diff.jobEmployerChecks.length || diff.assetChangesNeeded.length ? (
+                      {checkItems.length ? (
                         <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                           <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Checks worth doing</h4>
                           <ul class="mt-2 space-y-2 text-xs leading-5 text-[var(--muted)]">
-                            {[...diff.jobEmployerChecks, ...diff.assetChangesNeeded].slice(0, 4).map((item) => <li>{item}</li>)}
+                            {checkItems.map((item) => <li>{item}</li>)}
                           </ul>
                         </div>
                       ) : null}

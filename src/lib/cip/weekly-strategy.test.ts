@@ -154,4 +154,100 @@ describe("weekly strategy briefing diff", () => {
     expect(diff.displayAssumptions[0]).not.toMatch(/score based on/);
     expect(diff.recommendedActions[0]).not.toMatch(/score based on/);
   });
+
+  it("translates employer movement from the week-over-week comparison", () => {
+    const diff = buildBriefingDiff(
+      {
+        ...baseState,
+        employers: [{ ...baseState.employers[0], score: 80, direction: "up" }],
+      },
+      {
+        week_start: "2026-09-07",
+        summary: "Previous briefing.",
+        next_actions: [],
+        evidence: [
+          {
+            type: "strategic_state",
+            conversation_outcome_count: 1,
+            lane_scores: baseState.lanes,
+            employer_scores: [{ ...baseState.employers[0], score: 72 }],
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(diff.employerMovedUp[0]).toMatch(/moved up \+8 to 80/);
+    expect(diff.displayChanged.join(" ")).toMatch(/gained enough signal/);
+    expect(diff.displayChanged.join(" ")).not.toMatch(/\+8 to 80/);
+  });
+
+  it("translates candidate movement instead of reading it as an employer", () => {
+    const diff = buildBriefingDiff(
+      {
+        ...baseState,
+        deltas: ["Candidate Vermont Foodbank moved up to 64. watch score based on a new target signal"],
+      },
+      null,
+      context,
+    );
+
+    expect(diff.displayChanged.join(" ")).toMatch(/stronger employer candidate/);
+    expect(diff.displayChanged.join(" ")).not.toMatch(/^Candidate .* gained enough signal/);
+  });
+
+  it("reports employers that appeared since the last briefing", () => {
+    const diff = buildBriefingDiff(
+      {
+        ...baseState,
+        employers: [
+          baseState.employers[0],
+          { ...baseState.employers[0], name: "Vermont Foodbank", score: 70 },
+        ],
+      },
+      {
+        week_start: "2026-09-07",
+        summary: "Previous briefing.",
+        next_actions: [],
+        evidence: [
+          {
+            type: "strategic_state",
+            conversation_outcome_count: 1,
+            lane_scores: baseState.lanes,
+            employer_scores: [baseState.employers[0]],
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(diff.changed.join(" ")).toMatch(/Vermont Foodbank is new since the last briefing/);
+    expect(diff.displayChanged.join(" ")).toMatch(/decide this week whether it earns a real check/);
+  });
+
+  it("rewrites internal signal codes into plain language", () => {
+    const diff = buildBriefingDiff(
+      {
+        ...baseState,
+        lanes: [
+          {
+            lane: "Entrepreneurship teaching",
+            label: "Research lane",
+            score: 58,
+            direction: "steady",
+            reasons: ["Alex Herzog: strengthens lane_fit (+6)."],
+            explanation: "watch score based on Alex Herzog: strengthens lane_fit (+6).",
+          },
+        ],
+      },
+      null,
+      context,
+    );
+
+    const assumption = diff.displayAssumptions.join(" ");
+    expect(assumption).toMatch(/a conversation with Alex Herzog supported this lane/);
+    expect(assumption).not.toMatch(/lane_fit/);
+    expect(assumption).not.toMatch(/\(\+6\)/);
+    expect(diff.recommendedActions.join(" ")).not.toMatch(/lane_fit/);
+  });
 });

@@ -223,6 +223,22 @@ export function buildBriefingDiff(
     (item, diff) => `${item.name} moved down ${diff} to ${item.score}. ${item.nextMove}`,
     "down",
   );
+  // A lane or employer with no prior score is not "movement" — compareScores skips
+  // it — but its first appearance is exactly what a weekly briefing should mention.
+  const laneAppeared = findNewEntries(
+    strategicState.lanes,
+    previous?.lane_scores,
+    (item) => item.lane,
+    (item) => item.lane,
+    (item) => `${item.lane} is new since the last briefing at ${item.score}. ${item.explanation}`,
+  ).slice(0, 3);
+  const employerAppeared = findNewEntries(
+    strategicState.employers,
+    previous?.employer_scores,
+    (item) => item.name,
+    (item) => item.name,
+    (item) => `${item.name} is new since the last briefing at ${item.score}. ${item.nextMove}`,
+  ).slice(0, 3);
   const contactsNeedingFollowUp = strategicState.followUpObligations
     .filter((obligation) => obligation.urgency === "due_soon" || obligation.urgency === "overdue")
     .map((obligation) => `${obligation.contactName}: ${obligation.nextAction || obligation.promisedFollowUp}`)
@@ -239,7 +255,7 @@ export function buildBriefingDiff(
     ? [`Refresh or review assets for ${strategicState.resumeLaneRecommendation.lane}: ${strategicState.resumeLaneRecommendation.nextMove}`]
     : ["Run evidence analysis before refreshing resume or outreach assets."];
   const evidenceGaps = strategicState.lanes
-    .flatMap((lane) => lane.reasons.filter((reason) => /needs|capped|proof|evidence|posting/i.test(reason)).map((reason) => `${lane.lane}: ${reason}`))
+    .flatMap((lane) => lane.reasons.filter((reason) => /needs|capped|proof|evidence|posting/i.test(reason)).map((reason) => `${lane.lane}: ${humanizeSignalPhrases(reason)}`))
     .slice(0, 4);
   const jobEmployerChecks = [
     strategicState.employerCandidates[0] ? `Decide whether ${strategicState.employerCandidates[0].name} belongs on the watched-employer list or should be removed.` : "",
@@ -247,7 +263,7 @@ export function buildBriefingDiff(
     context.opportunityMatchCount ? "Compare current opportunity matches against the top lane's proof gaps before applying." : "Run opportunity or employer research so the next briefing has specific roles to compare.",
   ].filter(Boolean);
 
-  changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown);
+  changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown, ...laneAppeared, ...employerAppeared);
   if (baseline && strategicState.deltas.length) changed.push(...strategicState.deltas.slice(0, 4));
   if (!changed.length && strategicState.conversationOutcomeCount > (previous?.conversation_outcome_count ?? 0)) {
     changed.push(`${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0)} new conversation outcome${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0) === 1 ? "" : "s"} captured; no lane or employer crossed the movement threshold yet.`);
@@ -318,8 +334,66 @@ function researchAssumptionText(lane: string, explanation: string) {
   return `${lane}: ${explanation}`;
 }
 
+const SIGNAL_DIRECTION_VERBS: Record<string, string> = {
+  strengthens: "supported",
+  weakens: "weakened",
+  contradicts: "contradicted",
+  neutral: "touched on",
+  unclear: "left open",
+};
+
+const SIGNAL_TYPE_SUBJECTS: Record<string, string> = {
+  lane_fit: "this lane",
+  employer_fit: "this employer",
+  compensation: "the pay picture",
+  hiring_process: "the hiring process",
+  culture: "the culture read",
+  network_path: "the referral path",
+  role_language: "how the role is described",
+  dealbreaker: "a dealbreaker",
+  new_target: "a new target",
+  market_signal: "the market read",
+  follow_up_obligation: "a follow-up promise",
+};
+
+// strategic-state builds reason strings for scoring audit, not for reading:
+// "Alex Herzog: strengthens lane_fit (+6)." (lane, strategic-state.ts:253) and
+// "Alex Herzog: CCTV signal strengthens (+6)." (employer, :371). Rewrite both as
+// plain sentences and drop the score adjustment — internal signal codes and point
+// values should never reach a weekly memo.
+function humanizeSignalPhrases(text: string) {
+  return text
+    .replace(
+      /([^:.]+): (strengthens|weakens|contradicts|neutral|unclear) ([a-z_]+) \([+-]?\d+\)\.?/gi,
+      (_match, contact: string, direction: string, signalType: string) => {
+        const verb = SIGNAL_DIRECTION_VERBS[direction.toLowerCase()] ?? "touched on";
+        const subject = SIGNAL_TYPE_SUBJECTS[signalType.toLowerCase()] ?? signalType.replace(/_/g, " ");
+        return `a conversation with ${contact.trim()} ${verb} ${subject}.`;
+      },
+    )
+    .replace(
+      /([^:.]+): (.+?) signal (strengthens|weakens|contradicts|neutral|unclear) \([+-]?\d+\)\.?/gi,
+      (_match, contact: string, target: string, direction: string) => {
+        const verb = SIGNAL_DIRECTION_VERBS[direction.toLowerCase()] ?? "touched on";
+        return `a conversation with ${contact.trim()} ${verb} ${target.trim()}.`;
+      },
+    );
+}
+
+// Two wordings reach this function: strategic-state deltas ("X moved up to 72.")
+// and this file's week-over-week comparison ("X moved up +6 to 72."), so every
+// pattern accepts the optional signed difference. Order matters: the candidate
+// pattern must be tried before the employer one, because "Candidate Acme moved
+// up to 64." also matches the employer pattern with the name "Candidate Acme".
 function displayChangeText(change: string) {
-  const laneMovement = change.match(/^(?:Research lane|Conversation research lane|Primary lane|Strong alternate): (.+?) moved (up|down) to \d+\./i)
+  const appeared = change.match(/^(.+?) is new since the last briefing at \d+\./i);
+  if (appeared) {
+    return `${appeared[1]} is new since the last briefing; decide this week whether it earns a real check or should drop off.`;
+  }
+
+  // Lane deltas carry a "<label>: " prefix, and labels are computed (rankedLaneLabel),
+  // so match any short prefix rather than a hardcoded label list.
+  const laneMovement = change.match(/^[^:]{1,60}: (.+?) moved (up|down)(?:\s[+-]?\d+)? to \d+\./i)
     ?? change.match(/^(.+?) (rose|fell) [+-]?\d+ to \d+\./i);
   if (laneMovement) {
     const [, lane, direction] = laneMovement;
@@ -327,29 +401,29 @@ function displayChangeText(change: string) {
     return `${lane} gained support; turn it into one concrete market test before changing the resume strategy.`;
   }
 
-  const employerMovement = change.match(/^(.+?) moved (up|down) to \d+\./i);
-  if (employerMovement) {
-    const [, employer, direction] = employerMovement;
-    if (direction === "up") return `${employer} gained enough signal to check for specific current roles or a warm-contact path.`;
-    return `${employer} weakened; keep it on the map only if a specific role or contact makes it worth the time.`;
-  }
-
-  const candidateMovement = change.match(/^Candidate (.+?) moved (up|down) to \d+\./i);
+  const candidateMovement = change.match(/^Candidate (.+?) moved (up|down)(?:\s[+-]?\d+)? to \d+\./i);
   if (candidateMovement) {
     const [, candidate, direction] = candidateMovement;
     if (direction === "up") return `${candidate} is a stronger employer candidate; review it for promotion to the watched list.`;
     return `${candidate} is a weaker employer candidate; remove it unless there is a concrete role to inspect.`;
   }
 
-  return change
-    .replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, "")
+  const employerMovement = change.match(/^(.+?) moved (up|down)(?:\s[+-]?\d+)? to \d+\./i);
+  if (employerMovement) {
+    const [, employer, direction] = employerMovement;
+    if (direction === "up") return `${employer} gained enough signal to check for specific current roles or a warm-contact path.`;
+    return `${employer} weakened; keep it on the map only if a specific role or contact makes it worth the time.`;
+  }
+
+  // Strip the score band first: humanizing afterwards keeps the contact name from
+  // being swallowed into the "<band> score based on <reason>" prefix.
+  return humanizeSignalPhrases(change.replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, ""))
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function displayAssumptionText(assumption: string) {
-  return assumption
-    .replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, "")
+  return humanizeSignalPhrases(assumption.replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, ""))
     .replace(/advisor analysis surfaced this, but it still needs market proof before becoming a priority\./i, "worth testing only if real openings or current-work proof show up.")
     .replace(/\s+/g, " ")
     .trim();
@@ -407,6 +481,20 @@ function compareScores<T extends { score: number }, P extends { score: number }>
       return render(item, diff);
     })
     .filter(Boolean) as string[];
+}
+
+// Entries present now but absent from the previous snapshot. Returns nothing when
+// there is no previous list, so a baseline briefing does not report everything as new.
+function findNewEntries<T, P>(
+  current: T[],
+  previous: P[] | undefined,
+  key: (item: T) => string,
+  previousKey: (item: P) => string,
+  render: (item: T) => string,
+) {
+  if (!previous?.length) return [];
+  const known = new Set((previous ?? []).map((item) => normalizeKey(previousKey(item))));
+  return current.filter((item) => !known.has(normalizeKey(key(item)))).map(render);
 }
 
 function normalizeKey(value: string) {
