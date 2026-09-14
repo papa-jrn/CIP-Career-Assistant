@@ -1,11 +1,54 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadStrategicState } from "@/lib/cip/strategic-state";
+import { loadStrategicState, type StrategicState } from "@/lib/cip/strategic-state";
+
+type SnapshotRow = {
+  week_start: string;
+  summary: string;
+  next_actions: string[];
+  evidence: Array<Record<string, unknown>>;
+  created_at?: string;
+};
+
+type SnapshotStrategicEvidence = {
+  type: "strategic_state";
+  conversation_outcome_count?: number;
+  lane_scores?: Array<{ lane: string; label: string; score: number; direction: string; reasons?: string[]; explanation?: string }>;
+  employer_scores?: Array<{ name: string; score: number; direction: string; reasons?: string[]; explanation?: string; nextMove?: string; next_move?: string }>;
+  employer_candidate_scores?: Array<{ name: string; score: number; direction: string; reasons?: string[]; explanation?: string; nextMove?: string; next_move?: string }>;
+  follow_up_obligations?: Array<{ contactName: string; nextAction: string; promisedFollowUp: string; followUpDueDate: string; urgency: string }>;
+  resume_lane_recommendation?: { lane: string; label: string; score: number; direction: string; nextMove: string } | null;
+  deltas?: string[];
+};
+
+export type BriefingDiff = {
+  type: "briefing_diff";
+  baseline: boolean;
+  priorWeekStart: string | null;
+  periodCovered: string;
+  periodLabel: string;
+  changeSummary: string;
+  changed: string[];
+  laneStrengthened: string[];
+  laneWeakened: string[];
+  employerMovedUp: string[];
+  employerMovedDown: string[];
+  contactsNeedingFollowUp: string[];
+  overduePromises: string[];
+  staleAssumptions: string[];
+  displayChanged: string[];
+  displayAssumptions: string[];
+  assetChangesNeeded: string[];
+  evidenceGaps: string[];
+  jobEmployerChecks: string[];
+  recommendedActions: string[];
+};
 
 export async function buildWeeklyStrategySnapshot(
   supabase: SupabaseClient,
   userId: string,
 ) {
-  const [{ data: employers }, { data: matches }, strategicState] = await Promise.all([
+  const weekStart = startOfWeek(new Date());
+  const [{ data: employers }, { data: matches }, { data: previousSnapshots }, strategicState] = await Promise.all([
     supabase
       .from("watched_employers")
       .select("name,region,priority,fit_score,adapter_status,target_roles,careers_url")
@@ -17,25 +60,40 @@ export async function buildWeeklyStrategySnapshot(
       .eq("user_id", userId)
       .order("match_score", { ascending: false })
       .limit(10),
+    supabase
+      .from("career_strategy_snapshots")
+      .select("week_start,summary,next_actions,evidence,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3),
     loadStrategicState(supabase, userId),
   ]);
 
   const watched = employers ?? [];
   const opportunityMatches = matches ?? [];
+  const previousSnapshot = ((previousSnapshots ?? []) as SnapshotRow[]).find((snapshot) => snapshot.week_start !== weekStart)
+    ?? ((previousSnapshots ?? []) as SnapshotRow[])[0]
+    ?? null;
   const topEmployers = strategicState.employers.length
     ? strategicState.employers.slice(0, 5)
     : watched.slice(0, 5);
   const adapterBacklog = watched.filter((employer) => employer.adapter_status !== "supported").slice(0, 5);
   const regionFocus = [...new Set(watched.map((employer) => employer.region).filter(Boolean))];
-  const weekStart = startOfWeek(new Date());
   const topLane = strategicState.lanes[0];
   const movedLane = strategicState.lanes.find((lane) => lane.direction !== "steady");
   const movedEmployer = strategicState.employers.find((employer) => employer.direction !== "steady");
   const movedCandidate = strategicState.employerCandidates.find((candidate) => candidate.direction !== "steady");
   const urgentFollowUp = strategicState.followUpObligations.find((obligation) => obligation.urgency === "overdue" || obligation.urgency === "due_soon");
   const resumeLane = strategicState.resumeLaneRecommendation;
+  const briefingDiff = buildBriefingDiff(strategicState, previousSnapshot, {
+    watchedEmployerCount: watched.length,
+    opportunityMatchCount: opportunityMatches.length,
+    regionFocus,
+    adapterBacklogNames: adapterBacklog.map((employer) => employer.name),
+  });
 
   const nextActions = [
+    ...briefingDiff.recommendedActions,
     movedLane
       ? `Respond to the lane movement: ${movedLane.lane} moved ${movedLane.direction}. ${movedLane.reasons[0] ?? ""}`
       : topLane
@@ -66,15 +124,16 @@ export async function buildWeeklyStrategySnapshot(
       ? "Compare top opportunity matches against resume proof gaps before applying."
       : "Run labor-market research after watched employers are seeded.",
     "Turn one strong employer-role pair into a targeted networking or portfolio action.",
-  ];
+  ].filter((action, index, actions) => actions.indexOf(action) === index).slice(0, 5);
 
-  const summary = strategicState.deltas.length
-    ? `This snapshot includes ${strategicState.conversationOutcomeCount} conversation outcomes. ${strategicState.deltas.slice(0, 2).join(" ")}`
+  const summary = briefingDiff.changed.length
+    ? briefingDiff.changeSummary
     : watched.length
-      ? `This week focuses on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${opportunityMatches.length} ranked opportunity matches.`
-      : "This week starts by creating a trusted employer map before searching for individual roles.";
+      ? `No major strategy movement since the last briefing. Keep the week focused on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${opportunityMatches.length} ranked opportunity matches.`
+      : "No major strategy movement yet. Start by creating a trusted employer map before searching for individual roles.";
 
   const evidence = [
+    briefingDiff,
     {
       type: "strategic_state",
       generated_at: strategicState.generatedAt,
@@ -119,6 +178,183 @@ export async function buildWeeklyStrategySnapshot(
   return { error, summary, nextActions };
 }
 
+export function buildBriefingDiff(
+  strategicState: StrategicState,
+  previousSnapshot: SnapshotRow | null,
+  context: {
+    watchedEmployerCount: number;
+    opportunityMatchCount: number;
+    regionFocus: string[];
+    adapterBacklogNames: string[];
+  },
+): BriefingDiff {
+  const previous = previousSnapshot ? extractStrategicState(previousSnapshot.evidence) : null;
+  const baseline = !previous;
+  const changed: string[] = [];
+  const laneStrengthened = compareScores(
+    strategicState.lanes,
+    previous?.lane_scores,
+    (item) => item.lane,
+    (item) => item.lane,
+    (item, diff) => `${item.lane} rose ${diff >= 0 ? "+" : ""}${diff} to ${item.score}. ${item.explanation}`,
+    "up",
+  );
+  const laneWeakened = compareScores(
+    strategicState.lanes,
+    previous?.lane_scores,
+    (item) => item.lane,
+    (item) => item.lane,
+    (item, diff) => `${item.lane} fell ${diff} to ${item.score}. ${item.explanation}`,
+    "down",
+  );
+  const employerMovedUp = compareScores(
+    strategicState.employers,
+    previous?.employer_scores,
+    (item) => item.name,
+    (item) => item.name,
+    (item, diff) => `${item.name} moved up ${diff >= 0 ? "+" : ""}${diff} to ${item.score}. ${item.nextMove}`,
+    "up",
+  );
+  const employerMovedDown = compareScores(
+    strategicState.employers,
+    previous?.employer_scores,
+    (item) => item.name,
+    (item) => item.name,
+    (item, diff) => `${item.name} moved down ${diff} to ${item.score}. ${item.nextMove}`,
+    "down",
+  );
+  const contactsNeedingFollowUp = strategicState.followUpObligations
+    .filter((obligation) => obligation.urgency === "due_soon" || obligation.urgency === "overdue")
+    .map((obligation) => `${obligation.contactName}: ${obligation.nextAction || obligation.promisedFollowUp}`)
+    .slice(0, 5);
+  const overduePromises = strategicState.followUpObligations
+    .filter((obligation) => obligation.urgency === "overdue")
+    .map((obligation) => `${obligation.contactName}: ${obligation.promisedFollowUp || obligation.nextAction}`)
+    .slice(0, 5);
+  const staleAssumptions = strategicState.lanes
+    .filter((lane) => lane.label === "Research lane" || lane.score < 60)
+    .map((lane) => researchAssumptionText(lane.lane, lane.explanation))
+    .slice(0, 4);
+  const assetChangesNeeded = strategicState.resumeLaneRecommendation
+    ? [`Refresh or review assets for ${strategicState.resumeLaneRecommendation.lane}: ${strategicState.resumeLaneRecommendation.nextMove}`]
+    : ["Run evidence analysis before refreshing resume or outreach assets."];
+  const evidenceGaps = strategicState.lanes
+    .flatMap((lane) => lane.reasons.filter((reason) => /needs|capped|proof|evidence|posting/i.test(reason)).map((reason) => `${lane.lane}: ${reason}`))
+    .slice(0, 4);
+  const jobEmployerChecks = [
+    strategicState.employerCandidates[0] ? `Decide whether ${strategicState.employerCandidates[0].name} belongs on the watched-employer list or should be removed.` : "",
+    context.adapterBacklogNames.length ? `Look for specific current openings at ${context.adapterBacklogNames.slice(0, 3).join(", ")} and capture any credible roles in Opportunities.` : "",
+    context.opportunityMatchCount ? "Compare current opportunity matches against the top lane's proof gaps before applying." : "Run opportunity or employer research so the next briefing has specific roles to compare.",
+  ].filter(Boolean);
+
+  changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown);
+  if (baseline && strategicState.deltas.length) changed.push(...strategicState.deltas.slice(0, 4));
+  if (!changed.length && strategicState.conversationOutcomeCount > (previous?.conversation_outcome_count ?? 0)) {
+    changed.push(`${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0)} new conversation outcome${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0) === 1 ? "" : "s"} captured; no lane or employer crossed the movement threshold yet.`);
+  }
+  const displayChanged = changed.length
+    ? changed.map(displayChangeText).slice(0, 5)
+    : [];
+  const displayAssumptions = staleAssumptions.map(displayAssumptionText).slice(0, 4);
+
+  const recommendedActions = [
+    contactsNeedingFollowUp[0] ? `Follow up: ${contactsNeedingFollowUp[0]}` : "",
+    laneStrengthened[0] ? `Turn the strengthened lane into one concrete search or outreach test. ${laneStrengthened[0]}` : "",
+    displayAssumptions[0] ? `Keep this as research, not a main search lane: ${displayAssumptions[0]}` : "",
+    jobEmployerChecks[0] ?? "",
+    assetChangesNeeded[0] ?? "",
+    !changed.length && context.watchedEmployerCount ? "Pick one watched employer and verify whether a specific current role exists before changing strategy." : "",
+    strategicState.conversationOutcomeCount ? "" : "Capture one market-read conversation outcome so the next briefing can compare real signals.",
+  ].filter(Boolean).slice(0, 5);
+
+  const currentWeekStart = startOfWeek(new Date());
+  return {
+    type: "briefing_diff",
+    baseline,
+    priorWeekStart: previousSnapshot?.week_start ?? null,
+    periodCovered: previousSnapshot
+      ? `${previousSnapshot.week_start} to ${currentWeekStart}`
+      : `Baseline snapshot for ${currentWeekStart}`,
+    periodLabel: baseline
+      ? `Baseline snapshot for ${currentWeekStart}`
+      : previousSnapshot
+        ? `${previousSnapshot.week_start} to ${currentWeekStart}`
+        : currentWeekStart,
+    changeSummary: changed.length
+      ? `${baseline ? "Baseline briefing" : "Briefing changed"}: ${changed.slice(0, 2).join(" ")}`
+      : baseline
+        ? "Baseline briefing created. Future snapshots will compare against this state."
+        : "Nothing material changed since the last briefing.",
+    changed,
+    laneStrengthened,
+    laneWeakened,
+    employerMovedUp,
+    employerMovedDown,
+    contactsNeedingFollowUp,
+    overduePromises,
+    staleAssumptions,
+    displayChanged,
+    displayAssumptions,
+    assetChangesNeeded,
+    evidenceGaps,
+    jobEmployerChecks,
+    recommendedActions: recommendedActions.length
+      ? recommendedActions
+      : ["Run one market-read, refresh employer checks, and generate the next briefing after new evidence lands."],
+  };
+}
+
+function researchAssumptionText(lane: string, explanation: string) {
+  const lower = explanation.toLowerCase();
+  if (lower.includes("light new-target signal") || lower.includes("needs a real role")) {
+    return `${lane}: keep as research until a real posting, employer signal, or current-work proof supports it.`;
+  }
+  if (lower.includes("baseline from current advisor lane order")) {
+    return `${lane}: advisor analysis surfaced this, but it still needs market proof before becoming a priority.`;
+  }
+  if (lower.includes("weakens")) {
+    return `${lane}: recent conversation evidence weakened this path; decide whether to keep testing it or remove it.`;
+  }
+  return `${lane}: ${explanation}`;
+}
+
+function displayChangeText(change: string) {
+  const laneMovement = change.match(/^(?:Research lane|Conversation research lane|Primary lane|Strong alternate): (.+?) moved (up|down) to \d+\./i)
+    ?? change.match(/^(.+?) (rose|fell) [+-]?\d+ to \d+\./i);
+  if (laneMovement) {
+    const [, lane, direction] = laneMovement;
+    if (direction === "down" || direction === "fell") return `${lane} moved down into research/watch status; keep it visible, but do not let it drive the search until stronger evidence appears.`;
+    return `${lane} gained support; turn it into one concrete market test before changing the resume strategy.`;
+  }
+
+  const employerMovement = change.match(/^(.+?) moved (up|down) to \d+\./i);
+  if (employerMovement) {
+    const [, employer, direction] = employerMovement;
+    if (direction === "up") return `${employer} gained enough signal to check for specific current roles or a warm-contact path.`;
+    return `${employer} weakened; keep it on the map only if a specific role or contact makes it worth the time.`;
+  }
+
+  const candidateMovement = change.match(/^Candidate (.+?) moved (up|down) to \d+\./i);
+  if (candidateMovement) {
+    const [, candidate, direction] = candidateMovement;
+    if (direction === "up") return `${candidate} is a stronger employer candidate; review it for promotion to the watched list.`;
+    return `${candidate} is a weaker employer candidate; remove it unless there is a concrete role to inspect.`;
+  }
+
+  return change
+    .replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function displayAssumptionText(assumption: string) {
+  return assumption
+    .replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, "")
+    .replace(/advisor analysis surfaced this, but it still needs market proof before becoming a priority\./i, "worth testing only if real openings or current-work proof show up.")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function propagateStrategicStateAfterChange(
   supabase: SupabaseClient,
   userId: string,
@@ -144,6 +380,37 @@ export function formatRegion(region: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function extractStrategicState(evidence: Array<Record<string, unknown>>): SnapshotStrategicEvidence | null {
+  return (evidence ?? []).find((item) => item?.type === "strategic_state") as SnapshotStrategicEvidence | undefined ?? null;
+}
+
+function compareScores<T extends { score: number }, P extends { score: number }>(
+  current: T[],
+  previous: P[] | undefined,
+  key: (item: T) => string,
+  previousKey: (item: P) => string,
+  render: (item: T, diff: number) => string,
+  direction: "up" | "down",
+) {
+  const previousByKey = new Map(
+    (previous ?? []).map((item) => [normalizeKey(previousKey(item)), Number(item.score ?? 0)]),
+  );
+  return current
+    .map((item) => {
+      const prior = previousByKey.get(normalizeKey(key(item)));
+      if (prior === undefined) return null;
+      const diff = item.score - prior;
+      if (direction === "up" && diff < 4) return null;
+      if (direction === "down" && diff > -4) return null;
+      return render(item, diff);
+    })
+    .filter(Boolean) as string[];
+}
+
+function normalizeKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export interface StaleSignalNotice {

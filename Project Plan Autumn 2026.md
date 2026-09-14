@@ -499,6 +499,33 @@ The briefing should include:
 
 Use "weekly" in the code only where needed. The product rhythm may be weekly or monthly. The logic should support either.
 
+## Autumn 2026 Status
+
+Started.
+
+First implementation slice:
+
+- Weekly strategy snapshots now load the previous saved snapshot before writing the new one.
+- Snapshot evidence now includes a `briefing_diff` object with period covered, baseline status, changed items, lane movement, employer movement, follow-up pressure, stale assumptions, asset changes, evidence gaps, job/employer checks, and recommended actions.
+- The briefing generator now limits the main action queue to 3-5 concrete actions so the page behaves like a weekly work queue instead of a data dump.
+- Briefing now leads with the action queue and "what changed" before counts, employer totals, and older snapshot details.
+- Empty/no-movement behavior now says "nothing material changed" honestly while still recommending useful maintenance actions.
+- Added tests for real movement, no-change behavior, and overdue follow-up actions.
+
+UX polish slice:
+
+- Briefing action cards no longer show duplicate numbering.
+- Baseline snapshots now use clearer period labeling instead of mixing a date range with "baseline."
+- Research-lane actions now read as practical guidance rather than internal scoring warnings.
+- Employer checks now point toward finding specific current openings and capturing credible roles in Opportunities, while full employer-to-job discovery remains a later phase.
+- Briefing now stores raw movement for audit but displays translated human-facing change and assumption text, so scoring/debug phrases do not dominate the weekly memo.
+
+Next slice:
+
+- Smoke test `/briefing` against live saved snapshots after a few saves/re-analysis runs.
+- Make the generated snapshot response refresh or reveal the saved briefing without requiring a manual page refresh.
+- Decide whether `briefing_diff` should remain in evidence JSON or graduate into first-class database columns after the shape proves useful.
+
 ---
 
 # Phase 5 — De-Founder Pass
@@ -662,7 +689,7 @@ This is the foundation for SaaS expansion. New lanes should become config and da
 
 ## Goal
 
-Build the first lane-specific intelligence layer that monthly Claude cannot easily persist and combine with user history.
+Build the first lane-specific intelligence layer that monthly Claude cannot easily persist and combine with user history. This means - to date we have what is basically a WEAK engine when it comes to finding actual jobs. Claude/ChatGPT/Gemini/Z.AI actually do a better job at finding potential jobs in an area. Just 3-4 months agao, they couldn't do a deep dive into Dartmouth's job board OR Dartmouth Health's job board. Now, they can. We need to 1, find the geographical businesses, and 2, find these potential jobs for the user. Combining this with the weekly analysis really strengthens things.
 
 ## Scope
 
