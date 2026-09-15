@@ -11,7 +11,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "lint": "eslint .",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && vitest run"
   },
   "dependencies": {
     "@astrojs/node": "^11.1.5",

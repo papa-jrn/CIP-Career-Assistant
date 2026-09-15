@@ -80,7 +80,7 @@ async function fetchRemotive(query: string): Promise<RemoteJob[]> {
   if (query) url.searchParams.set("search", query);
   url.searchParams.set("limit", "50");
   const payload = await getJson(url.toString());
-  const jobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
+  const jobs: Record<string, unknown>[] = Array.isArray(payload?.jobs) ? payload.jobs : [];
   return jobs.slice(0, 50).map((item: Record<string, unknown>) => ({
     title: String(item.title ?? "Untitled role"),
     company: String(item.company_name ?? "Unknown company"),

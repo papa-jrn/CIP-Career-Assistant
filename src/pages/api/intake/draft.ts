@@ -68,7 +68,7 @@ function extractPartialIntake(form: FormData) {
     full_name: getText("full_name"),
     target_title: getText("target_title"),
     email: getText("email"),
-    salary_target: Number.isFinite(salaryTarget) && salaryTarget > 0 ? salaryTarget : undefined,
+    salary_target: salaryTarget !== undefined && Number.isFinite(salaryTarget) && salaryTarget > 0 ? salaryTarget : undefined,
     work_modes: form.getAll("work_modes").map(String).filter(Boolean),
     resume_text: getText("resume_text"),
     linkedin_url: getText("linkedin_url"),

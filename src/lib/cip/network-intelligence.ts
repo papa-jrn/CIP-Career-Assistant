@@ -628,8 +628,8 @@ function scoreContact(
   const noteText = normalizeText(contact.notes);
   const profileText = normalizeText([
     context.intake?.target_title,
-    context.intake?.preferred_industries,
-    context.intake?.geographic_preferences,
+    context.intake?.industry_preferences,
+    context.intake?.career_constraints,
     context.intake?.public_evidence,
     context.latestAnalysis?.summary,
     context.latestAnalysis?.positioning?.join(" "),

@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, type AdvisorAnalysis } from "@/lib/cip/advisor";
-import { buildIdentityDraft, parseIntakeForm } from "@/lib/cip/intake";
+import { buildIdentityDraft, parseIntakeForm, type IntakeForm } from "@/lib/cip/intake";
 import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
@@ -63,7 +63,7 @@ type PersistenceResult =
   | { state: "error"; message: string };
 
 async function tryPersistIntake(
-  intake: ReturnType<typeof parseIntakeForm> extends { data: infer T } ? T : never,
+  intake: IntakeForm,
   draft: ReturnType<typeof buildIdentityDraft>,
   advisor: AdvisorAnalysis,
   supabase: ReturnType<typeof createServer> | null,

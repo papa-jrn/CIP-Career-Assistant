@@ -225,7 +225,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       .map((lane) => [normalize(lane.lane ?? ""), lane]),
   );
 
-  return targetLanes.map((lane, index) => {
+  return targetLanes.map((lane, index): StrategicLaneScore => {
     const conversationResearchLane = lane.label === "Conversation research lane";
     const base = conversationResearchLane ? 42 : 74 - index * 8;
     let score = base;
@@ -311,7 +311,7 @@ export function scoreEmployerCandidates(inputs: StrategicStateInputs): Strategic
 export function buildFollowUpObligations(outcomes: ConversationOutcome[]): StrategicFollowUpObligation[] {
   return outcomes
     .filter((outcome) => outcome.promisedFollowUp || outcome.followUpDueDate || outcome.nextAction || outcome.signalType === "follow_up_obligation")
-    .map((outcome) => {
+    .map((outcome): StrategicFollowUpObligation => {
       const urgency = followUpUrgency(outcome.followUpDueDate);
       const reasons = [
         outcome.promisedFollowUp ? `Promised follow-up: ${outcome.promisedFollowUp}` : "",
@@ -354,7 +354,7 @@ function scoreEmployerLike(
   conversationOutcomes: ConversationOutcome[],
   source: "watched" | "candidate",
 ): StrategicEmployerScore[] {
-  return employers.map((employer) => {
+  return employers.map((employer): StrategicEmployerScore => {
     const base = clamp(Number(employer.fit_score ?? 50));
     let score = base;
     const reasons = [`Baseline ${source === "watched" ? "watched-employer" : "employer-candidate"} fit score: ${base}.`];
@@ -521,7 +521,7 @@ function scoreExplanation(score: number, reasons: string[]) {
   return `${band} score based on ${movement}`.trim();
 }
 
-function followUpUrgency(date: string) {
+function followUpUrgency(date: string): StrategicFollowUpObligation["urgency"] {
   if (!date) return "unscheduled";
   const today = new Date().toISOString().slice(0, 10);
   if (date < today) return "overdue";

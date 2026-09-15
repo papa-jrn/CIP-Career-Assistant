@@ -28,16 +28,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     mode === "all_unpromoted"
       ? await supabase
           .from("employer_candidates")
-          .delete()
+          .delete({ count: "exact" })
           .eq("user_id", user.id)
           .neq("review_state", "promoted")
-          .select("id", { count: "exact" })
+          .select("id")
       : await supabase
           .from("employer_candidates")
-          .delete()
+          .delete({ count: "exact" })
           .eq("user_id", user.id)
           .in("id", candidateIds)
-          .select("id", { count: "exact" });
+          .select("id");
 
   if (error) {
     return html(`<p class="text-sm text-red-700">${escapeHtml(error.message)}</p>`, 500);

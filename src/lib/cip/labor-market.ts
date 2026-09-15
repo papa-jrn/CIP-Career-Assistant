@@ -141,7 +141,7 @@ async function fetchGreenhouseBoard(slug: string): Promise<NormalizedOpportunity
   const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs?content=true`);
   if (!response.ok) throw new Error(`Greenhouse ${slug} returned ${response.status}`);
   const payload = await response.json();
-  const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  const jobs: unknown[] = Array.isArray(payload.jobs) ? payload.jobs : [];
 
   return jobs
     .filter((job) => job && typeof job === "object")
