@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadLatestVerifiedPostings } from "@/lib/cip/job-search-run";
 import { loadStrategicState, type StrategicState } from "@/lib/cip/strategic-state";
 
 type SnapshotRow = {
@@ -48,18 +49,14 @@ export async function buildWeeklyStrategySnapshot(
   userId: string,
 ) {
   const weekStart = startOfWeek(new Date());
-  const [{ data: employers }, { data: matches }, { data: previousSnapshots }, strategicState] = await Promise.all([
+  const [{ data: employers }, verifiedOpenings, { data: previousSnapshots }, strategicState] = await Promise.all([
     supabase
       .from("watched_employers")
       .select("name,region,priority,fit_score,adapter_status,target_roles,careers_url")
       .eq("user_id", userId)
       .order("fit_score", { ascending: false }),
-    supabase
-      .from("opportunity_matches")
-      .select("match_score,confidence,opportunities(title,company,source_url)")
-      .eq("user_id", userId)
-      .order("match_score", { ascending: false })
-      .limit(10),
+    // Verified openings from the latest weekly job search (replaces the retired board-era matches).
+    loadLatestVerifiedPostings(supabase, userId, 10),
     supabase
       .from("career_strategy_snapshots")
       .select("week_start,summary,next_actions,evidence,created_at")
@@ -70,7 +67,6 @@ export async function buildWeeklyStrategySnapshot(
   ]);
 
   const watched = employers ?? [];
-  const opportunityMatches = matches ?? [];
   const previousSnapshot = ((previousSnapshots ?? []) as SnapshotRow[]).find((snapshot) => snapshot.week_start !== weekStart)
     ?? ((previousSnapshots ?? []) as SnapshotRow[])[0]
     ?? null;
@@ -87,7 +83,7 @@ export async function buildWeeklyStrategySnapshot(
   const resumeLane = strategicState.resumeLaneRecommendation;
   const briefingDiff = buildBriefingDiff(strategicState, previousSnapshot, {
     watchedEmployerCount: watched.length,
-    opportunityMatchCount: opportunityMatches.length,
+    opportunityMatchCount: verifiedOpenings.count,
     regionFocus,
     adapterBacklogNames: adapterBacklog.map((employer) => employer.name),
   });
@@ -118,18 +114,18 @@ export async function buildWeeklyStrategySnapshot(
       ? `Resume lane to work next: ${resumeLane.lane}. ${resumeLane.nextMove}`
       : "Run evidence analysis before refreshing career assets.",
     adapterBacklog.length
-      ? `Prioritize adapters or manual review for ${adapterBacklog.slice(0, 3).map((employer) => employer.name).join(", ")}.`
-      : "Keep supported employer feeds fresh and watch for new matches.",
-    opportunityMatches.length
-      ? "Compare top opportunity matches against resume proof gaps before applying."
-      : "Run labor-market research after watched employers are seeded.",
+      ? `Open the career pages for ${adapterBacklog.slice(0, 3).map((employer) => employer.name).join(", ")} and confirm they list current roles.`
+      : "Keep your saved employer career pages current.",
+    verifiedOpenings.count
+      ? "Compare the verified openings from your latest search against resume proof gaps before applying."
+      : "Run this week's job search on Opportunities to find verified openings.",
     "Turn one strong employer-role pair into a targeted networking or portfolio action.",
   ].filter((action, index, actions) => actions.indexOf(action) === index).slice(0, 5);
 
   const summary = briefingDiff.changed.length
     ? briefingDiff.changeSummary
     : watched.length
-      ? `No major strategy movement since the last briefing. Keep the week focused on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${opportunityMatches.length} ranked opportunity matches.`
+      ? `No major strategy movement since the last briefing. Keep the week focused on ${watched.length} watched employers across ${regionFocus.map(formatRegion).join(", ")} with ${verifiedOpenings.count} verified openings from your latest search.`
       : "No major strategy movement yet. Start by creating a trusted employer map before searching for individual roles.";
 
   const evidence = [
@@ -153,11 +149,12 @@ export async function buildWeeklyStrategySnapshot(
       reasons: "reasons" in employer ? employer.reasons : [],
       next_move: "nextMove" in employer ? employer.nextMove : employer.careers_url,
     })),
-    ...opportunityMatches.map((match) => ({
-      type: "opportunity_match",
-      match_score: match.match_score,
-      confidence: match.confidence,
-      opportunity: match.opportunities,
+    ...verifiedOpenings.postings.map((posting) => ({
+      type: "verified_posting",
+      title: posting.title,
+      employer: posting.employer,
+      source_url: posting.sourceUrl,
+      verified_at: posting.verifiedAt,
     })),
   ];
 
@@ -167,7 +164,8 @@ export async function buildWeeklyStrategySnapshot(
       week_start: weekStart,
       region_focus: regionFocus,
       watched_employer_count: watched.length,
-      opportunity_match_count: opportunityMatches.length,
+      // Column keeps its historical name; it now counts verified openings from the latest weekly search.
+      opportunity_match_count: verifiedOpenings.count,
       summary,
       next_actions: nextActions,
       evidence,
@@ -260,7 +258,7 @@ export function buildBriefingDiff(
   const jobEmployerChecks = [
     strategicState.employerCandidates[0] ? `Decide whether ${strategicState.employerCandidates[0].name} belongs on the watched-employer list or should be removed.` : "",
     context.adapterBacklogNames.length ? `Look for specific current openings at ${context.adapterBacklogNames.slice(0, 3).join(", ")} and capture any credible roles in Opportunities.` : "",
-    context.opportunityMatchCount ? "Compare current opportunity matches against the top lane's proof gaps before applying." : "Run opportunity or employer research so the next briefing has specific roles to compare.",
+    context.opportunityMatchCount ? "Compare the verified openings from your latest search against the top lane's proof gaps before applying." : "Run this week's job search on Opportunities so the next briefing has verified openings to compare.",
   ].filter(Boolean);
 
   changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown, ...laneAppeared, ...employerAppeared);

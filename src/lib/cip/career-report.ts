@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadLatestVerifiedPostings } from "@/lib/cip/job-search-run";
 import type { AdvisorAnalysis, EvidenceLedgerItem, ExplorationArea } from "@/lib/cip/advisor";
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import {
@@ -274,34 +275,27 @@ async function loadOpportunitySnapshot(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<ReportOpportunitySnapshot | null> {
-  const [{ data: watched }, { data: matches }] = await Promise.all([
+  const [{ data: watched }, verifiedOpenings] = await Promise.all([
     supabase
       .from("watched_employers")
       .select("name, region, fit_score")
       .eq("user_id", userId)
       .order("fit_score", { ascending: false }),
-    supabase
-      .from("opportunity_matches")
-      .select("match_score, opportunities(title, company)")
-      .eq("user_id", userId)
-      .order("match_score", { ascending: false })
-      .limit(5),
+    // Verified openings from the latest weekly job search (replaces the retired board-era matches).
+    loadLatestVerifiedPostings(supabase, userId, 5),
   ]);
 
   const watchedList = watched ?? [];
-  if (!watchedList.length && !(matches ?? []).length) return null;
+  if (!watchedList.length && !verifiedOpenings.count) return null;
 
   const regionFocus = [...new Set(watchedList.map((e) => e.region).filter(Boolean))];
 
   return {
     watchedEmployerCount: watchedList.length,
-    opportunityMatchCount: (matches ?? []).length,
+    opportunityMatchCount: verifiedOpenings.count,
     regionFocus,
     topEmployers: watchedList.slice(0, 5).map((e) => ({ name: e.name, fitScore: e.fit_score })),
-    topMatches: (matches ?? []).map((m) => {
-      const opp = m.opportunities as { title?: string | null; company?: string | null } | null;
-      return { title: opp?.title ?? null, company: opp?.company ?? null, matchScore: m.match_score };
-    }),
+    topMatches: verifiedOpenings.postings.map((posting) => ({ title: posting.title, company: posting.employer, matchScore: null })),
   };
 }
 

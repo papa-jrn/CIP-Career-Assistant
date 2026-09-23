@@ -20,6 +20,7 @@ import {
 import { verifyPostings, type PageFetcher, type VerificationResult, safePageFetcher } from "@/lib/cip/job-verifier";
 import { toOutboundFacets, violatesExclusions, type OutboundSearchFacets, type SearchBrief } from "@/lib/cip/search-brief";
 import { geocodeCoordinates } from "@/lib/cip/geography-engine";
+import { directReadStuckTargets, type DirectReadTrace } from "@/lib/cip/job-search-direct";
 import { assessWorksite, type LocationAssessment } from "@/lib/cip/search-geography";
 
 /**
@@ -54,6 +55,8 @@ export interface TraceEntry {
   incomplete: boolean;
   usage: RunUsage;
   error?: string;
+  /** Employers whose job list the search could not read, so the app read it directly (fallback). */
+  directReads?: DirectReadTrace[];
 }
 
 export interface RunRow {
@@ -328,7 +331,24 @@ export async function advanceJobSearchRun(
   // Merge with what earlier steps already stored, cap, then check location, exclusions, and the page itself.
   const existing = await loadObservations(supabase, userId, run.id);
   const existingKeys = existing.map((row) => ({ source_url: row.source_url, employer: row.employer_text, requisition_id: row.requisition_id, existing: true }));
-  const candidates = parsed.response.postings.map((posting) => ({ ...posting, employer: posting.employer, existing: false }));
+  // Fallback: only for target employers whose job list the search reported it could not read.
+  const direct =
+    step.tier === "target_page"
+      ? await directReadStuckTargets({
+          entries: parsed.response.employers_checked,
+          step,
+          facets,
+          config,
+          provider,
+          fetcher: deps.fetcher ?? safePageFetcher,
+          usedSoFar: addUsage(usedSoFar, parsed.usage),
+          alreadyReadHosts: new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.host)),
+        })
+      : null;
+  const candidates = [
+    ...parsed.response.postings.map((posting) => ({ ...posting, tier: step.tier as SourceTier, existing: false })),
+    ...(direct?.candidates ?? []).map((posting) => ({ ...posting, tier: posting.tier as SourceTier, existing: false })),
+  ];
   const merged = dedupeWithinRun([...existingKeys, ...candidates.map((posting) => ({ ...posting, source_url: posting.source_url }))] as Array<{ source_url: string; employer: string; requisition_id: string | null; existing: boolean }>);
   const room = Math.max(0, config.limits.maxPostings - existing.length);
   const fresh = (merged.filter((item) => !item.existing) as unknown as typeof candidates).slice(0, room);
@@ -390,7 +410,7 @@ export async function advanceJobSearchRun(
       remote_status: posting.remote_status,
       matched_role_term: posting.matched_role_term || null,
       evidence_excerpt: posting.evidence_excerpt.slice(0, 1200) || null,
-      source_tier: step.tier,
+      source_tier: posting.tier,
       verification_state: verification?.state ?? "discovered_unverified",
       verification_note: verification?.note ?? (exclusion ? `Not checked: matches your exclusion (${exclusion}).` : null),
       verification_checked_at: verification?.checkedAt ?? null,
@@ -407,16 +427,17 @@ export async function advanceJobSearchRun(
     }
   }
 
-  const usage = addUsage(usedSoFar, parsed.usage);
+  const usage = addUsage(addUsage(usedSoFar, parsed.usage), direct?.usage ?? EMPTY_USAGE);
   const cost = estimateCost(usage, config.pricing);
   const trace: TraceEntry = {
     step: step.index,
     tier: step.tier,
-    actions: parsed.actions,
+    actions: [...parsed.actions, ...(direct?.actions ?? [])],
     postingsFound: rows.length,
     rejected: parsed.rejected,
     incomplete: parsed.incomplete,
-    usage: parsed.usage,
+    usage: addUsage(parsed.usage, direct?.usage ?? EMPTY_USAGE),
+    ...(direct?.reads.length ? { directReads: direct.reads } : {}),
   };
   const coverage: CoverageEntry[] = parsed.response.employers_checked.map((entry) => ({
     name: entry.name,
@@ -426,6 +447,9 @@ export async function advanceJobSearchRun(
     tier: step.tier,
     step: step.index,
   }));
+  for (const entry of direct?.coverage ?? []) {
+    coverage.push({ name: entry.name, status: entry.status, note: entry.note.slice(0, 600), careersPageUrl: entry.careersPageUrl, tier: step.tier, step: step.index });
+  }
 
   await supabase
     .from("job_search_runs")
@@ -503,7 +527,9 @@ async function finalize(
   else status = hadTruncation ? "partial" : "succeeded";
 
   const cost = estimateCost(normalizeUsage(run.usage), options.config.pricing);
-  const summary = buildSummary({ status, observationsCount: observations.length, counts, stepsPlanned: run.plan.length, stepsRun, note: options.note, cost });
+  const directNames = [...new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.employer))];
+  const unreadNames = [...new Set(run.coverage.filter((entry) => entry.status === "direct_read_failed" || entry.status === "direct_read_unsupported").map((entry) => entry.name))];
+  const summary = buildSummary({ status, observationsCount: observations.length, counts, stepsPlanned: run.plan.length, stepsRun, note: options.note, cost, directNames, unreadNames });
 
   await supabase
     .from("job_search_runs")
@@ -547,6 +573,8 @@ export function buildSummary(input: {
   stepsRun: number;
   note?: string;
   cost: { usd: number | null; basis: "estimated" | "unavailable" };
+  directNames?: string[];
+  unreadNames?: string[];
 }) {
   const { counts } = input;
   const found = input.observationsCount
@@ -564,7 +592,11 @@ export function buildSummary(input: {
         : input.status === "budget_limited"
           ? "The search stopped at a limit; results below are partial."
           : "";
-  return [lead, found, coverage, input.note, cost].filter(Boolean).join(" ");
+  const direct = input.directNames?.length
+    ? `For ${input.directNames.join(", ")}, the search could not read the job list, so the app read the employer's own public job list directly.`
+    : "";
+  const unread = input.unreadNames?.length ? `Could not read the job list for ${input.unreadNames.join(", ")}; please check ${input.unreadNames.length === 1 ? "it" : "them"} by hand.` : "";
+  return [lead, found, coverage, direct, unread, input.note, cost].filter(Boolean).join(" ");
 }
 
 function normalizeUsage(value: RunRow["usage"]): RunUsage {
@@ -607,6 +639,49 @@ export async function loadLatestRunView(supabase: SupabaseClient, userId: string
     .limit(1)
     .maybeSingle();
   return data ? loadRunView(supabase, userId, data.id) : null;
+}
+
+export interface VerifiedPostingSummary {
+  title: string;
+  employer: string;
+  sourceUrl: string;
+  verifiedAt: string | null;
+}
+
+/**
+ * The postings from the latest run that actually searched (succeeded or partial) which were
+ * verified open on their source page, are not excluded, and are not outside the user's places
+ * (remote roles count). This is what the briefing and the career report summarize, replacing
+ * the retired board-era `opportunity_matches`.
+ */
+export async function loadLatestVerifiedPostings(
+  supabase: SupabaseClient,
+  userId: string,
+  limit = 10,
+): Promise<{ runId: string | null; finishedAt: string | null; count: number; postings: VerifiedPostingSummary[] }> {
+  const { data: run } = await supabase
+    .from("job_search_runs")
+    .select("id,finished_at")
+    .eq("user_id", userId)
+    .in("status", ["succeeded", "partial"])
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!run) return { runId: null, finishedAt: null, count: 0, postings: [] };
+
+  const rows = await loadObservations(supabase, userId, run.id);
+  const local = rows.filter((row) => row.verification_state === "verified_open" && !row.exclusion_hit && !isOutsideArea(row));
+  return {
+    runId: run.id,
+    finishedAt: run.finished_at,
+    count: local.length,
+    postings: local.slice(0, limit).map((row) => ({
+      title: row.title,
+      employer: row.employer_text,
+      sourceUrl: row.source_url,
+      verifiedAt: row.verification_checked_at,
+    })),
+  };
 }
 
 /** Last run that actually searched (succeeded or partial) and when the next is due. */

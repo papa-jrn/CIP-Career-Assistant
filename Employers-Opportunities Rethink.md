@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Revised 2026-09-23 — implementation scope and acceptance gates defined; not yet implemented.**
+Status: **Updated 2026-09-23 (evening) — steps 0-3 and 9 are built and live-tested; steps 4-8 and the Employers redesign are not started. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -98,7 +98,8 @@ Today this only feeds employer *discovery*. It should ground **the entire job se
 
 **Retire (the dead-premise machinery)**
 - Board discovery and `scoreOpportunity`'s keyword-overlap number. Clean ATS endpoints may verify
-  already-discovered postings; they do not remain a parallel discovery or fallback engine.
+  already-discovered postings; they do not remain a parallel discovery or fallback engine. (One narrow,
+  founder-approved exception, disclosed to the user, is described in the §8 step 9 amendment.)
 - Treating a raw board pull as "the search." It is not the product anymore.
 
 **Build (new)**
@@ -250,6 +251,33 @@ makes §5's flywheel actually connect.
 9. **Retire the dead-premise scrapers** once the engine above is trusted. ATS adapters (Autumn
    Phase 13) survive **only as verification** of discovered postings against employer-owned
    pages — never again as the discovery engine.
+   *Status 2026-09-23: DONE at the Opportunities cutover. Deleted `adzuna-jobs.ts`, `remote-jobs.ts`,
+   `labor-market.ts` (board ingestion, `scoreOpportunity`), and the `/api/jobs/geographic`,
+   `/api/jobs/remote`, `/api/labor-market/ingest` routes; removed the Adzuna and board-slug env vars.
+   Board-era `opportunities` / `opportunity_matches` rows are archived in place (migration
+   `20260923140000`, `archived_at` + `archive_reason`), not deleted, and are no longer read. The
+   briefing snapshot and the career report now summarize verified openings from the latest weekly
+   search (`loadLatestVerifiedPostings`); the snapshot column `opportunity_match_count` keeps its
+   historical name. The Opportunities page is now the home for the weekly search (run, progress,
+   results grouped by verification, coverage, "what this search covers"); the Briefing page shows a
+   read-only summary that links to it, so there is one place to run a search. Amends step 6's
+   "on the briefing page": the trigger lives on Opportunities and the Briefing surfaces status and
+   due state.*
+
+   *Amendment 2026-09-23 (founder decision): a NARROW direct reader is allowed, only as a fallback
+   and only for saved target employers whose job list the web search reported it could not read
+   (`page_found_but_could_not_read_listings`). It never runs for employers the search read fine,
+   is not a separate discovery pipeline, and is not a general crawler. Trigger case: Dartmouth
+   Health's career site is a JavaScript app that shows programs nothing, while its underlying
+   iCIMS job list is plain public HTML (382 listings over 8 pages). The reader (`ats-reader.ts`,
+   `job-search-direct.ts`) finds the iCIMS host from the page the search reported, checks
+   robots.txt, reads the list politely (pause between pages, page cap), and a model then chooses
+   listings BY INDEX only, so it cannot introduce a title or URL of its own. Every choice is
+   verified on its own page like any other posting. The user is always told: the coverage line and
+   the run summary say the app read the list itself, and employers it could not read at all
+   (unsupported site, robots block, error) are named with "please check by hand." iCIMS is the only
+   supported format so far. Verification also learned that iCIMS job pages are an empty wrapper
+   unless fetched with `?in_iframe=1`.*
 
 ## 9. Open decisions (for the founder)
 
@@ -405,7 +433,9 @@ de-founder, state-layer testing, configurable lane infrastructure, and beta gate
 
 At cutover, disable legacy discovery routes/buttons, replace `opportunity_matches` score consumers
 in the briefing, and archive board-era records with provenance rather than deleting user history.
-Remove dead configuration/docs. Verification adapters cannot initiate a second discovery pipeline.
+Remove dead configuration/docs. Verification adapters cannot initiate a second discovery pipeline
+(the one exception is the fallback-only direct reader for target pages the search could not read;
+see the amendment under §8 step 9).
 An operational rollback disables the new search and retains saved history; it must not silently
 reactivate retired discovery. Show last successful run, due state, in-progress state, and visible
 errors; update results after completion without requiring an unexplained reload.
@@ -430,3 +460,132 @@ errors; update results after completion without requiring an unexplained reload.
    latency/cost, and whether the founder can identify a useful next action. Run the repo's
    required typecheck/tests and build checks for implementation changes. Document the live
    outcome; do not claim discovery quality from unit tests alone.
+
+---
+
+## 16. Status board and build log (as of 2026-09-23, evening)
+
+This section is the running record of what is built, what was learned, and what is next. §1-§15 are the
+plan; where they disagree with this section, this section reflects what actually exists. Do not read the
+plan as a claim of completed functionality: the two live acceptance passes in §15.3 have not been done.
+
+### Status board
+
+| §8 step | State | Where it lives |
+|---|---|---|
+| 0. Conversation-note auto-extraction | Done | `conversation-extraction.ts` |
+| 1. Search-brief assembler | Done, tested | `search-brief.ts`; confirmed preferences in `search_preference_items`, edited at `/preferences` |
+| 2. Geographic grounding | Done, verified live | `geography-engine.ts`, `search-geography.ts`, `brief-loader.ts`; "Check coverage" on `/preferences` |
+| 3. LLM-web-search job engine | Done, live-tested, one real run reviewed | `job-search-*.ts`, `job-verifier.ts`; runs in `job_search_runs` / `job_search_observations` |
+| 4. Posting identity + dedupe across runs | NOT started (only same-run dedupe exists) | next |
+| 5. Employer resolution / aliasing | NOT started | |
+| 6. Weekly job diff + trigger | Trigger done (manual run on Opportunities, due state); diff vs the previous run NOT started | |
+| 7. Evidence-grounded fit + recommendation | NOT started (postings show verification, location, and pay only; no apply / talk-first / skip yet) | |
+| 8. Minimal action tracking | NOT started | |
+| 9. Retire the dead-premise scrapers | Done at the Opportunities cutover; a narrow fallback-only direct reader was added by amendment (§8 step 9) | |
+
+Surfaces: **Opportunities** is the home of the weekly search (run, progress, results grouped by verification,
+coverage, "what this search covers"). **Briefing** shows a read-only summary that links there. **Search
+preferences** holds the confirmed constraints. **Employers** is unchanged; its redesign (§14) has not started.
+
+### What was built and learned (2026-09-23 session)
+
+**Brief and preferences.** Comp floor, exclusions, and location existed only as free text in intake; the brief takes
+structured preferences and reports unconfirmed free text as gaps. Nothing is applied from intake until the user
+confirms it on `/preferences`. The intake `salary_target` is treated as a suggestion, not a floor (a target is not
+a minimum). Exclusions are applied locally to results and never sent to the provider; `toOutboundFacets()` is an
+allow-list, tested to exclude private content. Preferred job sources (trusted domains) are stored as preferences.
+
+**Geography.** Overpass returns no state for nearby towns, so towns across a state line (Norwich VT vs Lebanon NH)
+were mislabeled with the center's state. Each of the 12 nearest towns is now reverse-geocoded for its real state;
+unverified stays unknown and is treated as ambiguous, never in range. A failed nearby-town lookup retries once and is
+reported ("only the center place is covered"), never presented as an expanded search. Worksite distance is
+straight-line from a geocoded clean city/state (or a state-matched locality); unlisted or unresolvable locations are
+"unknown", never "outside".
+
+**Search engine.** Tiered: saved targets' career pages, then preferred sources, then the open web, as up to 7 bounded
+steps advanced by separate requests. OpenAI Responses API with web search; default model `gpt-5.4`, configurable.
+Live spike results: `gpt-4.1-mini` (the repo's old default) fabricated postings (fake requisition IDs, 404 URLs) and must
+not be used for discovery; `gpt-5.4` returned only verified postings; `gpt-5.4-mini` mostly worked but returned a
+duplicate and a dead posting. Non-reasoning models are not acceptable here. Caps enforced in code: 3 runs per user per
+rolling week, 12 scopes, 25 postings, tool-call and token ceilings, a per-run dollar ceiling once pricing is set. Cost is
+recorded as "not estimated" until `JOB_SEARCH_PRICING_JSON` is configured; the app never hardcodes provider prices.
+
+**Verification rules learned from live results.** Every posting is fetched and checked on its own page.
+- HTTP status alone is not enough: a removed posting returned 200 with a generic shell page. The page must show the
+  title (and the requisition ID when one is distinctive).
+- A stated application deadline that has passed is not "verified open" (a real result caught this).
+- iCIMS job pages are an empty wrapper unless fetched with `?in_iframe=1`; the verifier does this.
+- Blocks, login walls, rate limits and server errors are "could not check", never "closed".
+
+**Location, pay, and grouping.** Postings outside the user's distance are kept and shown in their own group, not mixed
+with local matches or hidden. Hourly pay converts to an annual estimate assuming a full-time year (40 x 52 = 2,080
+hours; $35/hour is about $72,800), always labeled an estimate, compared with the salary floor; part-time without hours,
+monthly, and vague pay stay unknown (`pay.ts`).
+
+**Cutover.** Deleted the Adzuna, remote-feed, and board-ingestion code and routes and their env vars; archived board-era
+`opportunities` / `opportunity_matches` rows in place (migration `20260923140000`); the briefing snapshot and career
+report now count verified openings from the latest weekly search. The snapshot column `opportunity_match_count` keeps its
+historical name.
+
+**Direct reader (fallback only, founder-approved).** Dartmouth Health's public career site is a JavaScript app that shows
+a program nothing; its job list lives in iCIMS as plain HTML (382 listings over 8 pages, read in about 6 seconds in the live
+check). When the search reports it could not read a saved target's listings, the app finds the iCIMS host, checks
+robots.txt, reads the list politely, and a model chooses listings by index only (so it cannot invent a title or URL); every
+pick is verified on its own page. The coverage line, the posting label, and the run summary all say the app read the list
+itself; employers it cannot read at all are named with "please check by hand." iCIMS is the only supported format.
+
+**HealthcareSource (symplr) sites: decided NOT to build a reader (founder decision, option 1).** Northeast VT Regional
+Hospital (St. Johnsbury, `pm.healthcaresource.com/cs/dhanortheasternvt`) and the other Dartmouth Health member hospitals
+(Alice Peck Day in Lebanon, Mt. Ascutney in Windsor, Cheshire, Springfield, Valley Regional) use it. It is a single-page app
+backed by a private, undocumented search service with its own token layer, no robots.txt, sitemap, or feed, and a request format
+buried in a 15 MB bundle. Reading it would be reverse-engineering a private service, unlike iCIMS's public HTML. Today the app
+says these pages need a hand check and links to them. Revisit after a few real runs show how much is being missed.
+
+### Live results so far
+
+- First real search (7 of 7 steps): 6 postings found, 4 verified open, 1 not yet verifiable, 1 gone (404). It correctly held back
+  a posting whose requisition ID did not match and caught a dead link. Review found a passed-deadline posting marked open
+  (fixed), a DC hybrid role reported as "distance unknown" (fixed by geocoding a clean city/state), and a misleading "lead"
+  label on verified rows (fixed).
+- Recall varies run to run: the Dartmouth "Executive Director" role found in earlier tests was missed in the first run. This is why
+  step 4 (re-verify earlier finds without the model) and remembering each employer's listing page are next.
+- OpenAI spend: $0.23 month-to-date on the CIP project after the tests. A full run's cost is not yet measured.
+
+### Decisions made by the founder (2026-09-23)
+
+- Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
+- Provider: OpenAI, reasoning model, one manual full search per week; target career pages first, then sector boards, then general search.
+  LinkedIn and Indeed are not targeted (login-gated, and their terms prohibit automated access).
+- Remote and hourly-pay handling: remote is a later concern; hourly pay converts at 2,080 hours, labeled an estimate.
+- A narrow, fallback-only, disclosed direct reader is allowed (amends step 9). HealthcareSource stays "check by hand."
+- Hosting when ready: Vercel (Pro already held), CIP as its own project; not deploying yet. The CIP name and domain will be
+  workshopped before the beta.
+
+### Migrations (apply in this order; each is safe to run twice)
+
+`20260923120000_search_preference_items.sql`, `20260923130000_job_search_runs.sql`, `20260923140000_archive_board_era_opportunities.sql`,
+`20260923150000_direct_read_tier.sql`. The last two are needed for the archive marker and to save direct-read postings.
+
+### Next, in order
+
+1. **Two live acceptance passes** (§15.3): establish a baseline run, change a constraint or add evidence, run again, and trace the change
+   through brief, search, saved observations, and the visible result. Include a successful-zero-result and a simulated-failure path.
+2. **Step 4: posting identity across runs** and re-verification of earlier finds each run (no model call).
+3. **Remember each target's real career-page URL** (user-supplied or discovered) and give it back to the search and the direct reader.
+4. **Steps 5-8:** employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College), the weekly diff, the apply / talk-first /
+   research-funding / monitor / skip recommendation, minimal action tracking; then the Employers (target workspace) redesign (§14).
+5. **De-founder and state-layer tests** (Autumn Phases 5-6), lane configuration, and the 990 enrichment, per the Autumn plan.
+
+### Parked (not decided or not started)
+
+- Cost per beta user and total monthly cost (see `productionization_discussion.md`), including locking down sign-ups and the API key.
+- Deploying to Vercel: swap the Node adapter for the Vercel one; the in-memory rate limiter is weak on serverless (search caps are database-backed
+  and hold); the OpenAI key is currently copied into the server build (a follow-up task is queued to move secrets to runtime reads).
+- Workshopping the CIP name and domain.
+
+### Working notes
+
+- `npm run dev` builds and serves `dist/`; it does not hot-reload. Restart it to see code changes, and do not run `npm run build` while it is running.
+- Private server settings must be read as `import.meta.env.NAME` written out by name (or via `readJobSearchEnv`); looking them up by a variable returns nothing.
+- The OpenAI account: the key in `.env` belongs to a specific organization; confirm which account the dashboard is showing before reading spend.

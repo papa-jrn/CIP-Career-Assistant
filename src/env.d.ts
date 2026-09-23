@@ -8,8 +8,6 @@ interface ImportMetaEnv {
   readonly PUBLIC_STRIPE_PUBLISHABLE_KEY?: string;
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_MODEL?: string;
-  readonly LABOR_MARKET_GREENHOUSE_BOARDS?: string;
-  readonly LABOR_MARKET_LEVER_COMPANIES?: string;
 }
 
 interface ImportMeta {

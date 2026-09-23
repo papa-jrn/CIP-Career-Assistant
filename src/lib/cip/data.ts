@@ -66,7 +66,7 @@ export const navItems: NavStep[] = [
     step: 7,
     cycle: true,
     icon: "opportunities",
-    blurb: "Translate the profile into role families, filters, and review rules.",
+    blurb: "Run the weekly search: verified openings at your target employers and trusted job sources.",
   },
   {
     href: "/briefing",

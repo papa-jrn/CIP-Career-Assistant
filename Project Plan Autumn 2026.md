@@ -18,6 +18,17 @@ The founder's DH conversation included an uploaded primary-source press release,
 anecdote. The Rethink records the source and exact reduction categories. Source-backed facts must
 flow alongside conversation signals, with separate confidence for downstream market inferences.
 
+## Progress update — 2026-09-23 (evening)
+
+The Employers & Opportunities Rethink slice is well underway. Built and live-tested: the search brief and confirmed
+search preferences, geographic grounding with verified states, the weekly LLM web-search job engine with per-posting
+verification and durable run records, the Opportunities page as the home for the weekly search, retirement of the
+board-era pipeline, and a narrow fallback-only direct reader for employer job lists the search cannot read (iCIMS).
+Not yet done: posting identity across runs, employer resolution, the weekly job diff, the apply / talk-first / skip
+recommendation, action tracking, the Employers redesign, and the two live acceptance passes. Phase 13's board retirement
+is complete. See `Employers-Opportunities Rethink.md` §16 for the status board, decisions, and next steps. The de-founder pass
+(Phase 5), state-layer tests (Phase 6), and lane infrastructure remain ahead and are unchanged.
+
 ## Why This Plan Exists
 
 This is not a tidy continuation of the Spring plan. It is a restart.
@@ -1025,6 +1036,8 @@ The founder expected fresh, source-backed job and employer discovery every weekl
 2. Disable `ingestConfiguredSources` (Greenhouse/Lever slugs) in `labor-market.ts` and its `/api/labor-market/ingest` route.
 3. Retire or repurpose the Opportunities page: it may only ever show loop-derived matches (discovery runs, watched-employer checks). Archive board-era `opportunities` / `opportunity_matches` rows rather than silently deleting user history.
 4. Remove now-dead env vars from `.env.example` and documentation.
+
+**Status 2026-09-23:** board retirement is done. The Adzuna, remote-feed, and Greenhouse/Lever ingestion code and routes are deleted, their env vars removed, board-era records archived in place, and the Opportunities page, briefing, and report now read verified results from the weekly search. See `Employers-Opportunities Rethink.md` §8 step 9.
 
 ## Discovery Steps
 

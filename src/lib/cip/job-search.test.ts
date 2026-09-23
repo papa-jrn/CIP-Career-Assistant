@@ -23,6 +23,8 @@ import {
   judgeVerification,
   pageContainsRequisition,
   pageContainsTitle,
+  verificationFetchUrl,
+  verifyPosting,
   verifyPostings,
 } from "@/lib/cip/job-verifier";
 import { assembleSearchBrief, toOutboundFacets } from "@/lib/cip/search-brief";
@@ -159,10 +161,22 @@ describe("verification judgment", () => {
 
   it("matches titles by whole phrase or nearly all meaningful words, and ignores markup and scripts", () => {
     expect(htmlToText("<script>var title='Executive Director'</script><b>Hello</b>&nbsp;world &amp; more")).toBe("Hello world & more");
+    expect(htmlToText("Pediatrician &ndash; Elliot Health &#8211; &#x2013; it&rsquo;s &lt;ok&gt; &amp;amp;")).toBe("Pediatrician – Elliot Health – – it’s <ok> &amp;");
     expect(pageContainsTitle("Senior Media Relations Officer at the College", "Senior Media Relations Officer")).toBe(true);
     expect(pageContainsTitle("Media Relations Assistant", "Senior Media Relations Officer")).toBe(false);
     expect(pageContainsRequisition("Requisition: REQ-1012314", "1012314")).toBe(true);
     expect(pageContainsRequisition("Requisition: REQ-999", "1012314")).toBe(false);
+  });
+
+  it("fetches iCIMS job pages with in_iframe=1 (the plain address is an empty wrapper) and leaves other URLs alone", async () => {
+    expect(verificationFetchUrl("https://careers-x.icims.com/jobs/41685/some-title/job")).toBe("https://careers-x.icims.com/jobs/41685/some-title/job?in_iframe=1");
+    expect(verificationFetchUrl("https://careers-x.icims.com/jobs/41685/some-title/job?in_iframe=1")).toBe("https://careers-x.icims.com/jobs/41685/some-title/job?in_iframe=1");
+    expect(verificationFetchUrl("https://careers-x.icims.com/jobs/search?ss=1")).toBe("https://careers-x.icims.com/jobs/search?ss=1");
+    expect(verificationFetchUrl("https://example.org/jobs/41685/x/job")).toBe("https://example.org/jobs/41685/x/job");
+    expect(verificationFetchUrl("not a url")).toBe("not a url");
+    const seen: string[] = [];
+    await verifyPosting({ title: "T", sourceUrl: "https://careers-x.icims.com/jobs/1/t/job" }, async (url) => (seen.push(url), { status: 200, text: "" }));
+    expect(seen).toEqual(["https://careers-x.icims.com/jobs/1/t/job?in_iframe=1"]);
   });
 
   it("verifies many postings with bounded concurrency and preserves order", async () => {

@@ -33,6 +33,12 @@ export interface JobSearchLimits {
   /** A run older than this is "due" again. */
   dueAfterDays: number;
   verifyConcurrency: number;
+  /** Fallback direct reading of employer job lists the search could not read (target employers only). */
+  directReadsPerStep: number;
+  directReadMaxPages: number;
+  directReadMaxListings: number;
+  directReadDelayMs: number;
+  directReadMaxSelected: number;
 }
 
 export interface JobSearchPricing {
@@ -68,6 +74,11 @@ export const DEFAULT_LIMITS: JobSearchLimits = {
   abandonedAfterMinutes: 10,
   dueAfterDays: 7,
   verifyConcurrency: 3,
+  directReadsPerStep: 3,
+  directReadMaxPages: 10,
+  directReadMaxListings: 600,
+  directReadDelayMs: 600,
+  directReadMaxSelected: 10,
 };
 
 export type EnvReader = (name: string) => string | undefined;

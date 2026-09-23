@@ -12,7 +12,7 @@ This is an **Astro** app (SSR), not Next.js. Ignore any prior instruction to rea
 - **Tailwind v4**, **Zod** for validation, **Stripe** for payments, **vitest** for tests.
 
 ## Commands
-- `npm run dev` — local dev server (`node scripts/serve-local.mjs`). Sign in from
+- `npm run dev` — local server (`node scripts/serve-local.mjs`). **It runs `npm run build` and then serves `dist/`, so it does NOT hot-reload.** Stop it and run `npm run dev` again to see code changes. Do not run `npm run build` while it is running (it replaces the files being served); to type-check a build without disturbing it, use `npx astro build --outDir <somewhere-else>`. Sign in from
   **`http://localhost:4321`**, not `127.0.0.1` (the Supabase PKCE cookie is origin-bound, so a
   mixed loopback origin fails magic-link login).
 - `npm test` — **`tsc --noEmit` then `vitest run`**. Keep this green; the repo typechecks clean.

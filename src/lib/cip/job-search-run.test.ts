@@ -8,11 +8,12 @@ import {
   buildSummary,
   computeDueState,
   countByState,
+  loadLatestVerifiedPostings,
   loadRunView,
   startJobSearchRun,
   type RunView,
 } from "@/lib/cip/job-search-run";
-import { escapeHtml, renderJobSearchPanel } from "@/lib/cip/job-search-view";
+import { escapeHtml, renderJobSearchPanel, renderJobSearchSummary } from "@/lib/cip/job-search-view";
 
 const USER = "user-1";
 const NOW = "2026-09-23T12:00:00.000Z";
@@ -435,5 +436,52 @@ describe("summary, due state, and the panel", () => {
     };
     const html = renderJobSearchPanel(view, { runKey: "abc12345", due: computeDueState(null, 7, NOW), configured: true });
     for (const heading of ["Verified open", "Not verified yet", "Closed or gone", "Excluded by your rules"]) expect(html).toContain(heading);
+  });
+});
+
+describe("cutover consumers", () => {
+  const observation = (overrides: Record<string, unknown>) => ({
+    id: crypto.randomUUID(), user_id: USER, run_id: "run-latest", title: "T", employer_text: "E", source_url: "https://x.org/p/1",
+    remote_status: "onsite", verification_state: "verified_open", verification_checked_at: NOW, exclusion_hit: null,
+    location_status: "within", first_seen_at: NOW, ...overrides,
+  });
+
+  it("summarizes only verified, non-excluded, in-area openings from the latest searching run", async () => {
+    const { client, db } = createFakeSupabase();
+    db.job_search_runs.push(
+      { id: "run-old", user_id: USER, status: "succeeded", finished_at: "2026-09-01T00:00:00.000Z" },
+      { id: "run-latest", user_id: USER, status: "partial", finished_at: "2026-09-20T00:00:00.000Z" },
+      { id: "run-failed", user_id: USER, status: "failed", finished_at: "2026-09-22T00:00:00.000Z" },
+    );
+    db.job_search_observations.push(
+      observation({ title: "Local verified" }),
+      observation({ title: "Remote verified", remote_status: "remote", location_status: null }),
+      observation({ title: "Far away", location_status: "outside" }),
+      observation({ title: "Excluded", exclusion_hit: "employer: X" }),
+      observation({ title: "Unverified", verification_state: "discovered_unverified" }),
+      observation({ title: "Old run", run_id: "run-old" }),
+    );
+    const result = await loadLatestVerifiedPostings(client, USER, 10);
+    expect(result.runId).toBe("run-latest");
+    expect(result.count).toBe(2);
+    expect(result.postings.map((posting) => posting.title).sort()).toEqual(["Local verified", "Remote verified"]);
+    expect(await loadLatestVerifiedPostings(client, "someone-else")).toMatchObject({ runId: null, count: 0, postings: [] });
+  });
+
+  it("renders a read-only Briefing summary that links to Opportunities and never offers to run or advance", async () => {
+    const fake = createFakeSupabase({ watched_employers: employers(2) });
+    const outcome = await startJobSearchRun(fake.client, USER, "key-summary", { config: config(), now });
+    const running = await loadRunView(fake.client, USER, (outcome as { runId: string }).runId);
+    const due = computeDueState(null, 7, NOW);
+    for (const html of [
+      renderJobSearchSummary(running, { runKey: "abc12345", due, configured: true }),
+      renderJobSearchSummary(null, { runKey: "abc12345", due, configured: true }),
+      renderJobSearchSummary(null, { runKey: "abc12345", due, configured: false }),
+    ]) {
+      expect(html).not.toContain("hx-post");
+      expect(html).not.toContain("/api/jobs/");
+    }
+    expect(renderJobSearchSummary(running, { runKey: "abc12345", due, configured: true })).toContain('href="/opportunities"');
+    expect(renderJobSearchSummary(running, { runKey: "abc12345", due, configured: true })).toContain("in progress");
   });
 });

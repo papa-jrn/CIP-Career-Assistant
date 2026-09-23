@@ -38,12 +38,16 @@ const COVERAGE_LABEL: Record<string, string> = {
   no_matching_openings: "Read; nothing matched",
   page_found_but_could_not_read_listings: "Found the page but could not read the listings",
   not_found: "Could not find a careers page",
+  read_directly_by_app: "Search could not read it, so the app read the employer's job list directly",
+  direct_read_failed: "Could not be read, even directly. Check it by hand",
+  direct_read_unsupported: "Could not be read, and no supported job-list format was found. Check it by hand",
 };
 
 const TIER_LABEL: Record<string, string> = {
   target_page: "Employer career page",
   preferred_source: "Your preferred source",
   general: "Open-web search",
+  direct_read: "Read directly from the employer's job list",
 };
 
 export function escapeHtml(value: unknown): string {
@@ -249,6 +253,42 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
     ${group("Excluded by your rules", "These match an exclusion you set and were not checked further.", excluded, floorUsd)}
     ${coverageBlock(view)}${detailsBlock(view)}
     <p class="sr-only">${counts.verified} verified.</p>
+  </div>`;
+}
+
+/**
+ * Compact read-only summary for other pages (the Briefing). It never starts or advances a run;
+ * it points to Opportunities, where the search is run and reviewed.
+ */
+export function renderJobSearchSummary(view: RunView | null, context: PanelContext): string {
+  const link = (label: string) =>
+    `<a class="cip-fancy-button cip-fancy-button-secondary mt-3 inline-flex" href="/opportunities"><span>${escapeHtml(label)}</span></a>`;
+  const head = `<h2 class="text-lg font-semibold">Weekly job search</h2>`;
+  const open = '<div id="job-search-panel">';
+
+  if (!context.configured) {
+    return `${open}${head}<p class="mt-2 text-sm text-[var(--muted)]">The search is not set up on this server, so nothing has been searched.</p></div>`;
+  }
+  if (!view) {
+    return `${open}${head}<p class="mt-2 text-sm text-[var(--muted)]">No search has run yet. It finds real, verified openings at your target employers and trusted job sites.</p>${link("Run this week's search")}</div>`;
+  }
+
+  const { run } = view;
+  if (run.status === "running") {
+    return `${open}${head}<p class="mt-2 text-sm">A search is in progress (step ${Math.min(run.next_step + 1, run.plan.length)} of ${run.plan.length}). Progress is saved.</p>${link("Watch it on Opportunities")}</div>`;
+  }
+
+  const bad = run.status === "failed" || run.status === "partial" || run.status === "budget_limited" || run.status === "not_configured";
+  const dueLine = context.due.lastRunAt
+    ? `Last successful search ${escapeHtml(formatDate(context.due.lastRunAt))}. ${context.due.due ? "A new search is due." : `Next due ${escapeHtml(formatDate(context.due.dueAt))}.`}`
+    : "No search has completed yet.";
+  return `${open}${head}
+    <p class="mt-1 text-xs text-[var(--muted)]">${dueLine}</p>
+    <div class="mt-3 rounded-md border ${bad ? "border-yellow-300 bg-yellow-50 text-yellow-900" : "border-[var(--line)] bg-[var(--background)]"} p-3 text-sm">
+      <p class="font-semibold">${escapeHtml(STATUS_LABEL[run.status] ?? run.status)} · ${escapeHtml(formatDate(run.started_at))}</p>
+      <p class="mt-1 leading-6">${escapeHtml(run.summary)}</p>
+    </div>
+    ${link(context.due.due ? "Run this week's search" : "Open Opportunities")}
   </div>`;
 }
 

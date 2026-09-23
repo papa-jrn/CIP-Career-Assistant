@@ -77,17 +77,33 @@ export function findPassedDeadline(text: string, todayIso: string): string | nul
 
 const STOPWORDS = new Set(["the", "and", "for", "with", "from", "of", "at", "in", "to", "a", "an", "on"]);
 
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ", quot: '"', apos: "'", lt: "<", gt: ">", ndash: "–", mdash: "—", hellip: "…",
+  rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", copy: "©", reg: "®", trade: "™", middot: "·", bull: "•",
+};
+
+/** Decodes numeric and the common named HTML entities. `&amp;` is decoded last so it cannot double-decode. */
+export function decodeEntities(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => safeCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-z]+);/gi, (whole, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? whole)
+    .replace(/&amp;/gi, "&");
+}
+
+function safeCodePoint(code: number) {
+  if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return "";
+  const text = String.fromCodePoint(code);
+  return code === 0xa0 ? " " : text;
+}
+
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|noscript|template)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;|&#34;/gi, '"')
-    .replace(/&#39;|&apos;|&rsquo;|&lsquo;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+  return decodeEntities(
+    html
+      .replace(/<(script|style|noscript|template)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<[^>]+>/g, " "),
+  )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -180,12 +196,31 @@ export const safePageFetcher: PageFetcher = async (url) => {
   }
 };
 
+/**
+ * The address to fetch when checking a posting. iCIMS job pages wrap their content in an iframe:
+ * the plain address returns an empty wrapper, and the content only appears at `?in_iframe=1`
+ * (found in a live check against Dartmouth Health). Users still get the normal link; only the
+ * verifier's fetch is adjusted.
+ */
+export function verificationFetchUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase().endsWith(".icims.com") && /\/jobs\/\d+\//.test(parsed.pathname) && !parsed.searchParams.has("in_iframe")) {
+      parsed.searchParams.set("in_iframe", "1");
+      return parsed.href;
+    }
+  } catch {
+    // not a URL we can adjust; fetch it as given
+  }
+  return url;
+}
+
 export async function verifyPosting(
   posting: PostingToVerify,
   fetcher: PageFetcher = safePageFetcher,
   now: () => string = () => new Date().toISOString(),
 ): Promise<VerificationResult> {
-  return judgeVerification(await fetcher(posting.sourceUrl), posting, now());
+  return judgeVerification(await fetcher(verificationFetchUrl(posting.sourceUrl)), posting, now());
 }
 
 /** Verify many postings with bounded concurrency; order of results matches input. */
