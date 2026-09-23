@@ -1,6 +1,7 @@
 import type { ConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import type { GeocodedSearchArea } from "@/lib/cip/geography-engine";
 import type { StrategicState } from "@/lib/cip/strategic-state";
+import { normalizeStateCode } from "@/lib/cip/us-states";
 
 /**
  * Search brief (Employers & Opportunities Rethink, build step 1).
@@ -39,6 +40,8 @@ export interface SearchPreferences {
   };
   /** Already-geocoded anchors (one or more user-selected regions). */
   anchors?: GeocodedSearchArea[];
+  /** Anchors the user saved that could not be geocoded this time. Reported, never dropped silently. */
+  unresolvedAnchors?: Array<{ label: string; reason: string }>;
   /** Constraints the user wrote as free text and no one has confirmed as structured. */
   unparsedConstraints?: Array<{ field: string; text: string }>;
 }
@@ -72,7 +75,13 @@ export interface BriefLocality {
 }
 
 export interface BriefAnchor {
+  /** The place as the user entered it. */
   label: string;
+  /** What the geocoder resolved it to, so a wrong match (wrong state, wrong town) is visible. */
+  resolvedAs: string;
+  centerCity: string;
+  /** "fallback" means the nearby-towns lookup failed and only the center place is covered. */
+  nearbyLookup: "ok" | "fallback";
   latitude: number;
   longitude: number;
   radiusMiles: number;
@@ -122,6 +131,8 @@ export interface SearchBrief {
   compensation: { floorUsd: number | null; unit: "year"; upperBound: null };
   workModel: { accepted: BriefWorkMode[]; remoteLimits: string | null };
   anchors: BriefAnchor[];
+  /** Saved anchors that failed to geocode; these were NOT searched. */
+  unresolvedAnchors: Array<{ label: string; reason: string }>;
   targets: BriefTarget[];
   signals: BriefSignal[];
   /** Contradictions noted, never silently reconciled. */
@@ -150,7 +161,7 @@ export interface OutboundSearchFacets {
 
 const MAX_LANES = 5;
 const MAX_TARGETS = 15;
-const MAX_LOCALITIES = 14;
+const MAX_LOCALITIES = 12; // matches how many nearby towns get a verified state
 const MAX_SIGNALS = 20;
 const MAX_VOCABULARY_PER_LANE = 6;
 const OUTBOUND_FLOOR_STEP = 5_000;
@@ -175,6 +186,7 @@ export function assembleSearchBrief(inputs: SearchBriefInputs): SearchBrief {
   const lanes = buildLanes(inputs.strategicState, outcomes);
   const targets = buildTargets(inputs.strategicState, exclusions.employers);
   const anchors = (preferences.anchors ?? []).map(toBriefAnchor);
+  const unresolvedAnchors = (preferences.unresolvedAnchors ?? []).map((item) => ({ label: item.label, reason: item.reason }));
   const signals = buildSignals(outcomes);
   const conflicts = detectCompensationConflicts(outcomes, floorUsd);
   const unresolvedConstraints = (preferences.unparsedConstraints ?? [])
@@ -189,6 +201,7 @@ export function assembleSearchBrief(inputs: SearchBriefInputs): SearchBrief {
     workModes,
     remoteLimits,
     anchors,
+    unresolvedAnchors,
     exclusions,
     unresolvedConstraints,
   });
@@ -199,6 +212,7 @@ export function assembleSearchBrief(inputs: SearchBriefInputs): SearchBrief {
     compensation: { floorUsd, unit: "year" as const, upperBound: null },
     workModel: { accepted: workModes, remoteLimits },
     anchors,
+    unresolvedAnchors,
     targets,
     signals,
     conflicts,
@@ -356,14 +370,22 @@ function buildTargets(state: StrategicState, excludedEmployers: string[]): Brief
 function toBriefAnchor(area: GeocodedSearchArea): BriefAnchor {
   return {
     label: area.query || area.displayName,
+    resolvedAs: area.displayName,
+    centerCity: area.city,
+    nearbyLookup: area.nearbyLookup,
     latitude: area.latitude,
     longitude: area.longitude,
     radiusMiles: area.radiusMiles,
-    state: area.state,
+    state: normalizeStateCode(area.state) || area.state,
     localities: [...area.nearbyPlaces]
       .sort((a, b) => a.distanceMiles - b.distanceMiles || a.name.localeCompare(b.name))
       .slice(0, MAX_LOCALITIES)
-      .map((place) => ({ name: place.name, state: place.state, distanceMiles: place.distanceMiles })),
+      .map((place) => ({
+        name: place.name,
+        // Unknown stays empty so a town across a state line is never labeled with the anchor state.
+        state: normalizeStateCode(place.state),
+        distanceMiles: place.distanceMiles,
+      })),
   };
 }
 
@@ -426,6 +448,7 @@ function buildGaps(input: {
   workModes: BriefWorkMode[];
   remoteLimits: string | null;
   anchors: BriefAnchor[];
+  unresolvedAnchors: Array<{ label: string; reason: string }>;
   exclusions: SearchBrief["exclusions"];
   unresolvedConstraints: Array<{ field: string; text: string }>;
 }): string[] {
@@ -436,8 +459,16 @@ function buildGaps(input: {
   if (input.workModes.includes("remote") && !input.remoteLimits) {
     gaps.push("Remote is accepted but no residency or work-authorization limit is recorded.");
   }
-  if (!input.anchors.length) {
+  if (!input.anchors.length && !input.unresolvedAnchors.length) {
     gaps.push("No geocoded location anchor: local search cannot run and results cannot be ranked by distance.");
+  }
+  for (const anchor of input.anchors) {
+    if (anchor.nearbyLookup === "fallback") {
+      gaps.push(`The nearby-town lookup failed for "${anchor.label}", so only that place itself is covered, not the towns around it. Try again shortly.`);
+    }
+  }
+  for (const item of input.unresolvedAnchors) {
+    gaps.push(`Could not locate "${item.label}" (${item.reason}); it was not searched.`);
   }
   const noExclusions =
     !input.exclusions.industries.length && !input.exclusions.roles.length && !input.exclusions.employers.length;

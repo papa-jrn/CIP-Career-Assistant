@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { loadSearchBrief } from "../lib/cip/brief-loader";
 import { loadLatestIntake } from "../lib/cip/profile";
+import { toOutboundFacets, type SearchBrief } from "../lib/cip/search-brief";
 import {
   intakeSuggestions,
   loadStoredSearchPreferences,
@@ -35,6 +37,20 @@ const freeText = [
   { label: "Salary, location, and work model (from Intake)", text: String(intake?.career_constraints ?? "").trim() },
   { label: "Industries: energizing and hard no's (from Intake)", text: String(intake?.industry_preferences ?? "").trim() },
 ].filter((item) => item.text);
+
+// Geocoding calls public services and can take several seconds, so the coverage preview only
+// runs when asked for.
+const wantsPreview = Astro.url.searchParams.get("preview") === "1";
+let previewBrief: SearchBrief | null = null;
+let previewError = "";
+if (wantsPreview) {
+  try {
+    previewBrief = await loadSearchBrief(supabase, user.id);
+  } catch (err) {
+    previewError = err instanceof Error ? err.message : "Could not build the preview.";
+  }
+}
+const previewFacets = previewBrief ? toOutboundFacets(previewBrief) : null;
 
 const modeOptions = [
   { value: "onsite", label: "On-site" },
@@ -88,6 +104,83 @@ const [addedCount, retiredCount] = (saved ?? "").split("-");
             </div>
           </div>
         )}
+
+        <div class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold">What the search will cover</h2>
+              <p class="mt-1 text-xs text-[var(--muted)]">Looks up your saved places and shows the towns the search would include. Save your changes first. This can take a few seconds.</p>
+            </div>
+            <a
+              class="cip-fancy-button cip-fancy-button-secondary"
+              href="/preferences?preview=1#coverage-results"
+              hx-get="/preferences?preview=1"
+              hx-select="#coverage-results"
+              hx-target="#coverage-results"
+              hx-swap="outerHTML"
+              hx-indicator="#coverage-loading"
+            ><span>Check coverage</span></a>
+          </div>
+          <div id="coverage-loading" class="htmx-indicator cip-thinking-panel mt-4" role="status" aria-live="polite">
+            <div class="cip-thinking-orbit" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Checking your search coverage</p>
+              <div class="cip-thinking-lines" aria-hidden="true">
+                <span>Finding each saved place on the map...</span>
+                <span>Listing towns inside your radius...</span>
+                <span>Confirming which state each town is in...</span>
+                <span>Matching role language to your lanes...</span>
+                <span>Checking what is still unset...</span>
+              </div>
+              <p class="sr-only">Looking up your saved places and nearby towns. This can take up to about half a minute.</p>
+              <div class="cip-thinking-bar" aria-hidden="true"><span></span></div>
+            </div>
+          </div>
+          <div id="coverage-results">
+            {previewError && <p class="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{previewError}</p>}
+            {previewBrief && previewFacets && (
+              <div class="mt-4 grid gap-4 text-sm">
+                {previewBrief.anchors.map((anchor) => (
+                  <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3">
+                    <p class="font-semibold">{anchor.label} <span class="font-normal text-[var(--muted)]">within {anchor.radiusMiles} mi (straight-line)</span></p>
+                    <p class="mt-1 text-xs text-[var(--muted)]">Found as: {anchor.resolvedAs}. If that is the wrong place, add the state to the entry above.</p>
+                    <p class="mt-2 leading-6">
+                      {anchor.nearbyLookup === "fallback"
+                        ? "The nearby-town lookup failed, so only this place itself is covered. Try again in a moment."
+                        : anchor.localities.length
+                          ? anchor.localities.map((place) => `${place.name}${place.state ? `, ${place.state}` : ""} (${place.distanceMiles} mi)`).join(" · ")
+                          : "No nearby towns were found inside this radius."}
+                    </p>
+                  </div>
+                ))}
+                {previewBrief.unresolvedAnchors.map((item) => (
+                  <p class="rounded-md border border-red-200 bg-red-50 p-3 text-red-800">Could not locate "{item.label}" ({item.reason}). It will not be searched.</p>
+                ))}
+                {!previewBrief.anchors.length && !previewBrief.unresolvedAnchors.length && (
+                  <p class="text-[var(--muted)]">No places are saved yet, so a local search cannot run.</p>
+                )}
+                <div>
+                  <p class="font-semibold">Role language the search would use</p>
+                  <ul class="mt-1 list-disc pl-5">
+                    {previewFacets.roleVocabulary.map((lane) => <li>{lane.terms[0]} <span class="text-[var(--muted)]">({lane.weight})</span></li>)}
+                  </ul>
+                </div>
+                {previewBrief.gaps.length > 0 && (
+                  <div>
+                    <p class="font-semibold">Still unknown or unset</p>
+                    <ul class="mt-1 list-disc pl-5 text-[var(--muted)]">
+                      {previewBrief.gaps.map((gap) => <li>{gap}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
         <form class="mt-6 grid gap-5" method="post" action="/api/preferences/save">
           <label class="grid gap-2">

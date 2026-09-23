@@ -201,6 +201,14 @@ makes §5's flywheel actually connect.
 2. **Geographic grounding of search** — every search expands to the geocoded labor shed
    (nearby localities from `geography-engine.ts`); local results ranked by straight-line distance from the
    anchor, never string-matched.
+   *Status 2026-09-23: built and verified live (`search-geography.ts`, `brief-loader.ts`, coverage
+   preview on `/preferences`). Findings: Overpass returns no state for nearby towns, so towns across
+   a state line (e.g. Norwich VT vs Lebanon NH) were mislabeled with the center's state. Each of the
+   12 nearest towns is now reverse-geocoded for its real state; unverified stays unknown and is
+   treated as ambiguous, never in range. A failed nearby-town lookup retries once, then is reported
+   as a gap ("center only"), never presented as an expanded search. Worksite distance is
+   straight-line from coordinates or a state-matched locality; unlisted locations are unknown, not
+   outside. Still needed: geocode a posting's worksite to coordinates during verification (step 4).*
 3. **LLM-web-search job engine** — brief in → real postings with source URLs out; persisted.
    Acceptance criteria: source verification before an apply recommendation; provider failure
    displays "search failed" while preserving prior results (never "no matches"); cost guardrails are

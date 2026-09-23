@@ -96,6 +96,14 @@ export async function loadStrategicState(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<StrategicState> {
+  return buildStrategicState(await loadStrategicInputs(supabase, userId));
+}
+
+/** The saved records the strategic state is built from; also reused by the search brief. */
+export async function loadStrategicInputs(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<StrategicStateInputs> {
   const [
     { data: intakeRow },
     { data: analysisRow },
@@ -167,14 +175,14 @@ export async function loadStrategicState(
       .filter(Boolean) as ConversationOutcome[],
   ]);
 
-  return buildStrategicState({
+  return {
     latestSource,
     latestAdvisor,
     conversationOutcomes,
     watchedEmployers: (employerRows ?? []) as WatchedEmployerLike[],
     employerCandidates: (candidateRows ?? []) as EmployerCandidateLike[],
     latestNetworkAnalysis: parseNetworkAnalysis(networkRow?.extracted_text ?? null),
-  });
+  };
 }
 
 export function buildStrategicState(inputs: StrategicStateInputs): StrategicState {
