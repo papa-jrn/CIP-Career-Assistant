@@ -20,7 +20,8 @@ export type PreferenceKind =
   | "exclusion_industry"
   | "exclusion_role"
   | "exclusion_employer"
-  | "anchor";
+  | "anchor"
+  | "job_source";
 
 export interface PreferenceRow {
   id: string;
@@ -54,6 +55,8 @@ export interface StoredSearchPreferences {
   remoteLimits?: string;
   exclusions: { industries: string[]; roles: string[]; employers: string[] };
   anchorRequests: AnchorRequest[];
+  /** Trusted job-source domains. Not a constraint: saving only these does not confirm the constraints above. */
+  preferredSources: string[];
 }
 
 const SINGLE_VALUED = new Set<PreferenceKind>(["salary_floor", "remote_limit"]);
@@ -62,6 +65,16 @@ const DEFAULT_RADIUS_MILES = 25;
 const MAX_ANCHORS = 5;
 const MAX_LIST_ITEMS = 30;
 
+const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+/** "https://www.HigherEdJobs.com/search?x=1" -> "higheredjobs.com". Invalid input passes through to fail validation. */
+export function parseSourceDomain(line: string): string {
+  const trimmed = line.trim().toLowerCase();
+  const withoutScheme = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  const host = withoutScheme.split(/[/?#]/)[0].replace(/:\d+$/, "").replace(/^www\./, "");
+  return host;
+}
+
 export const preferenceFormSchema = z.object({
   salaryFloor: z.number().int().positive().max(1_000_000).optional(),
   workModes: z.array(z.enum(["onsite", "hybrid", "remote"])),
@@ -69,6 +82,7 @@ export const preferenceFormSchema = z.object({
   industries: z.array(z.string().trim().min(1).max(120)).max(MAX_LIST_ITEMS),
   roles: z.array(z.string().trim().min(1).max(120)).max(MAX_LIST_ITEMS),
   employers: z.array(z.string().trim().min(1).max(120)).max(MAX_LIST_ITEMS),
+  jobSources: z.array(z.string().regex(DOMAIN_PATTERN, "must be a website domain such as higheredjobs.com")).max(20),
   anchors: z
     .array(z.object({ label: z.string().trim().min(2).max(120), radiusMiles: z.number().int().min(1).max(100) }))
     .max(MAX_ANCHORS),
@@ -85,6 +99,7 @@ export function parsePreferenceForm(form: FormData) {
     industries: splitLines(text(form, "exclusion_industries")),
     roles: splitLines(text(form, "exclusion_roles")),
     employers: splitLines(text(form, "exclusion_employers")),
+    jobSources: splitLines(text(form, "job_sources")).map(parseSourceDomain),
     anchors: splitLines(text(form, "anchors")).map(parseAnchorLine),
   });
 }
@@ -118,6 +133,7 @@ export function formValuesToDesired(values: PreferenceFormValues): DesiredPrefer
   for (const value of values.industries) desired.push({ kind: "exclusion_industry", value });
   for (const value of values.roles) desired.push({ kind: "exclusion_role", value });
   for (const value of values.employers) desired.push({ kind: "exclusion_employer", value });
+  for (const value of [...new Set(values.jobSources)]) desired.push({ kind: "job_source", value });
   for (const anchor of values.anchors) desired.push({ kind: "anchor", value: anchor.label, radiusMiles: anchor.radiusMiles });
   return desired;
 }
@@ -155,7 +171,8 @@ export function rowsToStoredPreferences(rows: PreferenceRow[]): StoredSearchPref
   const workModes = many("work_mode").filter((mode): mode is BriefWorkMode => WORK_MODES.includes(mode as BriefWorkMode));
 
   return {
-    hasAny: globalRows.length > 0,
+    // Preferred sources are configuration, not a confirmed constraint.
+    hasAny: globalRows.some((row) => row.kind !== "job_source"),
     salaryFloorUsd: salary ? Number(salary.amount ?? salary.value) || undefined : undefined,
     workModes,
     remoteLimits: single("remote_limit")?.value,
@@ -164,6 +181,7 @@ export function rowsToStoredPreferences(rows: PreferenceRow[]): StoredSearchPref
       roles: many("exclusion_role"),
       employers: many("exclusion_employer"),
     },
+    preferredSources: many("job_source"),
     anchorRequests: globalRows
       .filter((row) => row.kind === "anchor")
       .sort((a, b) => a.value.localeCompare(b.value))
@@ -186,6 +204,7 @@ export function resolveSearchPreferences(
 ): SearchPreferences {
   if (stored.hasAny) {
     return {
+      preferredSources: stored.preferredSources,
       salaryFloorUsd: stored.salaryFloorUsd,
       workModes: stored.workModes.length ? stored.workModes : undefined,
       remoteLimits: stored.remoteLimits,
@@ -193,7 +212,11 @@ export function resolveSearchPreferences(
       anchors: geocodedAnchors,
     };
   }
-  return { unparsedConstraints: preferencesFromIntake(intake).unparsedConstraints, anchors: geocodedAnchors };
+  return {
+    unparsedConstraints: preferencesFromIntake(intake).unparsedConstraints,
+    anchors: geocodedAnchors,
+    preferredSources: stored.preferredSources,
+  };
 }
 
 /** Values to prefill the form when nothing is stored yet: suggestions only, saved only on confirm. */

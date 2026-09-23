@@ -5,6 +5,7 @@ import {
   formValuesToDesired,
   parseAnchorLine,
   parsePreferenceForm,
+  parseSourceDomain,
   planPreferenceChanges,
   resolveSearchPreferences,
   rowsToStoredPreferences,
@@ -161,5 +162,38 @@ describe("resolveSearchPreferences", () => {
     expect(brief.exclusions.industries).toEqual(["Tobacco"]);
     expect(brief.unresolvedConstraints).toEqual([]);
     expect(brief.anchors).toHaveLength(1);
+  });
+});
+
+describe("preferred job sources", () => {
+  it("normalizes URLs and bare domains to a hostname and rejects non-domains", () => {
+    expect(parseSourceDomain("https://www.HigherEdJobs.com/search?q=1")).toBe("higheredjobs.com");
+    expect(parseSourceDomain("idealist.org/")).toBe("idealist.org");
+    const bad = parsePreferenceForm(formOf({ job_sources: "not a domain" }));
+    expect(bad.success).toBe(false);
+  });
+
+  it("saves as job_source rows, dedupes, and flows to stored preferences and the brief", () => {
+    const parsed = parsePreferenceForm(formOf({ job_sources: "higheredjobs.com\nhttps://www.higheredjobs.com/x\nidealist.org" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const desired = formValuesToDesired(parsed.data);
+    expect(desired.filter((item) => item.kind === "job_source").map((item) => item.value)).toEqual(["higheredjobs.com", "idealist.org"]);
+
+    const stored = rowsToStoredPreferences([
+      row({ id: "1", kind: "job_source", value: "idealist.org" }),
+      row({ id: "2", kind: "job_source", value: "higheredjobs.com" }),
+    ]);
+    expect(stored.preferredSources).toEqual(["higheredjobs.com", "idealist.org"]);
+    const prefs = resolveSearchPreferences(stored, { career_constraints: "No travel." });
+    const brief = assembleSearchBrief({ strategicState: fixtureStrategicState(), preferences: prefs, now: FIXTURE_NOW });
+    expect(brief.preferredSources).toEqual(["higheredjobs.com", "idealist.org"]);
+  });
+
+  it("does not count as confirming constraints, so free-text warnings remain", () => {
+    const stored = rowsToStoredPreferences([row({ id: "1", kind: "job_source", value: "idealist.org" })]);
+    expect(stored.hasAny).toBe(false);
+    const prefs = resolveSearchPreferences(stored, { career_constraints: "No travel." });
+    expect(prefs.unparsedConstraints).toHaveLength(1);
   });
 });

@@ -2,6 +2,10 @@
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
 import { briefingItems } from "../lib/cip/data";
+import { loadJobSearchConfig } from "../lib/cip/job-search-config";
+import { loadDueState, loadLatestRunView, type RunView } from "../lib/cip/job-search-run";
+import { renderJobSearchPanel } from "../lib/cip/job-search-view";
+import { readJobSearchEnv } from "../lib/cip/server-env";
 import { formatRegion, getStaleSignalNotice, type StaleSignalNotice } from "../lib/cip/weekly-strategy";
 import { createServer } from "../lib/supabase/server";
 
@@ -94,6 +98,7 @@ let signedIn = false;
 let snapshots: Snapshot[] = [];
 let loadError = "";
 let staleNotice: StaleSignalNotice | null = null;
+let jobSearchHtml = "";
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -117,6 +122,17 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       if (error) loadError = error.message;
       else snapshots = (data ?? []) as Snapshot[];
       staleNotice = notice;
+
+      // Weekly job search panel: latest run (if any), due state, and whether the provider is configured.
+      try {
+        const jobConfig = loadJobSearchConfig(readJobSearchEnv);
+        const latestRun: RunView | null = await loadLatestRunView(supabase, user.id);
+        const due = await loadDueState(supabase, user.id, jobConfig, new Date().toISOString());
+        jobSearchHtml = renderJobSearchPanel(latestRun, { runKey: crypto.randomUUID(), due, configured: jobConfig.configured });
+      } catch (jobError) {
+        const detail = jobError instanceof Error ? jobError.message : "unknown error";
+        jobSearchHtml = `<div id="job-search-panel"><p class="text-sm text-red-800">Could not load the weekly job search: ${detail.replace(/[<>&]/g, "")}. If this mentions a missing table, the job-search migration has not been applied yet.</p></div>`;
+      }
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load briefings.";
@@ -174,6 +190,12 @@ function movementClass(direction: string) {
         </div>
       </div>
       <div id="briefing-result" class="mt-5"></div>
+
+      {signedIn && jobSearchHtml ? (
+        <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+          <Fragment set:html={jobSearchHtml} />
+        </section>
+      ) : null}
 
       {staleNotice && staleNotice.newConversationCount > 0 ? (
         <div class="mt-5 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-4">

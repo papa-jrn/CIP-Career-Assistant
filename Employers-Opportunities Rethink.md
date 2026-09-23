@@ -214,6 +214,18 @@ makes §5's flywheel actually connect.
    displays "search failed" while preserving prior results (never "no matches"); cost guardrails are
    part of *done*, not a follow-up — caps on postings per run, per-user weekly budget, and
    measured tokens per run.
+   *Status 2026-09-23: built (`job-search-*.ts`, run records, weekly panel on the Briefing page).
+   Live spike findings that shaped it: `gpt-4.1-mini` fabricated postings (fake requisition IDs, 404
+   URLs), so discovery requires a reasoning model (default `gpt-5.4`, configurable; `gpt-5.4-mini`
+   also worked but returned a duplicate and a dead posting and could not read Dartmouth Health). A
+   removed posting returned HTTP 200, so verification checks page content (title plus requisition
+   ID), never status alone. Search runs as up to 7 bounded steps in tiers: target career pages,
+   preferred sources, general. Caps: 3 runs per user per week, 12 scopes, 25 postings, tool-call and
+   token ceilings per run, a per-run dollar ceiling once pricing is configured. Dollar cost is
+   recorded as unavailable until `JOB_SEARCH_PRICING_JSON` is set. Cost and beta-access questions are
+   recorded in `productionization_discussion.md` and must be settled before inviting testers.
+   Not yet done: two live acceptance passes (§15.3), postings identity across runs (step 4), and a
+   careers-URL hint for saved targets.*
 4. **Posting identity + dedupe** — prefer source-scoped requisition IDs and canonical posting
    URLs. Employer/title/location/description similarity supports matching, not automatic merging
    of distinct requisitions. Preserve source observations and repost lineage; uncertain merges
@@ -241,13 +253,14 @@ makes §5's flywheel actually connect.
 
 ## 9. Open decisions (for the founder)
 
-- [ ] Which search engine backs discovery — the existing OpenAI web-search Responses pattern
-      (as `business-search-engine.ts` already uses), or another? (Cede discovery to the frontier
-      model; do not rebuild a scraper.)
+- [x] Search engine: OpenAI Responses API with web search, using a reasoning model (`gpt-5.4`
+      default). Chosen 2026-09-23 after a live comparison; provider sits behind an adapter so it
+      can change by configuration. Non-reasoning models are not acceptable for discovery.
 - [x] Retire board discovery at cutover; retain only posting verification adapters. Archive old
       user history, remove discovery entry points and dead configuration, and update briefing consumers.
 - [ ] Cost posture — weekly per-user web-search calls have real token cost; measure before pricing
-      (consistent with `productionization_discussion.md`).
+      (consistent with `productionization_discussion.md`). Caps are enforced in code; the monthly
+      cost per beta user and hosting total are OPEN and written up in `productionization_discussion.md`.
 - [x] `talk-first` is as prominent as `apply`; use one recommendation vocabulary throughout (§8).
 - [x] V1 uses a manual "Run this week's search" action; show last successful run and when due.
       Scheduled automation is deferred and must not be implied by the UI.
@@ -361,6 +374,9 @@ relationship basis, not a guessed affiliation. Keep talk-first as prominent as a
 **Constraint contract:**
 
 - Separate hard exclusions from ranked preferences. Never broaden either silently to fill cards.
+- Hourly-to-annual (founder decision 2026-09-23): a stated hourly rate is converted assuming a full-time
+  year, 40 hours x 52 weeks = 2,080 hours ($35/hour is about $72,800), always labeled an estimate. Stated
+  weekly hours are honored; part-time with no hours, monthly, and vague pay stay unknown (`pay.ts`).
 - Preserve an explicit salary floor; do not invent an upper bound when expressing search facets.
   Compare known pay on compatible currency/period/hours; missing or noncomparable pay is unknown.
   Unknown compensation can require research without asserting the role meets the floor.

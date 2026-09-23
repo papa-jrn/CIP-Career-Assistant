@@ -40,6 +40,8 @@ export interface SearchPreferences {
   };
   /** Already-geocoded anchors (one or more user-selected regions). */
   anchors?: GeocodedSearchArea[];
+  /** Job sources the user trusts (domains such as a sector job board). Searched after target career pages. */
+  preferredSources?: string[];
   /** Anchors the user saved that could not be geocoded this time. Reported, never dropped silently. */
   unresolvedAnchors?: Array<{ label: string; reason: string }>;
   /** Constraints the user wrote as free text and no one has confirmed as structured. */
@@ -130,6 +132,8 @@ export interface SearchBrief {
   exclusions: { industries: string[]; roles: string[]; employers: string[] };
   compensation: { floorUsd: number | null; unit: "year"; upperBound: null };
   workModel: { accepted: BriefWorkMode[]; remoteLimits: string | null };
+  /** Trusted job-source domains; job boards the search may use after employer-owned pages. */
+  preferredSources: string[];
   anchors: BriefAnchor[];
   /** Saved anchors that failed to geocode; these were NOT searched. */
   unresolvedAnchors: Array<{ label: string; reason: string }>;
@@ -157,6 +161,7 @@ export interface OutboundSearchFacets {
   /** Floor rounded down to the nearest $5,000. No upper bound is ever sent. */
   minimumAnnualUsd: number | null;
   targetOrganizations: string[];
+  preferredSources: string[];
 }
 
 const MAX_LANES = 5;
@@ -211,6 +216,7 @@ export function assembleSearchBrief(inputs: SearchBriefInputs): SearchBrief {
     exclusions,
     compensation: { floorUsd, unit: "year" as const, upperBound: null },
     workModel: { accepted: workModes, remoteLimits },
+    preferredSources: uniqueSorted((preferences.preferredSources ?? []).map((item) => item.trim().toLowerCase())),
     anchors,
     unresolvedAnchors,
     targets,
@@ -258,6 +264,7 @@ export function toOutboundFacets(brief: SearchBrief): OutboundSearchFacets {
         ? null
         : Math.floor(brief.compensation.floorUsd / OUTBOUND_FLOOR_STEP) * OUTBOUND_FLOOR_STEP,
     targetOrganizations: brief.targets.map((target) => target.name),
+    preferredSources: [...brief.preferredSources],
   };
 }
 

@@ -164,6 +164,68 @@ the founder's 4–6 real weekly passes produce real cost numbers.
 
 ---
 
+## Weekly job search: cost and beta access (TO DISCUSS)
+
+**Status: open. Recorded 2026-09-23, before the beta. Do not price or invite testers until this is worked through.**
+
+The weekly job search (Employers & Opportunities Rethink, build step 3) is the first feature with a
+real per-use cost: each search runs up to 7 bounded provider calls, each using web search and a
+reasoning model, plus our own verification fetches. The founder plans to open the app to a few
+friends for beta and expects to pay about $10/month for Vercel hosting; the question is what the
+whole app costs to keep running, per month, with N testers.
+
+**What we know (measured, not estimated)**
+- Live spike, 2026-09-23, one provider call covering three employers: roughly 9,000 to 32,000
+  input tokens, 600 to 2,000 output tokens, and 1 to 6 web-search/page-open calls, depending on model.
+- The OpenAI organization's month-to-date spend was $0.23 after those spike runs (dashboard figure,
+  which lags). A full run is up to about 7 such calls, so a run is plausibly cents to well under a
+  dollar, but this is NOT yet measured for a full run and must not be quoted as a price.
+- `gpt-4.1-mini` (the repo's old default) fabricated postings in the spike. Reasoning models
+  (`gpt-5.4`, `gpt-5.4-mini`) did not. The job-search default is `gpt-5.4`; other AI passes still
+  default to `gpt-4.1-mini` and have not been audited for this failure mode (see Phase 1 step 6, per-pass model tiers).
+
+**What the app now records so this can be answered with data**
+- Every run stores input/output/reasoning tokens, web-search-call count, model, steps, and errors.
+- Dollar cost is stored as `null` ("unavailable") until pricing is configured. Set
+  `JOB_SEARCH_PRICING_JSON` from OpenAI's current pricing page (input $/M tokens, output $/M
+  tokens, $ per web-search call); the app never hardcodes provider prices.
+
+**Cost drivers to model for the monthly figure**
+1. Search: users x runs per week x steps per run x (tokens + search calls). Caps in code: 3 runs per
+   user per rolling 7 days, 7 steps per run, 12 tool calls per step, 25 postings, and a token/call
+   ceiling (or a dollar ceiling once pricing is set; default $1 per run).
+2. Hosting: Vercel plan (confirm which plan the $10/month figure refers to, and its function
+   duration limits, see below). Supabase plan and database size (runs and observations are append-only).
+3. Geocoding: Nominatim and Overpass are free public services with usage policies meant for light
+   use. A handful of testers is fine; before scaling, cache town and state lookups in the database
+   and consider Geocodio for reverse lookups.
+4. Other AI passes (advisor, evidence, network, resume): unmeasured per-user cost. Measure alongside search.
+
+**Beta access controls needed before inviting anyone**
+- Lock down account creation (invite-only sign-up) so strangers cannot create accounts that spend the key.
+- Keep `OPENAI_API_KEY` server-side only (it is: never sent to the browser), use a dedicated
+  project key for the beta, and set a monthly budget cap and alerts on that OpenAI project/org.
+- Per-user caps are database-backed (weekly run cap, one active run), which survives serverless. The
+  existing in-memory rate limiter (`src/lib/rate-limit.ts`) does NOT: on Vercel each instance has its
+  own memory, so treat it as a courtesy, not a guardrail.
+- Decide what happens at a cap: show a clear message (built), and whether extra runs can be requested.
+
+**Deployment constraint to verify**
+- Each search step is one provider call plus verification and can take up to about 1 to 2 minutes.
+  The run is split into steps advanced by separate requests so no single request needs to run for
+  the whole search, but each step still needs a function duration that fits. Check the hosting
+  plan's current limit before deploying; if too short, reduce `targetsPerStep`/`scopesPerStep` or
+  move steps to a background worker.
+
+**Decisions for the founder**
+- Model per pass and the monthly budget per beta user.
+- Whether the search stays manual weekly (current) or is scheduled later.
+- Whether any cost is passed through to users, and how (see the pricing section above: charge for
+  interpretation and targeting, never volume).
+- Who pays for beta testers' usage, and the cap that ends the beta if costs spike.
+
+---
+
 ## Suggested sequencing (summary)
 
 ```
