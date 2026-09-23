@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   parseConversationNotesForm,
   type ParsedConversationNote,
@@ -8,9 +9,21 @@ import {
   conversationOutcomeCareerSourcePayload,
   saveConversationOutcome,
   type ConversationConfidence,
+  type ConversationOutcome,
   type ConversationSignalDirection,
   type ConversationSignalType,
 } from "@/lib/cip/conversation-outcomes";
+import {
+  extractConversationFields,
+  mergeExtractedFields,
+  type ConversationExtractionContext,
+  type ExtractedConversationFields,
+} from "@/lib/cip/conversation-extraction";
+import {
+  buildTargetLanes,
+  parseAnalysisAdvisor,
+  parseIntakeSource,
+} from "@/lib/cip/resume-asset-context";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
@@ -56,25 +69,51 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const parsedNotes = notes.filter((note) => note.status === "parsed");
     const capturedAt = new Date().toISOString();
+    const openAiKey = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    const extractionContext = await loadExtractionContext(supabase, user.id);
+    // Only the fields a user can set by hand; these always win over extraction.
+    const userFields: ExtractedConversationFields = {
+      contactName: metadata.contactName,
+      relatedLane: metadata.relatedLane,
+      relatedEmployer: metadata.relatedEmployer,
+      signalType: metadata.signalType || undefined,
+      signalDirection: metadata.signalDirection || undefined,
+      confidence: metadata.confidence || undefined,
+      nextAction: metadata.nextAction,
+    };
+    const extractionSummaries: ExtractionSummary[] = [];
     let saved = 0;
     let saveError = "";
     let structuredTableError = "";
 
     for (const [index, note] of parsedNotes.entries()) {
+      // Read the note into typed strategic signals so the propagation engine
+      // fires without the user hand-coding dropdowns. User-entered fields win.
+      const extraction = await extractConversationFields(note.text, extractionContext, openAiKey);
+      const fields = mergeExtractedFields(userFields, extraction.fields);
       const outcome = buildConversationOutcome({
-        contactName: metadata.contactName || contactNameFromNote(note.text) || note.fileName,
+        contactName: fields.contactName || contactNameFromNote(note.text) || note.fileName,
         conversationDate: metadata.conversationDate || capturedAt.slice(0, 10),
         sourceRef: `loopback:${normalize(note.fileName)}:${capturedAt}:${index}`,
-        relatedLane: metadata.relatedLane,
-        relatedEmployer: metadata.relatedEmployer,
-        signalType: metadata.signalType,
-        signalDirection: metadata.signalDirection,
-        confidence: metadata.confidence,
-        marketSignal: note.text,
-        nextAction: metadata.nextAction,
+        relatedLane: fields.relatedLane,
+        relatedEmployer: fields.relatedEmployer,
+        signalType: fields.signalType,
+        signalDirection: fields.signalDirection,
+        confidence: fields.confidence,
+        compensationSignal: fields.compensationSignal,
+        workModelSignal: fields.workModelSignal,
+        cultureSignal: fields.cultureSignal,
+        hiringSignal: fields.hiringSignal,
+        marketSignal: fields.marketSignal || note.text,
+        newLeads: fields.newLeads,
+        warnings: fields.warnings,
+        promisedFollowUp: fields.promisedFollowUp,
+        followUpDueDate: fields.followUpDueDate,
+        nextAction: fields.nextAction,
         rawNoteExcerpt: note.text,
         createdAt: capturedAt,
       });
+      extractionSummaries.push(summarizeExtraction(note.fileName, outcome, extraction.mode));
       const structured = await saveConversationOutcome(supabase, user.id, outcome);
       if (structured.error) {
         structuredTableError = structured.error.message;
@@ -120,6 +159,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
           These notes are additive structured evidence. The next network analysis and the next evidence re-analysis will both read them, so what your advisors told you updates lanes, employer targets, and the evidence ledger.
         </p>
+        ${renderExtractionSummary(extractionSummaries)}
         ${saveError ? `<p class="mt-2 text-sm font-semibold text-red-700">Some notes failed to save: ${escapeHtml(saveError)}</p>` : ""}
         ${structuredTableError ? `<p class="mt-2 text-sm leading-6 text-[var(--muted)]">Saved to the evidence stream. The dedicated structured table also reported: ${escapeHtml(structuredTableError)}</p>` : ""}
         ${renderPropagationNote(propagation)}
@@ -134,6 +174,105 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return html(`<p class="text-sm font-semibold text-red-700">Conversation note import failed: ${escapeHtml(error instanceof Error ? error.message : "Unknown error")}</p>`, 500);
   }
 };
+
+interface ExtractionSummary {
+  fileName: string;
+  mode: "ai" | "heuristic" | "none";
+  relatedEmployer: string;
+  relatedLane: string;
+  signalDirection: string;
+  signalType: string;
+  hasSignal: boolean;
+}
+
+function summarizeExtraction(
+  fileName: string,
+  outcome: ConversationOutcome,
+  mode: "ai" | "heuristic" | "none",
+): ExtractionSummary {
+  return {
+    fileName,
+    mode,
+    relatedEmployer: outcome.relatedEmployer,
+    relatedLane: outcome.relatedLane,
+    signalDirection: outcome.signalDirection,
+    signalType: outcome.signalType,
+    hasSignal: Boolean(
+      outcome.relatedEmployer ||
+        outcome.relatedLane ||
+        (outcome.signalDirection && outcome.signalDirection !== "unclear"),
+    ),
+  };
+}
+
+// Show the user what the app read from their note. Transparency matters: the
+// signals drive lane/employer scoring, so the user must be able to see and
+// correct them rather than trust a silent inference.
+function renderExtractionSummary(summaries: ExtractionSummary[]) {
+  const useful = summaries.filter((summary) => summary.mode !== "none");
+  if (!useful.length) return "";
+  const rows = useful
+    .map((summary) => {
+      if (!summary.hasSignal) {
+        return `<li class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"><span class="font-semibold text-[var(--foreground)]">${escapeHtml(summary.fileName)}</span> — no employer, lane, or clear direction detected. Add the Related employer / Signal direction fields to steer scoring.</li>`;
+      }
+      const parts = [
+        summary.relatedEmployer ? `employer <span class="font-semibold text-[var(--foreground)]">${escapeHtml(summary.relatedEmployer)}</span>` : "",
+        summary.relatedLane ? `lane <span class="font-semibold text-[var(--foreground)]">${escapeHtml(summary.relatedLane)}</span>` : "",
+        summary.signalDirection && summary.signalDirection !== "unclear" ? `direction <span class="font-semibold text-[var(--foreground)]">${escapeHtml(summary.signalDirection)}</span>` : "",
+        summary.signalType ? `(${escapeHtml(summary.signalType.replace(/_/g, " "))})` : "",
+      ].filter(Boolean).join(", ");
+      return `<li class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"><span class="font-semibold text-[var(--foreground)]">${escapeHtml(summary.fileName)}</span> — read as ${parts}.</li>`;
+    })
+    .join("");
+  return `
+    <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--background)] p-3">
+      <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">Signals read from your notes${useful.some((s) => s.mode === "ai") ? " (AI-assisted)" : ""}</p>
+      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">You did not have to hand-code these. If any are wrong, re-save the note with the structured fields set — your entries always override the automatic read.</p>
+      <ul class="mt-2 space-y-2 text-sm text-[var(--muted)]">${rows}</ul>
+    </div>
+  `;
+}
+
+async function loadExtractionContext(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<ConversationExtractionContext> {
+  const [{ data: employerRows }, { data: candidateRows }, { data: intakeRow }, { data: analysisRow }] = await Promise.all([
+    supabase.from("watched_employers").select("name").eq("user_id", userId).limit(80),
+    supabase.from("employer_candidates").select("name").eq("user_id", userId).limit(60),
+    supabase
+      .from("career_sources")
+      .select("extracted_text")
+      .eq("user_id", userId)
+      .eq("source_type", "resume_intake")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("career_sources")
+      .select("extracted_text")
+      .eq("user_id", userId)
+      .eq("source_type", "evidence_analysis")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const employerNames = [
+    ...(employerRows ?? []).map((row) => String(row.name ?? "").trim()),
+    ...(candidateRows ?? []).map((row) => String(row.name ?? "").trim()),
+  ].filter(Boolean);
+
+  const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
+  const latestAdvisor = parseAnalysisAdvisor(analysisRow?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
+  const targetLanes = buildTargetLanes(latestSource, latestAdvisor, { limit: 5 }).map((lane) => lane.role);
+
+  return {
+    watchedEmployers: [...new Set(employerNames)],
+    targetLanes: [...new Set(targetLanes)],
+  };
+}
 
 function renderNoteSummary(notes: ParsedConversationNote[]) {
   return `
