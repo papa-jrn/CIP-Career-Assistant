@@ -1,6 +1,22 @@
 # Project Plan Autumn 2026
 
-Last updated: 2026-09-10
+Last updated: 2026-09-23
+
+## Sequencing update — 2026-09-23
+
+The next implementation slice is the Employers & Opportunities Rethink, building on the existing
+conversation/propagation/briefing repairs. See `Employers-Opportunities Rethink.md` §12–§15 for
+the run, verification, evidence-lineage, target-map, retirement, and acceptance contracts.
+This brings the minimum Phase 10/12/13 work into one complete loop: current state → brief →
+discovery → source verification → persisted history → recommendation → briefing → recorded action.
+It does not declare the remaining Autumn phases complete. De-founder work, state tests,
+configurable lane infrastructure, full nonprofit enrichment, and beta gates remain obligations.
+Define enrichment interfaces now; the full Phase 8 pipeline follows the first end-to-end proof.
+V1 search is manually triggered with visible run/due status; scheduling follows verified value.
+
+The founder's DH conversation included an uploaded primary-source press release, not just an
+anecdote. The Rethink records the source and exact reduction categories. Source-backed facts must
+flow alongside conversation signals, with separate confidence for downstream market inferences.
 
 ## Why This Plan Exists
 
@@ -1014,9 +1030,9 @@ The founder expected fresh, source-backed job and employer discovery every weekl
 
 1. Build the discovery adapter interface (provider, model, search tool, token budget).
 2. Implement the first provider behind it.
-3. Schedule per-lane, per-geography discovery runs on the briefing rhythm (weekly or monthly): new roles at watched targets, new target organizations in the lane's categories, funding/leadership changes.
+3. Trigger per-lane, per-geography discovery manually from the briefing in v1: new roles at watched targets and new target organizations. Show last successful run and due status. Scheduling and broader funding/leadership monitoring follow the first verified loop.
 4. Feed every discovery run through Phase 3 propagation: new employer candidates, role snapshots, briefing deltas.
-5. Surface "new since last run" in the briefing as the headline discovery section.
+5. Surface changes since the previous successful run for the same scope, with dates and brief changes visible. Persist every run and observation; weekly upserts alone are not sufficient history. Failures/partial coverage cannot imply no matches or closed jobs.
 6. Keep employer-direct adapter work as verification of what discovery claims.
 
 ## Employer-Direct Adapters (verification layer)
@@ -1025,14 +1041,17 @@ Start where clean endpoints exist: Greenhouse, Lever, Ashby, SmartRecruiters, Wo
 
 ## Acceptance Criteria
 
-- A weekly run produces genuinely new, source-backed roles and/or targets since the last run — the experience the founder never had.
+- A successful weekly run searches the stated scope and reports actual verified roles/targets and changes, including honest no-change or zero-result outcomes. No quota of new jobs is fabricated; failed and partial runs have distinct states.
 - No code path renders board-API data as user-facing output.
-- A watched employer with a supported ATS can show source-backed roles; unsupported employers are not faked.
+- A supported ATS can verify an already-discovered posting; unsupported verification is labeled. Search omission is not source disappearance. No parallel ATS discovery pipeline survives cutover.
 - The discovery provider can be switched by configuration.
 
 ## Notes
 
-This comes after the loop and lane work. Discovery without the loop just rebuilds the old funnel with better prose. Do not let adapter work distract from the core restart.
+The September 23 sequencing update brings a bounded discovery slice forward using the existing
+loop, with configurable lane inputs and explicit missing enrichment. Complete and prove the
+whole flow before expanding it. Adapter work remains verification; the Rethink §15 owns the
+cutover and two-pass live acceptance gate.
 
 ---
 

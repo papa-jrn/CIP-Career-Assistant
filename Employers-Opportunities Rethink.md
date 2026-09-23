@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Reviewed 2026-09-23 — gap-closure pass applied, ready to build.** Set 2026-09-23.
+Status: **Revised 2026-09-23 — implementation scope and acceptance gates defined; not yet implemented.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -9,7 +9,9 @@ The same-day review closed the engineering-spec gaps this plan was missing: post
 dedupe, employer resolution/aliasing, staleness honesty, the weekly trigger model, cost and
 empty-state guardrails, the fit-correction loop, nonprofit-intelligence (990) integration as a
 fit-signal source, the Part 7 surface sketch, and the test discipline. See §5, §6, §8, §10, §11.
-The only outstanding items are the founder decisions in §9.
+The follow-up review adds verification, durable run history, failure semantics, evidence lineage,
+separate actions and corrections, and a Part 6 acceptance contract. See §12–§15. These are build
+requirements, not claims of completed functionality. Remaining configuration decisions are in §9.
 
 ---
 
@@ -28,7 +30,7 @@ resume against it. The founder confirmed this from real use: *"Here we are 6–7
 Claude rocks those jobs out."*
 
 **Consequence:** competing with a frontier model on raw job discovery is unwinnable and pointless.
-The keyword-scoring board-scraper approach must be retired or demoted. The question is no longer
+The keyword-scoring board-scraper approach must be retired. The question is no longer
 "how do we search better than Claude," but **"what do we do that a Claude prompt and Indeed
 structurally cannot?"**
 
@@ -47,7 +49,7 @@ prompt or Indeed can do:
 
 2. **Memory and a weekly *diff* going *out*.** Claude-on-the-1st produces a fresh list monthly
    with no memory of last month's. The app can run the search weekly, persist results, and report
-   *what is new, what closed, what moved* — the same diff logic already built for lanes/employers
+   *what is new, what was verified, what changed at its source, what moved* — the diff logic built for lanes/employers
    in `weekly-strategy.ts`, applied to jobs. That is a partner, not a prompt.
 
 3. **An evidence-grounded fit check that beats Indeed's.** Indeed grades a posting against a
@@ -56,12 +58,15 @@ prompt or Indeed can do:
    `apply` / `talk-first` / `research-funding` / `monitor` / `skip`. Strictly more than Indeed can
    do, because Indeed has none of that accumulated context.
 
-**The moat is connective tissue, not search.** A market event — e.g. Dartmouth Hitchcock cutting
-400+ healthcare jobs — should ripple across the whole picture: weaken DH as a near-term target,
-flag a flooded local healthcare-ops market (a real competition headwind), possibly strengthen
-employers who absorb displaced demand, generate an outreach angle, and re-weight next week's search
-away from DH-dependent roles. No chat prompt connects a friend's tip → the employer list → lane
-strategy → next week's jobs. The app can. That connection *is* the product.
+**The moat is connective tissue, not search.** The founder uploaded Dartmouth Health's actual
+[September 15, 2026 staff-reductions release](https://www.dartmouth-health.org/news/article/dartmouth-health-announces-staff-reductions)
+alongside the conversation. This is primary-source evidence: 124 employees' positions eliminated
+and 303 open positions canceled, not 427 people laid off. The release identifies Dartmouth
+Hitchcock Medical Center and Dartmouth Hitchcock Clinics Southern Region. Preserve that scope.
+This verified event can inform target priority and next week's search. Additional competition in
+the local applicant pool or opportunities at other employers are separate inferences, not facts
+established by the release. Connect the conversation and uploaded source to the same event,
+without double-counting it. That connection is the product.
 
 ## 3. The Geocodio / geographic edge — use it everywhere
 
@@ -74,7 +79,8 @@ Today this only feeds employer *discovery*. It should ground **the entire job se
 
 - Expand a search to the real commute/labor shed (nearby towns within the radius), not just the
   typed city — so "White River Junction" also searches Lebanon, Hanover, Norwich, Wilder, etc.
-- Rank results by true distance from the user's anchor, not string matching.
+- Rank local results by geocoded straight-line distance from the user's anchor, not string matching.
+  This is not driving distance or commute time; unknown locations remain unknown. See §14.
 - Feed the geocoded locality list into the search engine's query set (it already generates
   employer queries; extend to role/opportunity queries).
 - This is a concrete, defensible advantage over both a generic Claude prompt and Indeed's
@@ -90,9 +96,9 @@ Today this only feeds employer *discovery*. It should ground **the entire job se
   (geocoded brief → LLM web search → persisted candidates with provenance + review queue).
 - The confidence/provenance discipline and the human review queue.
 
-**Retire or demote (the dead-premise machinery)**
-- Greenhouse/Lever board scraping and `scoreOpportunity`'s keyword-overlap number. Keep only if a
-  specific saved employer exposes a clean ATS feed worth monitoring; otherwise remove.
+**Retire (the dead-premise machinery)**
+- Board discovery and `scoreOpportunity`'s keyword-overlap number. Clean ATS endpoints may verify
+  already-discovered postings; they do not remain a parallel discovery or fallback engine.
 - Treating a raw board pull as "the search." It is not the product anymore.
 
 **Build (new)**
@@ -101,15 +107,15 @@ Today this only feeds employer *discovery*. It should ground **the entire job se
 - An **LLM-web-search job engine** that consumes the brief, returns real postings *with source
   URLs*, and never fabricates listings (the §19 integrity rule — the original hallucinated-listing
   failure must not return).
-- **Persistence + weekly diff** of results (new / still-open / closed / moved).
-- An **evidence-grounded fit + recommendation** per posting (apply / talk-first / research / skip),
+- **Persistence + weekly diff** of results and source-verification observations (§12).
+- An **evidence-grounded fit + recommendation** per posting (apply / talk-first / research-funding / monitor / skip),
   with the reasons drawn from the evidence ledger and conversation intelligence.
 
 ## 5. The accumulation flywheel (why this compounds)
 
 Every artifact the user adds should sharpen the *next* search:
-- A conversation signal ("DH cut 400 healthcare roles") → down-weights DH-dependent searches and
-  raises a competition warning.
+- The DH conversation plus uploaded release → one source-backed event, with any target-priority
+  adjustment explained separately from a tentative competition warning (§7, §13).
 - A lane movement (Program Operations up) → shifts the search's role vocabulary.
 - A new exclusion or comp-floor edit → filters results.
 - A saved/target employer → prioritizes its openings.
@@ -127,7 +133,10 @@ step 7 consumes. "Good mission fit but weak salary plausibility → research-fun
 blind-apply" is a recommendation Indeed cannot make and a cold prompt will not persist. The
 Rethink is therefore not a replacement for the 990 work — **it is the consumer that makes the
 990 data pay off.** Build them as one pipeline: 990 fields feed the search brief (step 1) and
-surface as named reasons on recommendations (step 7).
+surface as named reasons on recommendations (step 7). Define that enrichment contract now, but
+do not block the first complete discovery loop on the full 990 integration. Missing enrichment
+means unknown, not poor fit. Retain filing year and source; historical executive compensation
+does not establish a current opening's salary or available budget.
 
 ## 6. Integrity guardrails (non-negotiable, §8 / §19)
 
@@ -139,33 +148,35 @@ surface as named reasons on recommendations (step 7).
 - **Recommendation over score.** Never show a bare match number as if it were truth.
 - **`talk-first` is a first-class outcome**, consistent with the product's relationship-first,
   anti-mass-apply thesis. The app should sometimes say "don't apply yet — have a conversation."
-- **Staleness honesty.** The app can never truly know a role "closed" — only that it is no longer
-  visible at the source. Every posting carries "first seen" and "last verified [date]"; the diff
-  reports "no longer visible on [source]," never "closed."
+- **Staleness honesty.** Search omission does not establish disappearance. Only a successful
+  source check can establish "no longer visible"; blocked pages mean verification unavailable.
+  An explicit source closure can be labeled "source reports closed." Show first seen, last
+  seen in discovery, last verification attempt, and last verified open separately (§12).
 - **Privacy boundary on the brief.** The search brief holds comp floor, exclusions, and
   conversation-derived signals. Only search-relevant, non-sensitive facets leave the app:
   role language, geocoded area, work model, broad comp range. Private claims — unverified
   stories, named confidences, sensitive constraints — never go to the provider.
-- **User-correctable recommendations.** Every apply / talk-first / research-funding / skip chip
-  carries an inline "correct this" control ("actually, I applied", "already talked to them").
-  Corrections are persisted, fold back into preferences and exclusions, and are the on-ramp to
-  outcome tracking (build step 8). A recommendation the user cannot overrule is a claim the
-  app is not willing to be wrong about — that is not integrity, it is arrogance.
+- **User-correctable recommendations.** Every recommendation supports a reasoned correction.
+  Activity ("I applied", "already talked"), factual corrections, and explicit preference changes
+  are separate records. Applying does not prove the recommendation wrong; dismissing one role
+  does not exclude its employer or lane. Only an explicit scoped preference changes exclusions.
 
 ## 7. Worked example / acceptance test
 
-The redesign is working when the Dartmouth Hitchcock scenario produces this, end to end:
+The redesign is working when the conversation and uploaded DH release flow through together:
 
-> You logged a conversation: a friend at Dartmouth Hitchcock said they cut 400+ healthcare roles
-> this week. Since then: **Dartmouth Health moved down** as a near-term target, and a **competition
-> warning** is flagged for local healthcare-operations roles (a wave of experienced people just
-> entered your market). Your **Program Operations lane is unchanged**, but this week's job search
-> **de-prioritized DH-dependent roles** and surfaced 3 new openings within 25 miles of White River
-> Junction at other employers, 1 marked *talk-first* because of a warm path. One role from last
-> week is **no longer visible on the employer's site** (first seen 9/12, last verified today).
+> The Dartmouth Health release you supplied confirms occupied-position eliminations and canceled
+> vacancies. We linked it to your conversation and the affected organizations. Here is whether
+> that changed your target priorities, why, and how it affected this run's search. Any local
+> competition concern is labeled as an inference. Your Program Operations lane need not weaken
+> because one employer reduced staffing. Here are the actual verified openings and relationship
+> actions found, or an honest account of why there are none.
 
-If the app can produce that from a pasted note — with no hand-coding of dropdowns — it is
-decisively better than the monthly Claude prompt.
+Acceptance requires correct source-linked counts (§2), event date and organization scope; no
+double-counting of the note and release; and a traceable decision through brief, recommendation,
+and briefing. It does not require a particular ranking movement or invented quota of new jobs.
+Only show a warm path supported by saved relationship evidence. A missing search result is not
+a closed role. The source upload must participate without the user retyping it into dropdowns.
 
 ## 8. Phased build sequence (reviewed and expanded)
 
@@ -181,32 +192,34 @@ makes §5's flywheel actually connect.
    signals (privacy facets enforced here, §6). Conflicts resolve explicitly — e.g. a conversation
    comp signal that contradicts the stated floor is noted in the brief, never silently reconciled.
 2. **Geographic grounding of search** — every search expands to the geocoded labor shed
-   (nearby localities from `geography-engine.ts`); results ranked by true distance from the
+   (nearby localities from `geography-engine.ts`); local results ranked by straight-line distance from the
    anchor, never string-matched.
 3. **LLM-web-search job engine** — brief in → real postings with source URLs out; persisted.
-   Acceptance criteria: no fabricated listings; provider failure degrades to an honest
-   "no results this week" state (never a fallback to scraped boards); and cost guardrails are
+   Acceptance criteria: source verification before an apply recommendation; provider failure
+   displays "search failed" while preserving prior results (never "no matches"); cost guardrails are
    part of *done*, not a follow-up — caps on postings per run, per-user weekly budget, and
    measured tokens per run.
-4. **Posting identity + dedupe** — normalized employer + normalized title + fuzzy description
-   similarity + location forms the matching key; `first_seen` / `last_seen` lifecycle; reposts
-   and multi-source duplicates collapse into one posting. Pure functions, fixture-tested.
-   (Without this, step 6's diff produces phantom "new" and "closed" churn and user trust dies.)
+4. **Posting identity + dedupe** — prefer source-scoped requisition IDs and canonical posting
+   URLs. Employer/title/location/description similarity supports matching, not automatic merging
+   of distinct requisitions. Preserve source observations and repost lineage; uncertain merges
+   require review and can be corrected. Pure functions, fixture-tested.
 5. **Employer resolution** — discovered posting employers resolve onto the saved employer map
    (`watched_employers` / `employer_candidates`) via normalization + an alias table, with a
-   human-confirm nudge for uncertain matches ("Dartmouth Hitchcock" = "Dartmouth Health"). This
+   human-confirm nudge for uncertain matches. Resolve DH and historical Dartmouth Hitchcock naming
+   with source context; preserve parent/member/clinic relationships rather than merging them all. This
    is the connective tissue of §2's moat: without it, conversations ↔ employers ↔ postings never
    actually link and the flywheel spins free.
-6. **Weekly job diff + trigger** — new / open / no-longer-visible / moved, wired into the briefing
+6. **Weekly job diff + trigger** — new / verified-open / source-status-changed / moved, wired into the briefing
    heartbeat, with staleness labels (§6). **Trigger model, stated:** v1 is a manual weekly action
    on the briefing page ("Run this week's search"); scheduled automation is a later upgrade. Do
    not repeat the Round 3 failure where "weekly" meant "whenever someone remembers."
-7. **Evidence-grounded fit + recommendation** — apply / talk-first / research-funding / skip,
+7. **Evidence-grounded fit + recommendation** — apply / talk-first / research-funding / monitor / skip,
    reasoned from the evidence ledger, conversation signals, and the **990 nonprofit intelligence
-   when the target is a nonprofit** (funding stability, salary plausibility — see §5). The
+   when available for the target** (funding stability, salary plausibility — see §5). The
    "better-than-Indeed reality check," correctable per §6.
-8. **Outcome tracking** (Round 3 item) — applied / replied / interviewed / closed, plus the
-   per-recommendation corrections from §6, so the loop learns what converts.
+8. **Minimal action tracking in the first release** — applied / conversation-held / replied /
+   interviewed / user-closed, separate from source posting status, corrections, and preferences.
+   Richer conversion learning follows later; a few actions must not silently rewrite preferences.
 9. **Retire the dead-premise scrapers** once the engine above is trusted. ATS adapters (Autumn
    Phase 13) survive **only as verification** of discovered postings against employer-owned
    pages — never again as the discovery engine.
@@ -216,32 +229,34 @@ makes §5's flywheel actually connect.
 - [ ] Which search engine backs discovery — the existing OpenAI web-search Responses pattern
       (as `business-search-engine.ts` already uses), or another? (Cede discovery to the frontier
       model; do not rebuild a scraper.)
-- [ ] How aggressively to retire Greenhouse/Lever/Adzuna — delete, or keep behind a flag for any
-      employer with a clean feed?
+- [x] Retire board discovery at cutover; retain only posting verification adapters. Archive old
+      user history, remove discovery entry points and dead configuration, and update briefing consumers.
 - [ ] Cost posture — weekly per-user web-search calls have real token cost; measure before pricing
       (consistent with `productionization_discussion.md`).
-- [ ] Is `talk-first` surfaced as prominently as `apply`? (The thesis says it must be.)
-- [ ] Weekly trigger model — confirm v1 is a manual "Run this week's search" action on the
-      briefing page, with scheduled automation deferred until the engine is trusted (§8 step 6).
-- [ ] Confirm the correction/outcome vocabulary for steps 7–8: per-recommendation overrides
-      ("wrong — I applied", "already talked") plus applied / replied / interviewed / closed.
+- [x] `talk-first` is as prominent as `apply`; use one recommendation vocabulary throughout (§8).
+- [x] V1 uses a manual "Run this week's search" action; show last successful run and when due.
+      Scheduled automation is deferred and must not be implied by the UI.
+- [x] Activities, factual corrections, recommendation overrides, and scoped preferences remain
+      distinct (§6, §8). User-closed activity does not assert that the employer closed a posting.
 
 ## 10. Part 7 surface (sketch)
 
 The weekly Opportunities view is a **work queue, not a job board**:
 
 - Run banner: "This week's search ran [date] · 14 real postings within 25 mi · 3 new,
-  1 no-longer-visible · engine cost: N searches."
+  1 source-status change." Label run status and comparison dates; cost detail lives in run details.
 - One card per posting:
   - title + resolved employer (linked to its target-map entry)
-  - true distance from the anchor + the locality query that found it
+  - straight-line distance or location unknown; remote/hybrid eligibility + discovery locality
   - source URL + first-seen date + last-verified date
-  - diff badge: NEW / OPEN / NO-LONGER-VISIBLE
-  - recommendation chip — apply / talk-first / research-funding / skip — with named reasons
+  - separate discovery-change and source-verification badges (§12)
+  - recommendation chip — apply / talk-first / research-funding / monitor / skip — with named reasons
     (evidence ledger, conversation signals, 990 fields) and an inline "correct this" control
 - Empty state is first-class: "No real postings matched this week's brief within your
   constraints. The brief searched these 6 localities; widen radius or comp range?" Never
-  scraped-board filler, never invented listings.
+  scraped-board filler, never invented listings. Use this only after a successful search;
+  partial/failure/budget states disclose coverage and retain previous results. Widening constraints
+  is a user decision, never an automatic response to low yield.
 
 ## 11. Engineering disciplines (house rules, applied here)
 
@@ -249,6 +264,138 @@ The weekly Opportunities view is a **work queue, not a job board**:
   functions, unit-tested against fixture postings — no live search in the suite (same
   discipline as the existing test files).
 - Every LLM step keeps its deterministic/degraded path: provider down or over budget → an
-  honest empty state, never scraped-board filler, never invented listings.
+  explicit unavailable/budget status with previous results retained. Fit can fall back to
+  evidence-grounded rules; never manufacture discovery results or scraped-board filler.
 - AI-derived fit reads are labeled with confidence and correctable; corrections persist.
 - Cost is a requirement, not a report: caps and budgets are enforced in code before beta.
+
+## 12. Search runs, verification, and durable history
+
+Implement these contracts before connecting the new engine to the weekly briefing:
+
+- **Run record:** append a user-scoped run with brief/schema version, strategic-input IDs,
+  private brief and outbound search facets, provider/model, start/end times, queries attempted,
+  coverage by lane/locality/employer, tool usage, tokens, measured or explicitly estimated cost,
+  and errors. Lifecycle: queued → running → succeeded / partial / failed / not-configured /
+  budget-limited. An empty successful run is different from every unavailable state.
+- **Retry and budget safety:** use a per-user idempotency key and one active run per scope;
+  reserve budget before calls, bound retries/timeouts, and reconcile usage afterward. A repeated
+  click must not start another paid run. Partial work remains auditable; it must not overwrite
+  the last successful comparison baseline. Do not claim exact costs when usage is unavailable.
+- **Verification stage:** a search-generated URL alone is insufficient. Retain the observed
+  source URL, retrieval time, relevant excerpt/content reference, source requisition ID when
+  present, and field-level provenance for employer/title/location/salary. A generic careers page
+  is an employer lead, not a verified opening. Prefer employer-owned or authorized ATS sources.
+  States include discovered-unverified, verified-open, source-reports-closed, no-longer-visible,
+  and verification-unavailable. Check the exact role and source identity before marking open.
+- **Separate observations:** store first seen, last seen in discovery, last verification attempt,
+  last verified open, and observed source state. Search omission, rate limits, login walls,
+  blocked fetches, and server errors cannot turn a posting into no-longer-visible or closed.
+  Explicit closure or a confirmed unavailable posting after a successful source check records
+  evidence for that observation; it does not invent an employer decision or closure date.
+- **Action eligibility:** `apply` requires a verified-open source and stated verification time;
+  unverified/stale roles need verification first. Define the freshness interval as configuration.
+  Unknown salary, credentials, work model, or eligibility remain uncertainty, not invented fit.
+- **Additive history:** separate posting identity, per-run observations, recommendation versions,
+  and user actions. Keep original records when correcting a match. Existing weekly snapshot
+  upserts are not sufficient history: persist runs first and link briefing snapshots to run IDs.
+- **Comparison policy:** v1 compares against the previous successful run for the same user and
+  search scope, with dates visible. No prior success means baseline. A changed brief must show
+  changed constraints; out-of-scope postings did not disappear from their sources. Repeated runs
+  within a week retain history; a future weekly rollup can reference these immutable runs.
+- **Security:** authenticate with `getUser()`, scope all records and relations by user with RLS,
+  and guard POSTs with `isSameOriginRequest`. Verify fetched URLs and redirects through SSRF
+  protections with size/time limits. Treat external page text as untrusted evidence, never tool
+  instructions. Validate structured responses at runtime and escape rendered fragments.
+
+## 13. Evidence lineage and bounded strategic influence
+
+- Link conversations, uploaded documents, and public URLs through source IDs to an event/claim.
+  Save publication/event dates separately from upload and retrieval dates. An uploaded press
+  release is not downgraded to hearsay merely because it arrived with a conversation.
+- Distinguish primary-source facts, attributed personal reports, user preferences, and derived
+  strategic inferences. Each recommendation names the supporting records and any uncertainty.
+  Retain the uploaded artifact reference even when its public URL can also be verified.
+- DH's release and the friend's account are one event for weighting purposes. Separate the
+  employer's reported reductions from estimates of displaced applicants, regional competition,
+  or demand at other employers. A verified event does not verify every downstream implication.
+- Resolve historical names and abbreviations using source context. Dartmouth Health, its member
+  institutions, DHMC, clinics, and Dartmouth College must not be indiscriminately merged.
+- Bound a single event's effect; do not apply it again each run. Record review/expiry timing for
+  strategic influence without deleting historical facts. Corrections, retractions, or newer
+  evidence must be able to reverse the influence and explain the change.
+- Recommendations retain evidence IDs and versioned reasons. User actions are not automatic
+  preference labels. Explicit preference edits state their scope: role, employer, lane, or global.
+
+## 14. Part 6 acceptance and search constraints
+
+**Employers is a target-organization workspace, including organizations without vacancies.**
+
+Each target shows why it is relevant to a lane, current priority and what changed, supporting
+sources and dates, known relationship paths, hiring/financial unknowns, and the recommended next
+action. A careers URL or high employer fit is never evidence of a current opening. The weekly run
+can discover new organizations as well as jobs at saved targets. New candidates enter the review
+queue; promotion, parking, correction, and exclusion decisions persist. Parked/excluded targets
+must not silently return as fresh recommendations. Link jobs to targets and targets to their
+verified jobs, conversation history, and outreach/follow-up actions.
+
+Acceptance includes a relevant target with no vacancy and a supported talk-first action, plus a
+new candidate that is not automatically promoted. A warm path needs an actual saved person and
+relationship basis, not a guessed affiliation. Keep talk-first as prominent as apply.
+
+**Constraint contract:**
+
+- Separate hard exclusions from ranked preferences. Never broaden either silently to fill cards.
+- Preserve an explicit salary floor; do not invent an upper bound when expressing search facets.
+  Compare known pay on compatible currency/period/hours; missing or noncomparable pay is unknown.
+  Unknown compensation can require research without asserting the role meets the floor.
+- Geocode the job's actual worksite, not only headquarters. Label distance as straight-line;
+  multiple worksites remain distinct locations and ambiguous locations require review.
+- Remote is not automatically available everywhere: record residency/work-authorization limits
+  where stated. Hybrid requires worksite and attendance expectations, or an explicit unknown.
+- Support multiple user-selected regions/anchors and lane-specific role vocabulary. Record which
+  scopes were actually searched. Bounded search is not an exhaustive claim about the local market.
+- Lane rules and enrichment inputs are configuration/data. Nonprofit-specific evidence must not
+  determine an unrelated lane's fit. Missing 990 data does not exclude public institutions or
+  other targets that do not have applicable filings.
+
+## 15. First release, retirement, and proof
+
+Build one complete vertical slice using §8's components: current state and linked sources →
+privacy-filtered brief → discovery → source verification → identities and immutable observations
+→ evidence-grounded recommendation → briefing delta and a minimal action record. Define identity,
+run, and observation schemas before writing discovery results. Include both the target map and
+opportunity queue; do not stop at a provider response or an isolated search button.
+
+Use a small, explicitly bounded set of lanes, targets, and geographies for the first live proof.
+The full 990 enrichment pipeline, scheduled execution, and richer conversion learning follow
+that proof. Their interfaces belong in the first slice; their absence is shown honestly. Existing
+de-founder, state-layer testing, configurable lane infrastructure, and beta gates remain required.
+
+At cutover, disable legacy discovery routes/buttons, replace `opportunity_matches` score consumers
+in the briefing, and archive board-era records with provenance rather than deleting user history.
+Remove dead configuration/docs. Verification adapters cannot initiate a second discovery pipeline.
+An operational rollback disables the new search and retains saved history; it must not silently
+reactivate retired discovery. Show last successful run, due state, in-progress state, and visible
+errors; update results after completion without requiring an unexplained reload.
+
+**Required proof before calling the slice complete:**
+
+1. Deterministic fixture tests with `vi.stubEnv("OPENAI_API_KEY", "")`: brief constraints/privacy,
+   source validation, exact IDs versus fuzzy duplicates, reposts, employer/member resolution,
+   partial and failed runs, blocked sources, baseline comparisons, changed scope, idempotency,
+   budget enforcement, and separation of actions/corrections/preferences. Mock all provider calls.
+2. DH regression: uploaded release plus conversation produces one source-backed event with the
+   exact counts and scope in §2; downstream inferences stay labeled and bounded. Correcting the
+   evidence changes the next brief/recommendation; no fabricated openings or forced movement.
+3. Two live passes on the same account: establish a baseline, then add meaningful evidence or
+   change a constraint. Inspect sources manually and trace the actual change through brief,
+   search, saved observations, targets, recommendation, and visible briefing. No-change and
+   successful-zero-result paths must also work; simulate failures without real paid calls.
+4. A second account/fixture verifies user isolation and absence of founder assumptions. Any
+   reuse of `scripts/phase0-baseline.mjs` first requires `user_id` filtering on every query;
+   the historical all-account output is not an account-specific baseline.
+5. Record actual coverage, verified relevant results, dedupe mistakes, unsupported claims,
+   latency/cost, and whether the founder can identify a useful next action. Run the repo's
+   required typecheck/tests and build checks for implementation changes. Document the live
+   outcome; do not claim discovery quality from unit tests alone.
