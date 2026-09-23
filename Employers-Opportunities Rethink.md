@@ -191,6 +191,13 @@ makes §5's flywheel actually connect.
    generated locality queries, saved/target employers, and relevant non-sensitive conversation
    signals (privacy facets enforced here, §6). Conflicts resolve explicitly — e.g. a conversation
    comp signal that contradicts the stated floor is noted in the brief, never silently reconciled.
+   *Status 2026-09-23: schema + pure assembler built (`search-brief.ts`, tested). Finding: comp
+   floor, exclusions, and location anchor exist today only as free text in intake (`salary_target`
+   and `work_modes` are the only structured fields). The brief takes structured preferences,
+   reports free-text constraints as unresolved gaps rather than interpreting them, and exposes an
+   allow-listed `toOutboundFacets()` projection as the sole provider-facing view. Exclusions are
+   applied locally to results, never sent. Still needed: a small explicit capture UI that turns
+   the free-text constraints into confirmed structured preferences.*
 2. **Geographic grounding of search** — every search expands to the geocoded labor shed
    (nearby localities from `geography-engine.ts`); local results ranked by straight-line distance from the
    anchor, never string-matched.
