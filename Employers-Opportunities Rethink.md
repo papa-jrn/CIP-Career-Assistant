@@ -482,7 +482,7 @@ plan as a claim of completed functionality: the two live acceptance passes in §
 | 6. Weekly job diff + trigger | Trigger done (manual run on Opportunities, due state); diff vs the previous run NOT started | |
 | 7. Evidence-grounded fit + recommendation | NOT started (postings show verification, location, and pay only; no apply / talk-first / skip yet) | |
 | 8. Minimal action tracking | NOT started | |
-| 9. Retire the dead-premise scrapers | Done at the Opportunities cutover; fallback-only direct reader added by amendment (§8 step 9). 2026-09-29: generalized to a board-adapter registry — iCIMS + PeopleAdmin/SilkRoad. Trigger still fallback-only (see 2026-09-29 note); flip pending founder decision | |
+| 9. Retire the dead-premise scrapers | Done at the Opportunities cutover; direct reader added by amendment (§8 step 9). 2026-09-29: generalized to a board-adapter registry (iCIMS + PeopleAdmin/SilkRoad) AND trigger flipped — saved targets with a known supported board are read deterministically each run (`directReadKnownTargets`), founder-confirmed. 182 tests green. Live end-to-end confirmation still to do | |
 
 Surfaces: **Opportunities** is the home of the weekly search (run, progress, results grouped by verification,
 coverage, "what this search covers"). **Briefing** shows a read-only summary that links there. **Search
@@ -583,20 +583,29 @@ fires and the full list is still missed. Realizing the founder's stated goal —
 business, find its jobs, list them" — means **deterministically reading a saved target's own board
 each run when its listing URL is known and its format is supported**, rather than only on failure.
 This amends the §8-step-9 "fallback only" rule (still employer-owned, robots-checked, choose-by-
-index, per-posting verified, fully disclosed). **Recommended; needs founder confirmation before the
-trigger is flipped.** The generic reader is being built now regardless, wired into the existing
-fallback trigger; the trigger extension is the follow-up that actually captures the College's list.
+index, per-posting verified, fully disclosed). **Founder confirmed the flip (2026-09-29).** Amend §8-step-9: saved targets with a known,
+supported listing URL are read deterministically each run — not only on failure.
 
-**Built 2026-09-29 (tests green, 181 passing).** The single-format reader is now a board-adapter
-registry: `ats-reader.ts` shares one `readPagedBoard` loop (robots → paginate → parse), with
-iCIMS and a new header-driven **PeopleAdmin/SilkRoad** parser as adapters; `detectListSource`
-returns `icims | peopleadmin`; `job-search-direct.ts` dispatches on the kind. iCIMS behavior is
-unchanged (its tests still pass). This is wired into the **existing fallback trigger only** — so it
-captures a PeopleAdmin board when the web search reports it could not read it. It does **not** yet
-read the College's board on every run, because the board is readable enough that the search reports
-`read_openings` and the fallback never fires. Flipping the trigger (deterministic read of saved
-targets with a known listing URL) + storing the target listing URL is the next step, pending the
-founder decision above.
+**Built 2026-09-29 (tests green, 182 passing).**
+- *Generic reader.* The single-format reader is now a board-adapter registry: `ats-reader.ts`
+  shares one `readPagedBoard` loop (robots → paginate → parse), with iCIMS and a new header-driven
+  **PeopleAdmin/SilkRoad** parser as adapters; `detectListSource` returns `icims | peopleadmin`;
+  `job-search-direct.ts` dispatches on the kind. iCIMS behavior is unchanged (its tests still pass).
+- *Trigger flipped.* `directReadKnownTargets` reads a saved target's own board every run when its
+  stored `careers_url` resolves to a supported, readable board; `job-search-run.ts` runs it on the
+  `target_page` step (`loadTargetCareerUrls` maps target names → stored URLs), then the existing
+  fallback, both sharing `alreadyReadHosts` so a board is read once. The general web search still
+  runs and dedupe collapses overlap. Known-target reads are quiet on unsupported/already-read (only
+  genuine failures are surfaced), so the search+fallback still report honestly. Verified by a run
+  test: a target whose page the search read `read_openings` is still fully read directly.
+- *No new storage needed.* `watched_employers.careers_url` already exists (Dartmouth College's is
+  `searchjobs.dartmouth.edu`); the root page carries the `/postings/search` + Applicant-Portal
+  markers, so detection resolves the board even when the stored URL is the site root.
+
+Net effect: a saved target with a readable board (iCIMS or PeopleAdmin) now has its full list read
+and filtered every run, instead of the ~10 the general search happened to surface — the direct fix
+for the Dartmouth College recall miss. Remaining: a live run on the founder's account to confirm
+end-to-end, and letting employer discovery capture/refine each target's exact listing URL.
 
 ### Decisions made by the founder (2026-09-23)
 
