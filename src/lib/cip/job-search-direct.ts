@@ -1,8 +1,12 @@
 import {
   detectListSource,
   icimsListUrl,
+  peopleAdminListUrl,
   readIcimsListings,
+  readPeopleAdminListings,
+  type DirectReadResult,
   type DirectListing,
+  type ListSource,
 } from "@/lib/cip/ats-reader";
 import { addUsage, checkBudget, EMPTY_USAGE, type JobSearchConfig, type RunUsage } from "@/lib/cip/job-search-config";
 import {
@@ -76,25 +80,30 @@ export async function directReadStuckTargets(args: {
     const shell = await args.fetcher(url);
     const source = detectListSource(url, shell?.text ?? null);
     if (!source) {
-      fail("direct_read_unsupported", "The search could not read this page and it does not use a job-list format the app can read on its own (iCIMS is supported). Please check it by hand.");
+      fail("direct_read_unsupported", "The search could not read this page and it does not use a job-list format the app can read on its own (iCIMS and PeopleAdmin are supported). Please check it by hand.");
       continue;
     }
-    if (args.alreadyReadHosts.has(source.host)) {
-      fail("read_directly_by_app", `The app already read the job list at ${source.host} earlier in this run.`);
+    const sourceHost = listSourceHost(source);
+    if (args.alreadyReadHosts.has(sourceHost)) {
+      fail("read_directly_by_app", `The app already read the job list at ${sourceHost} earlier in this run.`);
       continue;
     }
 
-    const read = await readIcimsListings(args.fetcher, source.host, {
+    const readOptions = {
       maxPages: config.limits.directReadMaxPages,
       delayMs: config.limits.directReadDelayMs,
       maxListings: config.limits.directReadMaxListings,
-    });
+    };
+    const read: DirectReadResult =
+      source.kind === "icims"
+        ? await readIcimsListings(args.fetcher, source.host, readOptions)
+        : await readPeopleAdminListings(args.fetcher, source.base, readOptions);
     if (!read.ok) {
       fail("direct_read_failed", `The search could not read this job list and the app's own attempt also failed. ${read.problem ?? ""} Please check it by hand.`.trim());
       continue;
     }
-    args.alreadyReadHosts.add(source.host);
-    outcome.actions.push(`direct read: ${source.host} (${read.pagesRead} of ${read.totalPages} pages, ${read.listings.length} listings)`);
+    args.alreadyReadHosts.add(sourceHost);
+    outcome.actions.push(`direct read: ${sourceHost} (${read.pagesRead} of ${read.totalPages} pages, ${read.listings.length} listings)`);
 
     const request = buildSelectionRequest(entry.name, read.listings, args.facets, config);
     const result = await args.provider.runStep(request as unknown as Record<string, unknown>);
@@ -112,15 +121,19 @@ export async function directReadStuckTargets(args: {
     for (const index of selection.selected) {
       outcome.candidates.push({ ...toPosting(read.listings[index], entry.name), tier: "direct_read" });
     }
-    outcome.reads.push({ employer: entry.name, host: source.host, pages: read.pagesRead, listings: read.listings.length, selected: selection.selected.length });
+    outcome.reads.push({ employer: entry.name, host: sourceHost, pages: read.pagesRead, listings: read.listings.length, selected: selection.selected.length });
     outcome.coverage.push({
       name: entry.name,
       status: "read_directly_by_app",
-      careersPageUrl: icimsListUrl(source.host, 0),
-      note: `The search could not read this employer's job list, so the app read it directly from ${source.host}: ${read.listings.length} listings across ${read.pagesRead} of ${read.totalPages} pages${read.problem ? ` (${read.problem})` : ""}. ${selection.selected.length} looked relevant; each was then checked on its own page.`,
+      careersPageUrl: source.kind === "icims" ? icimsListUrl(source.host, 0) : peopleAdminListUrl(source.base, 0),
+      note: `The search could not read this employer's job list, so the app read it directly from ${sourceHost}: ${read.listings.length} listings across ${read.pagesRead} of ${read.totalPages} pages${read.problem ? ` (${read.problem})` : ""}. ${selection.selected.length} looked relevant; each was then checked on its own page.`,
     });
   }
   return outcome;
+}
+
+function listSourceHost(source: ListSource): string {
+  return source.kind === "icims" ? source.host : new URL(source.base).hostname;
 }
 
 function toPosting(listing: DirectListing, employer: string): DiscoveredPosting {
