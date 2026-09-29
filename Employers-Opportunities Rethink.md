@@ -683,6 +683,63 @@ outcome on the founder's data: the CTO / Media-Innovation lane rises to Strong A
 both strengthened evidence and verified matching roles). Pure/deterministic, fixture-tested, per house
 rules. **Documented now; not built — build after the live search run confirms the reader/skill work.**
 
+#### Fix spec: wire Career Lanes to the evidence analysis and the search (for build, 2026-09-29)
+
+Goal: `strategic-state.ts scoreLanes` consumes two signals it currently ignores, so the Career Lanes
+page reflects what the evidence re-analysis and the weekly search already established. All of this is
+internal scoring — nothing new leaves the app. Pure/deterministic, fixture-tested (house rule).
+
+**A. Evidence re-analysis deltas → lane boost/penalty (the "lanes talk to the evidence analysis" part).**
+Source is already available: `StrategicStateInputs.latestAdvisor`. Use `advisor.changeLog.strengthened[]`
+and `.weakened[]` (the mandatory change-detection output from the Autumn loop-repair) plus
+`advisor.positioning[]`.
+- For each lane, deterministically match its `role` + `roleVocabulary` against each strengthened /
+  weakened phrase (reuse the existing `matchesText` / shared-token helper in this file).
+- A strengthened match adds a bounded boost (propose +8, cap the total from this source at +12 so many
+  phrases can't run away). A weakened match subtracts (propose −8). A positioning phrase that names the
+  lane adds a smaller +4.
+- Record a human reason ("Evidence re-analysis strengthened this direction: <phrase>") the way
+  conversation adjustments already record reasons, so the lane card can cite it.
+
+**B. Verified matching postings → lane validation + cap exemption.**
+Source: the latest completed run's `job_search_observations` where `verification_state = 'verified_open'`,
+not excluded, not outside. `loadStrategicState` gains a query for these; add
+`verifiedPostings?: Array<{ title; employer; matchedRoleTerm?; tier }>` to `StrategicStateInputs`.
+- A posting matches a lane if its title matches the lane's `roleVocabulary` (deterministic), or the
+  search already tagged it to that lane (`matched_role_term` / lane basis).
+- A lane with ≥1 verified matching posting: (a) gets a bounded boost (propose +6 per posting, cap +12),
+  and (b) is EXEMPT from `exploratoryLaneCap` — that cap literally demands "a real role, employer, or
+  current-work evidence," and a verified-open posting *is* that. Without one, the cap still applies.
+- This is the piece that lifts the CTO / Media-Innovation lane out of the research queue once the search
+  finds a VP/CIO or Sr. Business Development role for it.
+
+**Guardrails (keep the anti-overconfidence discipline):**
+- Résumé strength ALONE still does not promote a lane. Leaving "research" requires a real external
+  signal: a verified posting OR a high-confidence conversation. A strengthened re-analysis delta can
+  raise the score but, on its own, does not exempt the cap.
+- All boosts bounded and reason-tagged; the final `clamp(0..100)` is unchanged. Weakened deltas can pull
+  a lane DOWN into research (mirroring how the DH conversation should weaken a DH-dependent lane).
+- Fix `exploratoryLaneCap` so it caps for MISSING validation, not by lane vocabulary — a lane named
+  "entrepreneur"/"workforce development" with real support must not be capped by its name alone.
+
+**Touched (no schema change, no new outbound facets):** `strategic-state.ts` — `StrategicStateInputs`
+(+`verifiedPostings`), `loadStrategicState` (load latest verified-open observations), `scoreLanes`
+(apply A+B, exempt cap when validated), plus small `matchDeltaToLane` / `matchPostingToLane` helpers.
+Consumers (`assets.astro selectAssetLanes`, briefing) reflect the new scores automatically.
+
+**Tests (fixture, no live calls):** (1) a lane in `changeLog.strengthened` rises, one in `weakened`
+falls; (2) a lane with a verified-open matching posting leaves the research cap and can become Strong
+Alternate; (3) a speculative lane with neither stays capped (discipline preserved); (4) résumé-only
+strength does not promote past research without an external signal.
+
+**Acceptance on the founder's data:** the Director of Media Innovation / CTO lane — strengthened by the
+re-analysis (web / AI / tech-exec) AND backed by verified DC VP/CIO + Sr. Business Development postings —
+rises out of the research queue to Strong Alternate, with cited reasons.
+
+**Sequencing:** Gap B reads the latest run's verified postings, so it works even before posting
+persistence (step 4); step 4 just makes it steadier run-to-run. Build A and B together — they are one
+"wire evidence + search results into lane scoring" change.
+
 ### 2026-09-29 (later) — Dartmouth College is robots-disallowed; the direct read correctly declines (NOT a bug)
 
 First live run with the reader/trigger/skill work active: **skill matching works** (roles badged
