@@ -183,20 +183,24 @@ const MAX_LOCALITIES = 12; // matches how many nearby towns get a verified state
 const MAX_SIGNALS = 20;
 const MAX_VOCABULARY_PER_LANE = 6;
 const MAX_SKILL_TERMS = 12;
-const MAX_SKILL_TERM_LEN = 80;
+// Long enough to hold a whole verified-claim sentence (they carry the skill keywords, e.g.
+// "…entrepreneurship, web development, and community engagement focus"). Truncation is at a word
+// boundary so a key term is never cut in half.
+const MAX_SKILL_TERM_LEN = 160;
 const OUTBOUND_FLOOR_STEP = 5_000;
 
 /**
  * Cleans proven-skill phrases into a small, deduped, non-sensitive vocabulary. Deterministic: no
- * LLM here (the brief stays pure and testable). Each phrase is trimmed and length-capped; the whole
- * set is capped. Case-insensitive dedupe keeps the first spelling seen.
+ * LLM here (the brief stays pure and testable). Each phrase is whitespace-normalized and, if long,
+ * trimmed back to a word boundary; the whole set is capped. Case-insensitive dedupe keeps the
+ * first spelling seen.
  */
 function buildSkillVocabulary(provenSkills: string[] | undefined): string[] {
   if (!provenSkills?.length) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of provenSkills) {
-    const phrase = String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_SKILL_TERM_LEN);
+    const phrase = clampToWord(String(raw ?? "").replace(/\s+/g, " ").trim(), MAX_SKILL_TERM_LEN);
     if (phrase.length < 3) continue;
     const key = phrase.toLowerCase();
     if (seen.has(key)) continue;
@@ -205,6 +209,15 @@ function buildSkillVocabulary(provenSkills: string[] | undefined): string[] {
     if (out.length >= MAX_SKILL_TERMS) break;
   }
   return out;
+}
+
+/** Trim to at most `max` chars, cutting at the last word boundary rather than mid-word. */
+function clampToWord(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return trimmed.replace(/[\s,;:.]+$/, "").trim();
 }
 
 const SEARCH_RELEVANT_SIGNALS = new Set<ConversationOutcome["signalType"]>([

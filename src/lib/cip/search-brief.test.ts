@@ -36,6 +36,15 @@ describe("skill vocabulary (secondary match signal)", () => {
     expect(brief.skillVocabulary).toEqual([]);
     expect(toOutboundFacets(brief).skillTerms).toEqual([]);
   });
+
+  it("keeps a long verified claim's key skill words intact (word-boundary trim, not mid-word)", () => {
+    const claim = "Long-term ownership of Bee Balm Productions with entrepreneurship, web development, and community engagement focus, plus AI-assisted media production and nonprofit client delivery over twelve years";
+    const brief = assembleSearchBrief({ strategicState: stateFixture(), provenSkills: [claim], now: FIXTURE_NOW });
+    const term = brief.skillVocabulary[0];
+    expect(term).toMatch(/web development/); // not clipped to "web developm"
+    expect(term.length).toBeLessThanOrEqual(160);
+    expect(term.endsWith(" ")).toBe(false);
+  });
 });
 
 describe("deriveProvenSkills", () => {
