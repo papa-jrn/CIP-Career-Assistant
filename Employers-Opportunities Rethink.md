@@ -683,6 +683,36 @@ outcome on the founder's data: the CTO / Media-Innovation lane rises to Strong A
 both strengthened evidence and verified matching roles). Pure/deterministic, fixture-tested, per house
 rules. **Documented now; not built — build after the live search run confirms the reader/skill work.**
 
+### 2026-09-29 (later) — Dartmouth College is robots-disallowed; the direct read correctly declines (NOT a bug)
+
+First live run with the reader/trigger/skill work active: **skill matching works** (roles badged
+"Outside your current lanes — matches your proven experience"), and **iCIMS employers (Dartmouth
+Health, FUJIFILM Dimatix) are read directly.** But Dartmouth College still reported "could not read…
+check by hand." Root cause, verified live: **`searchjobs.dartmouth.edu/robots.txt` is
+`User-Agent: * / Disallow: /`** — it forbids all automated readers (it explicitly allows only
+Googlebot, facebookexternalhit, LinkedInBot, and Twitterbot to `/postings`). The PeopleAdmin reader
+checks robots.txt and declines. **This is the politeness/integrity rule (§8 amendment) working, not a
+bug.** Fetch + detection both succeed with the app's own user-agent (200, 30 cards, detection fires);
+robots is the only blocker, and it is deliberate.
+
+Consequence: **Dartmouth College is web-search-only.** OpenAI's `web_search` reads it via
+Google-indexed content (which Dartmouth allows), so College roles DO surface (VP/CIO, Sr Business
+Development, Program Manager this run) but **non-deterministically** — which is why the endowed
+Executive Director found in an earlier run "disappeared" the next run. **Do NOT bypass robots**
+(UA-spoofing as Googlebot, ignoring the file) — that violates the discipline the whole product rests
+on, and the PeopleAdmin adapter still pays off for other PeopleAdmin sites that *do* allow bots.
+
+The real fix for "roles disappear between runs" is **posting identity + re-verification across runs
+(build step 4, not built):** once a role is found and verified, re-verify it each run with no model
+call and carry it forward, so a web-search-discovered role persists even when the next discovery pass
+does not re-surface it. This matters most for robots-blocked, web-search-only employers like
+Dartmouth College. Step 4 is now a priority alongside the lane-scoring propagation fix.
+
+Minor UX: the run summary says only "could not read… check by hand"; the per-employer coverage detail
+("What was checked") does carry the robots reason. Consider surfacing "the site asks automated readers
+not to access its job list (robots.txt)" distinctly from a technical failure, so the user is not
+confused into thinking the reader is broken.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
