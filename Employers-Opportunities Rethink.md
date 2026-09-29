@@ -607,6 +607,42 @@ and filtered every run, instead of the ~10 the general search happened to surfac
 for the Dartmouth College recall miss. Remaining: a live run on the founder's account to confirm
 end-to-end, and letting employer discovery capture/refine each target's exact listing URL.
 
+### 2026-09-29 (later) — skill-aware matching (lanes under-represent a multi-skilled candidate)
+
+First live run after the trigger flip: 18 verified postings (up from ~5), and the direct reader
+correctly read Dartmouth College's full 123-posting board. But the board selection kept only a weak
+lane-keyword match ("Director of Child Care") and skipped the founder's genuinely-good matches
+(verified live: Web Optimization & Support Analyst; Associate Director of Social Media; Sr. Business
+Development & Licensing Mgr — Engineering/AI/Digital; an Executive Director). Diagnosis: **not a
+reader/caps bug** — the full list was read and handed to selection. The cause is structural: both
+the web-search step (`buildStepRequest`) and the board selection (`buildSelectionRequest`) are fed
+**only the declared lane `role_vocabulary`**, never the candidate's proven résumé/evidence skills.
+The founder's good matches (web, digital/social, AI/biz-dev, leadership) fit his RÉSUMÉ breadth, not
+his narrow nonprofit lanes, so the search — faithfully following the brief — skips them. The brief
+under-represents him. This is the "better brief in" lever (Rethink §2, step 1/7) becoming binding.
+
+**Founder decision (2026-09-29): match proven skills too, labeled separately.** Feed verified
+skills as a SECONDARY signal; surface skill-matches that fall outside the declared lanes in their own
+clearly-labeled group ("strong on your proven skills, outside your current lanes"). Keep lanes as the
+PRIMARY, higher-weighted signal — this must not regress to the retired keyword-spray. Skill terms are
+résumé-derived role/skill words (non-sensitive) and are allow-listed for outbound like lane vocab;
+private evidence never leaves.
+
+**Slice plan:**
+1. *(this turn) Brief skill vocabulary + selection integration.* `brief-loader` derives proven-skill
+   terms from the latest advisor analysis (positioning + `evidenceLedger` claims that are
+   verified_from_resume / stated_by_user); `search-brief` carries `skillVocabulary` and exposes an
+   allow-listed `skillTerms` outbound facet; `buildSelectionRequest` (the direct-read choose-by-index)
+   includes skill terms and returns a per-pick `basis: "lane" | "skill"`; skill-basis picks are
+   labeled (via `matched_role_term`, no migration) and shown as a separate group in the view.
+2. *(next) Web-search step skill enrichment.* Add skill terms as a secondary signal to
+   `buildStepRequest` so the general/target web search also surfaces skill-matches, tagged by basis.
+3. *(next) First-class `match_basis` column* on `job_search_observations` (migration) if the
+   `matched_role_term` marker proves too coarse for grouping/recommendations.
+
+Guardrail: a skill-match outside all lanes is always labeled as such and never presented as a top
+lane recommendation. Lanes remain the intentional focus; skills widen the net honestly.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
