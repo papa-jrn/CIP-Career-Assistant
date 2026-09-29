@@ -649,6 +649,40 @@ private evidence never leaves.
 Guardrail: a skill-match outside all lanes is always labeled as such and never presented as a top
 lane recommendation. Lanes remain the intentional focus; skills widen the net honestly.
 
+### 2026-09-29 (later) — lane scoring is siloed from re-analysis and from verified postings (FIX QUEUED)
+
+Founder observation after the magic re-analysis (Round 4) + a search that found real matching roles:
+the **Career Lanes page barely moved.** Primary lane = Executive Director; "No validated secondary
+lane yet"; the CTO / Media-Innovation lane sat at score 53 in the research queue, the Entrepreneurship
+lane at 58, both "capped as research." Diagnosed: `strategic-state.ts scoreLanes` (which ranks the
+lanes) is **disconnected from two signals it should consume**:
+
+1. **The evidence re-analysis's strengthened/weakened deltas.** The re-analysis just strengthened the
+   founder's web-dev / AI / executive-technical positioning, but `scoreLanes` never reads
+   `advisor.positioning` / `changeLog` / the strengthened claims. It scores from a fixed base order +
+   network adjustments + conversation outcomes + text-pattern `exploratoryLaneCap`. So the
+   strengthening never reaches the lane that best represents it (CTO / Media-Innovation).
+2. **The verified job-search postings.** That same lane's cap message asks for "a real role, employer,
+   or current-work evidence before ranking higher" — and the weekly search *found* verified-open
+   matches (Dartmouth College VP/CIO, Executive Director). But `scoreLanes` does not consume
+   `job_search_observations`, so the validation it demands is sitting right there, unused.
+
+The conservatism itself is fine and intended (a lane should not become a search focus on résumé
+strength alone; it wants market validation). The bug is that the scorer **cannot tell a speculative
+lane with nothing behind it from a well-evidenced lane the search just validated**, because neither
+the re-analysis deltas nor the verified postings arrive. Same connective-tissue theme: right pieces,
+not wired together. Note too that `exploratoryLaneCap` caps by *name/text pattern* (e.g. "entrepreneur",
+"workforce development"), which can suppress a lane regardless of its actual evidence.
+
+**Fix (queued, sequenced AFTER confirming the search works end-to-end — the verified postings are an
+input to this fix):** propagate into `scoreLanes` (a) the re-analysis strengthened/weakened signals as
+a lane boost/penalty, and (b) verified-open matching postings as lane validation that can lift a lane
+out of the research cap. Keep the anti-overconfidence guardrail: verified postings + strengthened
+evidence count toward validation; résumé strength alone still does not promote a lane. Expected
+outcome on the founder's data: the CTO / Media-Innovation lane rises to Strong Alternate (it now has
+both strengthened evidence and verified matching roles). Pure/deterministic, fixture-tested, per house
+rules. **Documented now; not built — build after the live search run confirms the reader/skill work.**
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
