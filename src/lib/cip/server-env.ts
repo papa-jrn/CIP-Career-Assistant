@@ -13,6 +13,7 @@ export const readJobSearchEnv: EnvReader = (name) => {
     OPENAI_API_KEY: import.meta.env.OPENAI_API_KEY,
     JOB_SEARCH_MODEL: import.meta.env.JOB_SEARCH_MODEL,
     JOB_SEARCH_MAX_RUN_COST_USD: import.meta.env.JOB_SEARCH_MAX_RUN_COST_USD,
+    JOB_SEARCH_MAX_RUNS_PER_WEEK: import.meta.env.JOB_SEARCH_MAX_RUNS_PER_WEEK,
     JOB_SEARCH_PRICING_JSON: import.meta.env.JOB_SEARCH_PRICING_JSON,
   };
   return byName[name] || process.env[name] || undefined;
