@@ -109,6 +109,12 @@ function locationLine(row: ObservationRow) {
   return row.worksite_text ? `Worksite: ${row.worksite_text}` : "Worksite not stated";
 }
 
+// Slice 1 marker: a direct-read pick the model kept for proven-skill fit, not a declared lane.
+// It is badged so it never reads as a lane recommendation (the labeled-secondary-signal contract).
+function isSkillMatch(row: ObservationRow) {
+  return row.source_tier === "direct_read" && row.matched_role_term === "skill";
+}
+
 function postingCard(row: ObservationRow, floorUsd: number | null) {
   const href = safeHref(row.source_url);
   const label = VERIFICATION_LABEL[row.verification_state] ?? VERIFICATION_LABEL.discovered_unverified;
@@ -131,6 +137,7 @@ function postingCard(row: ObservationRow, floorUsd: number | null) {
         </div>
         <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${label.tone}">${escapeHtml(label.text)}</span>
       </div>
+      ${isSkillMatch(row) ? `<p class="mt-2 inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">Outside your current lanes — matches your proven experience</p>` : ""}
       <p class="mt-2 text-xs leading-5 text-[var(--muted)]">${escapeHtml(locationLine(row))}${bits.length ? ` · ${bits.join(" · ")}` : ""}</p>
       ${payLine ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pay: ${escapeHtml(payLine)}</p>` : ""}
       ${row.verification_note ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(row.verification_note)}${row.verification_checked_at ? ` (checked ${escapeHtml(formatDate(row.verification_checked_at))})` : ""}</p>` : ""}

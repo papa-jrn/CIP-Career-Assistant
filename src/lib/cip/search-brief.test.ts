@@ -8,6 +8,7 @@ import {
   violatesExclusions,
   type SearchPreferences,
 } from "@/lib/cip/search-brief";
+import { deriveProvenSkills } from "@/lib/cip/brief-loader";
 import { FIXTURE_NOW, fixtureArea as area, fixtureStrategicState as stateFixture } from "@/lib/cip/__fixtures__/search-fixtures";
 
 function assemble(preferences: SearchPreferences = {}, outcomes: ReturnType<typeof buildConversationOutcome>[] = []) {
@@ -18,6 +19,45 @@ function assemble(preferences: SearchPreferences = {}, outcomes: ReturnType<type
     now: FIXTURE_NOW,
   });
 }
+
+describe("skill vocabulary (secondary match signal)", () => {
+  it("carries proven skills into the brief and outbound facets, deduped, trimmed, and length-filtered", () => {
+    const brief = assembleSearchBrief({
+      strategicState: stateFixture(),
+      provenSkills: ["Web development", "web development", "  Social media strategy  ", "Operations leadership", "x"],
+      now: FIXTURE_NOW,
+    });
+    expect(brief.skillVocabulary).toEqual(["Web development", "Social media strategy", "Operations leadership"]);
+    expect(toOutboundFacets(brief).skillTerms).toEqual(brief.skillVocabulary);
+  });
+
+  it("is empty (not undefined) when no proven skills are supplied", () => {
+    const brief = assemble();
+    expect(brief.skillVocabulary).toEqual([]);
+    expect(toOutboundFacets(brief).skillTerms).toEqual([]);
+  });
+});
+
+describe("deriveProvenSkills", () => {
+  it("uses positioning and only verified-from-résumé / stated-by-user ledger claims", () => {
+    const skills = deriveProvenSkills({
+      positioning: ["Operations leadership as the through-line"],
+      evidenceLedger: [
+        { claim: "12+ years as a principal web developer", status: "verified_from_resume", evidence: "", whyItMatters: "", nextValidationStep: "" },
+        { claim: "Ran a networking chapter", status: "stated_by_user", evidence: "", whyItMatters: "", nextValidationStep: "" },
+        { claim: "Might be strong at AI", status: "inferred_medium_confidence", evidence: "", whyItMatters: "", nextValidationStep: "" },
+      ],
+    });
+    expect(skills).toContain("Operations leadership as the through-line");
+    expect(skills).toContain("12+ years as a principal web developer");
+    expect(skills).toContain("Ran a networking chapter");
+    expect(skills).not.toContain("Might be strong at AI"); // inferred, not proven
+  });
+
+  it("returns nothing when there is no advisor analysis", () => {
+    expect(deriveProvenSkills(null)).toEqual([]);
+  });
+});
 
 describe("assembleSearchBrief", () => {
   it("builds ranked lanes with weights and vocabulary from strategic state", () => {

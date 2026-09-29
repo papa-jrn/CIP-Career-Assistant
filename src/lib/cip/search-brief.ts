@@ -52,6 +52,12 @@ export interface SearchBriefInputs {
   strategicState: StrategicState;
   conversationOutcomes?: ConversationOutcome[];
   preferences?: SearchPreferences;
+  /**
+   * Proven, résumé-backed skill/role phrases (from the advisor's positioning and
+   * verified/stated evidence-ledger claims). A SECONDARY signal: the search may surface roles that
+   * match these even when they fall outside the declared lanes, labeled as such. Lanes stay primary.
+   */
+  provenSkills?: string[];
   /** ISO timestamp, injected so assembly stays deterministic. */
   now: string;
 }
@@ -129,6 +135,11 @@ export interface SearchBrief {
     targetCount: number;
   };
   lanes: BriefLane[];
+  /**
+   * Proven résumé/evidence skill phrases — a secondary match signal beside the lanes. A posting
+   * matching these but no lane is a labeled "outside your lanes, matches your experience" result.
+   */
+  skillVocabulary: string[];
   exclusions: { industries: string[]; roles: string[]; employers: string[] };
   compensation: { floorUsd: number | null; unit: "year"; upperBound: null };
   workModel: { accepted: BriefWorkMode[]; remoteLimits: string | null };
@@ -151,6 +162,8 @@ export interface SearchBrief {
 export interface OutboundSearchFacets {
   schemaVersion: number;
   roleVocabulary: Array<{ laneId: string; weight: BriefLaneWeight; terms: string[] }>;
+  /** Secondary, résumé-derived skill phrases the provider may match against, labeled distinctly. */
+  skillTerms: string[];
   areas: Array<{
     label: string;
     radiusMiles: number;
@@ -169,7 +182,30 @@ const MAX_TARGETS = 15;
 const MAX_LOCALITIES = 12; // matches how many nearby towns get a verified state
 const MAX_SIGNALS = 20;
 const MAX_VOCABULARY_PER_LANE = 6;
+const MAX_SKILL_TERMS = 12;
+const MAX_SKILL_TERM_LEN = 80;
 const OUTBOUND_FLOOR_STEP = 5_000;
+
+/**
+ * Cleans proven-skill phrases into a small, deduped, non-sensitive vocabulary. Deterministic: no
+ * LLM here (the brief stays pure and testable). Each phrase is trimmed and length-capped; the whole
+ * set is capped. Case-insensitive dedupe keeps the first spelling seen.
+ */
+function buildSkillVocabulary(provenSkills: string[] | undefined): string[] {
+  if (!provenSkills?.length) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of provenSkills) {
+    const phrase = String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_SKILL_TERM_LEN);
+    if (phrase.length < 3) continue;
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(phrase);
+    if (out.length >= MAX_SKILL_TERMS) break;
+  }
+  return out;
+}
 
 const SEARCH_RELEVANT_SIGNALS = new Set<ConversationOutcome["signalType"]>([
   "lane_fit",
@@ -213,6 +249,7 @@ export function assembleSearchBrief(inputs: SearchBriefInputs): SearchBrief {
 
   const content = {
     lanes,
+    skillVocabulary: buildSkillVocabulary(inputs.provenSkills),
     exclusions,
     compensation: { floorUsd, unit: "year" as const, upperBound: null },
     workModel: { accepted: workModes, remoteLimits },
@@ -252,6 +289,7 @@ export function toOutboundFacets(brief: SearchBrief): OutboundSearchFacets {
       weight: lane.weight,
       terms: lane.roleVocabulary,
     })),
+    skillTerms: [...brief.skillVocabulary],
     areas: brief.anchors.map((anchor) => ({
       label: anchor.label,
       radiusMiles: anchor.radiusMiles,

@@ -163,7 +163,8 @@ async function attemptTargetDirectRead(
   }
 
   for (const index of selection.selected) {
-    outcome.candidates.push({ ...toPosting(read.listings[index], name), tier: "direct_read" });
+    const basis = selection.basisByIndex[index] ?? "lane";
+    outcome.candidates.push({ ...toPosting(read.listings[index], name, basis), tier: "direct_read" });
   }
   outcome.reads.push({ employer: name, host: sourceHost, pages: read.pagesRead, listings: read.listings.length, selected: selection.selected.length });
   const lead =
@@ -182,7 +183,10 @@ function listSourceHost(source: ListSource): string {
   return source.kind === "icims" ? source.host : new URL(source.base).hostname;
 }
 
-function toPosting(listing: DirectListing, employer: string): DiscoveredPosting {
+// `basis` records why the model kept this listing: "lane" (matches a declared lane) or "skill"
+// (outside the lanes, but matches proven résumé skills). Slice 1 carries it in matched_role_term
+// with no schema change; the view badges skill matches so they are never read as lane picks.
+function toPosting(listing: DirectListing, employer: string, basis: "lane" | "skill" = "lane"): DiscoveredPosting {
   return {
     title: listing.title,
     employer,
@@ -194,7 +198,7 @@ function toPosting(listing: DirectListing, employer: string): DiscoveredPosting 
     posted_or_closing_date: null,
     salary_text: null,
     remote_status: "not_stated",
-    matched_role_term: "",
+    matched_role_term: basis === "skill" ? "skill" : "",
     evidence_excerpt: listing.snippet,
   };
 }

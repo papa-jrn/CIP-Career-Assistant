@@ -161,6 +161,23 @@ describe("choose-by-index selection", () => {
     expect(parseSelectionPayload(wrap([{ index: 0, reason: "" }, { index: 1, reason: "" }]), 2, 1)).toMatchObject({ selected: [0] });
     expect(parseSelectionPayload({ output: [] }, 2)).toMatchObject({ ok: false });
   });
+
+  it("sends the candidate's proven skills and returns each pick's basis (lane vs skill)", () => {
+    const skillFacets = toOutboundFacets(
+      assembleSearchBrief({ strategicState: fixtureStrategicState(), provenSkills: ["principal web developer"], now: FIXTURE_NOW }),
+    );
+    const request = buildSelectionRequest("Dartmouth College", listings, skillFacets, { model: "gpt-5.4", limits: DEFAULT_LIMITS });
+    expect(JSON.stringify(request)).toContain("principal web developer");
+
+    const parsed = parseSelectionPayload(wrap([{ index: 0, reason: "lane fit", basis: "lane" }, { index: 1, reason: "matches web dev", basis: "skill" }]), 2, 10);
+    expect(parsed).toMatchObject({ ok: true, selected: [0, 1] });
+    expect((parsed as { basisByIndex: Record<number, string> }).basisByIndex).toEqual({ 0: "lane", 1: "skill" });
+  });
+
+  it("defaults basis to 'lane' when the model omits it", () => {
+    const parsed = parseSelectionPayload(wrap([{ index: 0, reason: "" }]), 2, 10);
+    expect((parsed as { basisByIndex: Record<number, string> }).basisByIndex).toEqual({ 0: "lane" });
+  });
 });
 
 describe("fallback inside a run", () => {
@@ -184,7 +201,7 @@ describe("fallback inside a run", () => {
     };
   }
 
-  function providerFor(status: string, selection: Array<{ index: number; reason: string }> = [{ index: 0, reason: "fit" }, { index: 2, reason: "fit" }]) {
+  function providerFor(status: string, selection: Array<{ index: number; reason: string; basis?: "lane" | "skill" }> = [{ index: 0, reason: "fit" }, { index: 2, reason: "fit" }]) {
     const calls: Array<"search" | "select"> = [];
     const provider: JobSearchProvider = {
       name: "fake",
@@ -271,6 +288,17 @@ describe("fallback inside a run", () => {
     const { fetcher } = fetcherFor();
     const view = await run(provider, fetcher);
     expect((view?.observations ?? []).map((row) => row.title)).toEqual(["Registered Nurse (RN) - Emergency"]);
+  });
+
+  it("labels a direct-read pick chosen for proven skills (not a lane) as a skill match", async () => {
+    const { provider } = providerFor("page_found_but_could_not_read_listings", [{ index: 0, reason: "matches web dev", basis: "skill" }]);
+    const { fetcher } = fetcherFor();
+    const view = await run(provider, fetcher);
+    const rows = view?.observations ?? [];
+    expect(rows).toHaveLength(1);
+    // Slice-1 marker carried in matched_role_term; the view badges these as outside-lane matches.
+    expect(rows[0].matched_role_term).toBe("skill");
+    expect(rows[0].source_tier).toBe("direct_read");
   });
 
   it("reads a saved target's own board directly each run, even when the search read the page fine", async () => {

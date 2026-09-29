@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AdvisorAnalysis } from "@/lib/cip/advisor";
 import { resolveSearchArea, type GeocodedSearchArea } from "@/lib/cip/geography-engine";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { assembleSearchBrief, type SearchBrief } from "@/lib/cip/search-brief";
@@ -65,7 +66,24 @@ export async function loadSearchBrief(
   return assembleSearchBrief({
     strategicState: buildStrategicState(inputs),
     conversationOutcomes: inputs.conversationOutcomes,
+    provenSkills: deriveProvenSkills(inputs.latestAdvisor),
     preferences,
     now: options.now ?? new Date().toISOString(),
   });
+}
+
+/**
+ * Proven, résumé-backed skill/role phrases for the secondary skill-match signal. Deterministic:
+ * the advisor's positioning statements plus the evidence-ledger claims it already marked
+ * verified-from-résumé or stated-by-user. Inferred / needs-confirmation / insufficient claims are
+ * left out — only what the analysis treats as established goes outbound.
+ */
+export function deriveProvenSkills(advisor: Partial<AdvisorAnalysis> | null | undefined): string[] {
+  if (!advisor) return [];
+  const positioning = Array.isArray(advisor.positioning) ? advisor.positioning : [];
+  const ledger = Array.isArray(advisor.evidenceLedger) ? advisor.evidenceLedger : [];
+  const provenClaims = ledger
+    .filter((item) => item.status === "verified_from_resume" || item.status === "stated_by_user")
+    .map((item) => item.claim);
+  return [...positioning, ...provenClaims].filter((phrase): phrase is string => typeof phrase === "string" && phrase.trim().length > 0);
 }
