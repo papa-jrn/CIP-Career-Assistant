@@ -629,12 +629,18 @@ résumé-derived role/skill words (non-sensitive) and are allow-listed for outbo
 private evidence never leaves.
 
 **Slice plan:**
-1. *(this turn) Brief skill vocabulary + selection integration.* `brief-loader` derives proven-skill
-   terms from the latest advisor analysis (positioning + `evidenceLedger` claims that are
-   verified_from_resume / stated_by_user); `search-brief` carries `skillVocabulary` and exposes an
-   allow-listed `skillTerms` outbound facet; `buildSelectionRequest` (the direct-read choose-by-index)
-   includes skill terms and returns a per-pick `basis: "lane" | "skill"`; skill-basis picks are
-   labeled (via `matched_role_term`, no migration) and shown as a separate group in the view.
+1. **DONE 2026-09-29 (tests green, 189 passing).** Brief skill vocabulary + selection integration.
+   `brief-loader.deriveProvenSkills` pulls positioning + `evidenceLedger` claims marked
+   verified_from_resume / stated_by_user (inferred/needs-confirmation left out); `search-brief`
+   carries `skillVocabulary` and exposes an allow-listed `skillTerms` outbound facet;
+   `buildSelectionRequest` (the direct-read choose-by-index) now sends `proven_skills` and returns a
+   per-pick `basis: "lane" | "skill"` (`parseSelectionPayload` → `basisByIndex`, default "lane");
+   skill-basis direct-read picks carry a `matched_role_term` marker (no migration) and the view
+   badges them "Outside your current lanes — matches your proven experience." **Effectiveness caveat:
+   this only surfaces skill-matches if the saved advisor analysis actually captures those skills as
+   positioning or verified/stated claims. If the analysis is nonprofit-ops-flavored and omits the
+   founder's web/digital/AI/leadership breadth, the skill vocabulary will too — re-running evidence
+   analysis so the ledger reflects the full résumé is the upstream fix.**
 2. *(next) Web-search step skill enrichment.* Add skill terms as a secondary signal to
    `buildStepRequest` so the general/target web search also surfaces skill-matches, tagged by basis.
 3. *(next) First-class `match_basis` column* on `job_search_observations` (migration) if the
