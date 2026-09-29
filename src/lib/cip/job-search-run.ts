@@ -192,23 +192,26 @@ export async function startJobSearchRun(
     return recordBlocked(supabase, shell, "not_configured", "No search provider key is configured (OPENAI_API_KEY).", now);
   }
 
-  // 4. Weekly cap (checked before any paid call, and before the slow brief build).
-  const since = new Date(Date.parse(now()) - 7 * 86_400_000).toISOString();
-  const { count } = await supabase
-    .from("job_search_runs")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .in("status", ["running", "succeeded", "partial", "failed"])
-    .gt("next_step", 0) // only runs that actually made a provider call count toward the cap
-    .gte("started_at", since);
-  if ((count ?? 0) >= config.limits.maxRunsPerWeek) {
-    return recordBlocked(
-      supabase,
-      shell,
-      "budget_limited",
-      `Weekly limit reached: ${config.limits.maxRunsPerWeek} searches in the last 7 days.`,
-      now,
-    );
+  // 4. Weekly cap (checked before any paid call, and before the slow brief build). A cap of 0 or
+  //    less disables it (founder dev, via JOB_SEARCH_MAX_RUNS_PER_WEEK); per-run caps still apply.
+  if (config.limits.maxRunsPerWeek > 0) {
+    const since = new Date(Date.parse(now()) - 7 * 86_400_000).toISOString();
+    const { count } = await supabase
+      .from("job_search_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .in("status", ["running", "succeeded", "partial", "failed"])
+      .gt("next_step", 0) // only runs that actually made a provider call count toward the cap
+      .gte("started_at", since);
+    if ((count ?? 0) >= config.limits.maxRunsPerWeek) {
+      return recordBlocked(
+        supabase,
+        shell,
+        "budget_limited",
+        `Weekly limit reached: ${config.limits.maxRunsPerWeek} searches in the last 7 days.`,
+        now,
+      );
+    }
   }
 
   // 5. Build the private brief, its outbound projection, and the step plan.

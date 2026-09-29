@@ -162,6 +162,25 @@ describe("startJobSearchRun", () => {
     }
     expect((await startJobSearchRun(client, USER, "key-after-blocked", { config: config(), now })).kind).toBe("started");
   });
+
+  it("reads the weekly cap from env, where 0 disables it and unset keeps the default of 3", () => {
+    const disabled = loadJobSearchConfig((n) => (n === "JOB_SEARCH_MAX_RUNS_PER_WEEK" ? "0" : n === "OPENAI_API_KEY" ? "sk" : undefined));
+    expect(disabled.limits.maxRunsPerWeek).toBe(0);
+    const dflt = loadJobSearchConfig((n) => (n === "OPENAI_API_KEY" ? "sk" : undefined));
+    expect(dflt.limits.maxRunsPerWeek).toBe(3);
+  });
+
+  it("does not enforce the weekly cap when it is disabled (0)", async () => {
+    const { client, db } = createFakeSupabase({ watched_employers: employers(2) });
+    for (let i = 0; i < 5; i += 1) {
+      db.job_search_runs.push({
+        id: `old-${i}`, user_id: USER, idempotency_key: `old-key-${i}`,
+        status: "succeeded", next_step: 2, started_at: new Date(Date.parse(NOW) - 86_400_000).toISOString(),
+      });
+    }
+    const outcome = await startJobSearchRun(client, USER, "key-uncapped", { config: config({ limits: { ...DEFAULT_LIMITS, maxRunsPerWeek: 0 } }), now });
+    expect(outcome.kind).toBe("started");
+  });
 });
 
 describe("advanceJobSearchRun", () => {

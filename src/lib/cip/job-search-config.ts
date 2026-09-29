@@ -87,6 +87,10 @@ export function loadJobSearchConfig(env: EnvReader): JobSearchConfig {
   const limits: JobSearchLimits = { ...DEFAULT_LIMITS };
   const maxCost = Number(env("JOB_SEARCH_MAX_RUN_COST_USD"));
   if (Number.isFinite(maxCost) && maxCost > 0) limits.maxRunCostUsd = maxCost;
+  // Weekly run cap is env-overridable so it can be turned off in founder dev (0 = no weekly cap)
+  // and restored for beta. The committed default stays 3; per-run token/call/cost caps still apply.
+  const maxRuns = Number(env("JOB_SEARCH_MAX_RUNS_PER_WEEK"));
+  if (Number.isFinite(maxRuns) && maxRuns >= 0) limits.maxRunsPerWeek = maxRuns;
 
   return {
     provider: "openai",

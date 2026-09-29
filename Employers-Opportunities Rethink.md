@@ -676,6 +676,11 @@ lane recommendation. Lanes remain the intentional focus; skills widen the net ho
 
 ### Parked (not decided or not started)
 
+- **BETA-RESTORE: the weekly job-search run cap is disabled in founder dev.** `maxRunsPerWeek` is
+  env-overridable (`JOB_SEARCH_MAX_RUNS_PER_WEEK`, 0 = no weekly cap); the founder's local `.env`
+  sets it to 0 so re-runs are unlimited during development. The committed default stays 3, and
+  per-run token/call/cost caps always apply. Before beta, ensure the env is unset or set to a
+  positive value so the weekly cap is back on (2026-09-29).
 - Cost per beta user and total monthly cost (see `productionization_discussion.md`), including locking down sign-ups and the API key.
 - Deploying to Vercel: swap the Node adapter for the Vercel one; the in-memory rate limiter is weak on serverless (search caps are database-backed
   and hold); the OpenAI key is currently copied into the server build (a follow-up task is queued to move secrets to runtime reads).
