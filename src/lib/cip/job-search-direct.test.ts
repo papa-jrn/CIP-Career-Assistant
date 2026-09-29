@@ -272,4 +272,23 @@ describe("fallback inside a run", () => {
     const view = await run(provider, fetcher);
     expect((view?.observations ?? []).map((row) => row.title)).toEqual(["Registered Nurse (RN) - Emergency"]);
   });
+
+  it("reads a saved target's own board directly each run, even when the search read the page fine", async () => {
+    // The search reports it read the page fine (read_openings) — so the fallback trigger does NOT
+    // fire — but the target has a stored, supported careers URL, so the known-target reader still
+    // reads its full board deterministically. This is the fix for the Dartmouth College recall miss.
+    const { provider, calls } = providerFor("read_openings");
+    const { fetcher } = fetcherFor();
+    const seeded = [{ user_id: USER, name: "Employer 1", region: "R", priority: "medium", fit_score: 70, fit_summary: "", target_roles: [], careers_url: SHELL_URL }];
+    const fake = createFakeSupabase({ watched_employers: seeded });
+    const outcome = await startJobSearchRun(fake.client, USER, "key-known", { config: config(), now });
+    const view = await advanceJobSearchRun(fake.client, USER, (outcome as { runId: string }).runId, { config: config(), provider, fetcher, now });
+
+    expect(calls).toEqual(["search", "select"]); // search, then the deterministic board read + choose
+    const rows = view?.observations ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.source_tier === "direct_read")).toBe(true);
+    const entry = view?.run.coverage.find((item) => item.status === "read_directly_by_app");
+    expect(entry?.note).toMatch(/The app read Employer 1's job list directly/);
+  });
 });

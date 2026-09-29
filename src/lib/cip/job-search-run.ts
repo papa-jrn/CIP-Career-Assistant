@@ -20,7 +20,12 @@ import {
 import { verifyPostings, type PageFetcher, type VerificationResult, safePageFetcher } from "@/lib/cip/job-verifier";
 import { toOutboundFacets, violatesExclusions, type OutboundSearchFacets, type SearchBrief } from "@/lib/cip/search-brief";
 import { geocodeCoordinates } from "@/lib/cip/geography-engine";
-import { directReadStuckTargets, type DirectReadTrace } from "@/lib/cip/job-search-direct";
+import {
+  directReadKnownTargets,
+  directReadStuckTargets,
+  type DirectReadOutcome,
+  type DirectReadTrace,
+} from "@/lib/cip/job-search-direct";
 import { assessWorksite, type LocationAssessment } from "@/lib/cip/search-geography";
 
 /**
@@ -331,23 +336,51 @@ export async function advanceJobSearchRun(
   // Merge with what earlier steps already stored, cap, then check location, exclusions, and the page itself.
   const existing = await loadObservations(supabase, userId, run.id);
   const existingKeys = existing.map((row) => ({ source_url: row.source_url, employer: row.employer_text, requisition_id: row.requisition_id, existing: true }));
-  // Fallback: only for target employers whose job list the search reported it could not read.
-  const direct =
-    step.tier === "target_page"
-      ? await directReadStuckTargets({
-          entries: parsed.response.employers_checked,
+
+  // On a target-page step, read saved targets' own boards directly: KNOWN-target reads for targets
+  // with a stored, supported listing URL (deterministic, every run), then the FALLBACK read for any
+  // target the search reported it could not read. Both share `alreadyReadHosts` so a board is read
+  // once; the general search still runs and dedupe collapses any overlap.
+  let directCandidates: DirectReadOutcome["candidates"] = [];
+  let directUsage: RunUsage = EMPTY_USAGE;
+  let directActions: string[] = [];
+  let directReads: DirectReadTrace[] = [];
+  let directCoverage: DirectReadOutcome["coverage"] = [];
+  if (step.tier === "target_page") {
+    const fetcher = deps.fetcher ?? safePageFetcher;
+    const alreadyReadHosts = new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.host));
+    const knownTargets = await loadTargetCareerUrls(supabase, userId, step.targets ?? []);
+    const known = knownTargets.length
+      ? await directReadKnownTargets({
+          targets: knownTargets,
           step,
           facets,
           config,
           provider,
-          fetcher: deps.fetcher ?? safePageFetcher,
+          fetcher,
           usedSoFar: addUsage(usedSoFar, parsed.usage),
-          alreadyReadHosts: new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.host)),
+          alreadyReadHosts,
         })
       : null;
+    const stuck = await directReadStuckTargets({
+      entries: parsed.response.employers_checked,
+      step,
+      facets,
+      config,
+      provider,
+      fetcher,
+      usedSoFar: addUsage(addUsage(usedSoFar, parsed.usage), known?.usage ?? EMPTY_USAGE),
+      alreadyReadHosts,
+    });
+    directCandidates = [...(known?.candidates ?? []), ...stuck.candidates];
+    directUsage = addUsage(known?.usage ?? EMPTY_USAGE, stuck.usage);
+    directActions = [...(known?.actions ?? []), ...stuck.actions];
+    directReads = [...(known?.reads ?? []), ...stuck.reads];
+    directCoverage = [...(known?.coverage ?? []), ...stuck.coverage];
+  }
   const candidates = [
     ...parsed.response.postings.map((posting) => ({ ...posting, tier: step.tier as SourceTier, existing: false })),
-    ...(direct?.candidates ?? []).map((posting) => ({ ...posting, tier: posting.tier as SourceTier, existing: false })),
+    ...directCandidates.map((posting) => ({ ...posting, tier: posting.tier as SourceTier, existing: false })),
   ];
   const merged = dedupeWithinRun([...existingKeys, ...candidates.map((posting) => ({ ...posting, source_url: posting.source_url }))] as Array<{ source_url: string; employer: string; requisition_id: string | null; existing: boolean }>);
   const room = Math.max(0, config.limits.maxPostings - existing.length);
@@ -427,17 +460,17 @@ export async function advanceJobSearchRun(
     }
   }
 
-  const usage = addUsage(addUsage(usedSoFar, parsed.usage), direct?.usage ?? EMPTY_USAGE);
+  const usage = addUsage(addUsage(usedSoFar, parsed.usage), directUsage);
   const cost = estimateCost(usage, config.pricing);
   const trace: TraceEntry = {
     step: step.index,
     tier: step.tier,
-    actions: [...parsed.actions, ...(direct?.actions ?? [])],
+    actions: [...parsed.actions, ...directActions],
     postingsFound: rows.length,
     rejected: parsed.rejected,
     incomplete: parsed.incomplete,
-    usage: addUsage(parsed.usage, direct?.usage ?? EMPTY_USAGE),
-    ...(direct?.reads.length ? { directReads: direct.reads } : {}),
+    usage: addUsage(parsed.usage, directUsage),
+    ...(directReads.length ? { directReads } : {}),
   };
   const coverage: CoverageEntry[] = parsed.response.employers_checked.map((entry) => ({
     name: entry.name,
@@ -447,7 +480,7 @@ export async function advanceJobSearchRun(
     tier: step.tier,
     step: step.index,
   }));
-  for (const entry of direct?.coverage ?? []) {
+  for (const entry of directCoverage) {
     coverage.push({ name: entry.name, status: entry.status, note: entry.note.slice(0, 600), careersPageUrl: entry.careersPageUrl, tier: step.tier, step: step.index });
   }
 
@@ -622,6 +655,32 @@ export async function loadObservations(supabase: SupabaseClient, userId: string,
     .eq("user_id", userId)
     .order("first_seen_at", { ascending: true });
   return (data ?? []) as ObservationRow[];
+}
+
+/**
+ * Stored careers/listing URLs for the named saved targets (watched employers first, then
+ * candidates). Only targets that actually have a URL are returned; the deterministic known-target
+ * reader tries each and silently skips any whose page is not a supported board.
+ */
+async function loadTargetCareerUrls(
+  supabase: SupabaseClient,
+  userId: string,
+  names: string[],
+): Promise<Array<{ name: string; url: string }>> {
+  const wanted = [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+  if (!wanted.length) return [];
+  const [{ data: watched }, { data: candidates }] = await Promise.all([
+    supabase.from("watched_employers").select("name,careers_url").eq("user_id", userId).in("name", wanted),
+    supabase.from("employer_candidates").select("name,careers_url").eq("user_id", userId).in("name", wanted),
+  ]);
+  const byName = new Map<string, string>();
+  // Candidates first so watched employers win on a name collision.
+  for (const row of [...(candidates ?? []), ...(watched ?? [])] as Array<{ name?: unknown; careers_url?: unknown }>) {
+    const name = String(row.name ?? "").trim();
+    const url = String(row.careers_url ?? "").trim();
+    if (name && url) byName.set(name, url);
+  }
+  return [...byName].map(([name, url]) => ({ name, url }));
 }
 
 export async function loadRunView(supabase: SupabaseClient, userId: string, runId: string): Promise<RunView | null> {
