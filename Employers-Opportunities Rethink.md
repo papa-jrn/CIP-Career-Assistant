@@ -482,7 +482,7 @@ plan as a claim of completed functionality: the two live acceptance passes in §
 | 6. Weekly job diff + trigger | Trigger done (manual run on Opportunities, due state); diff vs the previous run NOT started | |
 | 7. Evidence-grounded fit + recommendation | NOT started (postings show verification, location, and pay only; no apply / talk-first / skip yet) | |
 | 8. Minimal action tracking | NOT started | |
-| 9. Retire the dead-premise scrapers | Done at the Opportunities cutover; a narrow fallback-only direct reader was added by amendment (§8 step 9) | |
+| 9. Retire the dead-premise scrapers | Done at the Opportunities cutover; fallback-only direct reader added by amendment (§8 step 9). 2026-09-29: generalized to a board-adapter registry — iCIMS + PeopleAdmin/SilkRoad. Trigger still fallback-only (see 2026-09-29 note); flip pending founder decision | |
 
 Surfaces: **Opportunities** is the home of the weekly search (run, progress, results grouped by verification,
 coverage, "what this search covers"). **Briefing** shows a read-only summary that links there. **Search
@@ -551,6 +551,52 @@ says these pages need a hand check and links to them. Revisit after a few real r
 - Recall varies run to run: the Dartmouth "Executive Director" role found in earlier tests was missed in the first run. This is why
   step 4 (re-verify earlier finds without the model) and remembering each employer's listing page are next.
 - OpenAI spend: $0.23 month-to-date on the CIP project after the tests. A full run's cost is not yet measured.
+
+### 2026-09-29 — recall diagnosis (searchjobs.dartmouth.edu) + generic board reader
+
+The founder reported the first real runs missing Dartmouth **College** postings that should have
+appeared (e.g. `/postings/87321`, `86741`, `84307`, `87206`). Diagnosed against the code and the
+live site:
+
+- **Not a readability problem.** `searchjobs.dartmouth.edu` is a **PeopleAdmin/SilkRoad** board
+  served as plain HTML: `/postings/search` lists all open postings (124 at check time) with
+  `data-posting-title`, `/postings/{id}` links, self-labeled columns, and `?page=N` pagination;
+  `/postings/{id}` detail pages carry the title in the HTML. Fully readable.
+- **It is a targeting + recall problem, three compounding causes:** (1) the engine passes the
+  `target_page` tier only the org *name* (`targetOrganizations = targets.map(t => t.name)`), not a
+  listing URL, so the model must rediscover the board every run — non-deterministic; (2) each step
+  returns "at most 10 postings" and does not paginate the full list; (3) the deterministic direct
+  reader only supported **iCIMS** (Dartmouth Health), so it never helped for the College's board.
+  Result: College postings fell to the flaky general web-search tier — exactly the "Executive
+  Director found in tests, missed in the first run" symptom already noted above.
+
+**Fix (founder chose the generic option, 2026-09-29):** turn the single-format direct reader into a
+small **board-adapter registry** (shared robots/pagination/choose-by-index/verify machinery; one
+detector + parser per board format). iCIMS stays; **PeopleAdmin/SilkRoad is the second adapter**,
+parsed by its own column headers so it works beyond Dartmouth. Also carry each target's real
+listing URL into the brief/search (long-standing "Next" item 3) so the search opens the exact page.
+
+**Open decision this surfaces — the reader's TRIGGER.** The reader today is fallback-only: it runs
+only when the web search reports `page_found_but_could_not_read_listings`. A *readable* board like
+the College's makes the search report `read_openings` (with just ~10 of 124), so the fallback never
+fires and the full list is still missed. Realizing the founder's stated goal — "find the
+business, find its jobs, list them" — means **deterministically reading a saved target's own board
+each run when its listing URL is known and its format is supported**, rather than only on failure.
+This amends the §8-step-9 "fallback only" rule (still employer-owned, robots-checked, choose-by-
+index, per-posting verified, fully disclosed). **Recommended; needs founder confirmation before the
+trigger is flipped.** The generic reader is being built now regardless, wired into the existing
+fallback trigger; the trigger extension is the follow-up that actually captures the College's list.
+
+**Built 2026-09-29 (tests green, 181 passing).** The single-format reader is now a board-adapter
+registry: `ats-reader.ts` shares one `readPagedBoard` loop (robots → paginate → parse), with
+iCIMS and a new header-driven **PeopleAdmin/SilkRoad** parser as adapters; `detectListSource`
+returns `icims | peopleadmin`; `job-search-direct.ts` dispatches on the kind. iCIMS behavior is
+unchanged (its tests still pass). This is wired into the **existing fallback trigger only** — so it
+captures a PeopleAdmin board when the web search reports it could not read it. It does **not** yet
+read the College's board on every run, because the board is readable enough that the search reports
+`read_openings` and the fallback never fires. Flipping the trigger (deterministic read of saved
+targets with a known listing URL) + storing the target listing URL is the next step, pending the
+founder decision above.
 
 ### Decisions made by the founder (2026-09-23)
 
