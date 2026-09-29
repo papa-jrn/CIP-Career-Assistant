@@ -633,3 +633,61 @@ Z.ai (GLM) or another frontier provider behind a swappable adapter — and every
 must feed the loop's memory (candidates, snapshots, briefing deltas) rather than emit
 free-floating prose. Discovery without memory would just be a monthly-Claude check-in with
 extra steps.
+
+---
+
+# Round 4 — The Magic, Realized (2026-09-29, founder-verified)
+
+The thing Rounds 1–3 were reaching for happened, on the founder's real data. After adding new
+evidence — a conversation (Alexis Jamba at Dartmouth Health, on job cuts + AI displacement),
+multiple GitHub repositories, the CCTV 2025 annual report, and CIP itself — and re-running the
+evidence analysis, the advisor produced a connected, insightful, honestly-labeled re-analysis that:
+
+- **Connected four independent inputs into one strategic shift:** weaken Dartmouth Health (from the
+  conversation), and strengthen web-development / AI-innovation / executive-leadership positioning
+  (from GitHub + annual report + CIP).
+- **Produced a real "What changed"** — strengthened, weakened, *and* questions retired — not a
+  re-rendered snapshot.
+- **Ran a full change-detection pass at Evidence score 315** (deeply saturated). Under the
+  pre-repair code, that score meant "you're done, no new info." The Autumn loop-repair is exactly
+  why it engaged instead of shutting down — the August failure, fixed, proven on real data.
+- **Stayed evidence-aware and honest:** it separated the primary-source DH event from downstream
+  inference, and named the specific artifacts behind each strengthened claim.
+
+The founder's words: **"THIS IS THE MAGIC."** He is right, and it is the product's reason to exist.
+
+## Why this is the differentiation, not a nice-to-have
+
+No single Claude/ChatGPT prompt does this, because it cannot hold the inputs across time. A
+conversation from three weeks ago, three GitHub repos, an annual report, and a project you are
+building do not co-exist in a chat window. CIP's additive memory **plus** the change-detection loop
+is what turns them into one coherent, evolving strategy. This is precisely the "better than a
+monthly Claude check-in" moat from Round 3's competitor reframe — now demonstrated, not argued.
+
+## Product requirement: every user must reliably reach this
+
+This must not be an accident the founder stumbled into on run twenty. Reaching the magic needs
+three things, and **the product is responsible for driving all three**:
+
+1. **Rich accumulated evidence.** The insight was only possible because varied real evidence existed
+   (conversation + code + document + project). The app must actively and repeatedly invite the user
+   to add conversations, links, documents, and projects — this is the fuel; a thin profile yields a
+   thin analysis.
+2. **Re-running the analysis after new evidence.** The magic came from the *re-analysis pass*, not
+   from saving evidence. Saving without re-analyzing produces nothing — the exact August failure.
+   The app must nudge the user to re-analyze whenever new evidence has landed. (`getStaleSignalNotice`
+   is the seed of this; it must be prominent wherever evidence enters, not buried.)
+3. **A loop engine that never shuts down.** Delivered by the Autumn loop-repair: saturation is
+   readiness, not a stop sign; new inputs always trigger change-detection with a mandatory changeLog.
+
+**Acceptance bar:** a user who adds two or three genuine pieces of evidence and re-analyzes should
+get a "What changed" readout that visibly connects them and shifts strategy — the way this one did.
+If they don't, the fuel (evidence) or the trigger (the re-analysis prompt) was missing; that is a
+product gap to close, not a user error.
+
+## Onboarding implication
+
+The founder reached this after months of accumulated context; a new user starts empty. So the
+first-run experience must (a) capture a résumé plus one or two real inputs fast, (b) show a first
+analysis, then (c) explicitly teach the loop: *"add what you learn, come back, watch it change."*
+The magic is the retention hook — show it early and deliberately, not by accident on run twenty.
