@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import { loadJobSearchConfig } from "../lib/cip/job-search-config";
 import { loadDueState, loadLatestRunView } from "../lib/cip/job-search-run";
+import { buildPostingAnnotations } from "../lib/cip/opportunity-recommendations";
 import { renderJobSearchPanel } from "../lib/cip/job-search-view";
 import { loadStoredSearchPreferences, type StoredSearchPreferences } from "../lib/cip/search-preferences";
 import { readJobSearchEnv } from "../lib/cip/server-env";
@@ -51,7 +52,8 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         const config = loadJobSearchConfig(readJobSearchEnv);
         const latestRun = await loadLatestRunView(supabase, user.id);
         const due = await loadDueState(supabase, user.id, config, new Date().toISOString());
-        panelHtml = renderJobSearchPanel(latestRun, { runKey: crypto.randomUUID(), due, configured: config.configured });
+        const annotations = latestRun ? await buildPostingAnnotations(supabase, user.id, latestRun) : undefined;
+        panelHtml = renderJobSearchPanel(latestRun, { runKey: crypto.randomUUID(), due, configured: config.configured }, annotations);
       } catch (error) {
         const detail = error instanceof Error ? error.message : "unknown error";
         panelHtml = `<div id="job-search-panel"><p class="text-sm text-red-800">Could not load the weekly job search: ${detail.replace(/[<>&]/g, "")}. If this mentions a missing table, apply the latest Supabase migrations.</p></div>`;

@@ -1,6 +1,9 @@
 import type { ObservationRow, RunView, WeeklyDiff } from "@/lib/cip/job-search-run";
 import { countByState, isOutsideArea } from "@/lib/cip/job-search-run";
 import { describePay } from "@/lib/cip/pay";
+import type { Recommendation, RecommendationCategory } from "@/lib/cip/recommendation";
+import { matchDisposition, type DispositionStatus, type PostingDisposition } from "@/lib/cip/posting-dispositions";
+import type { PostingAnnotations } from "@/lib/cip/opportunity-recommendations";
 
 /**
  * Server-rendered HTML for the weekly job-search panel (Rethink §10, first cut). One function
@@ -50,6 +53,34 @@ const TIER_LABEL: Record<string, string> = {
   general: "Open-web search",
   direct_read: "Read directly from the employer's job list",
 };
+
+const PILL = "inline-flex rounded-md px-2 py-1 text-xs font-semibold";
+
+// The app's suggested next move (step 6). Tone is muted and semantic, never louder than the
+// verification pill it sits under.
+const CHIP_META: Record<RecommendationCategory, { label: string; tone: string }> = {
+  talk_first: { label: "Talk to someone first", tone: "bg-[var(--accent-soft)] text-[var(--accent-strong)]" },
+  check_funding: { label: "Check the funding first", tone: "bg-yellow-50 text-yellow-900" },
+  apply: { label: "Apply now", tone: "bg-green-50 text-green-800" },
+  monitor: { label: "Monitor", tone: "bg-[var(--panel)] text-[var(--muted)]" },
+  skip: { label: "Skip", tone: "bg-red-50 text-red-800" },
+};
+
+// What the user has decided/done (their override of the suggestion; also the action-tracking state).
+const STATUS_LABEL_USER: Record<DispositionStatus, string> = {
+  watching: "Keeping an eye on it",
+  applied: "Applied",
+  talking: "Reached out",
+  passed: "Not for me",
+};
+
+// The buttons offered in the expander. "Keep an eye on for now" is the park-without-deciding action.
+const STATUS_ACTIONS: Array<{ status: DispositionStatus; label: string }> = [
+  { status: "watching", label: "Keep an eye on for now" },
+  { status: "applied", label: "Mark applied" },
+  { status: "talking", label: "Reached out" },
+  { status: "passed", label: "Not for me" },
+];
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -116,7 +147,41 @@ function isSkillMatch(row: ObservationRow) {
   return row.source_tier === "direct_read" && row.matched_role_term === "skill";
 }
 
-function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set<string>) {
+// The recommendation chip + the user's own status + the "why / change" expander. The app's chip is
+// always computed; when the user has set a status it takes visual precedence but the suggestion is
+// still shown, so the card stays honest about what changed.
+function recommendationBlock(row: ObservationRow, annotations?: PostingAnnotations) {
+  if (!annotations) return "";
+  const rec = annotations.recommendations.get(row.source_url);
+  if (!rec) return "";
+  const userStatus: PostingDisposition | null = matchDisposition(row, annotations.dispositions);
+  const chip = CHIP_META[rec.category];
+
+  const shown = userStatus
+    ? `<span class="${PILL} bg-[var(--accent-soft)] text-[var(--accent-strong)]">Your call: ${escapeHtml(STATUS_LABEL_USER[userStatus.status])}</span><span class="text-xs text-[var(--muted)]">app suggested: ${escapeHtml(chip.label)}</span>`
+    : `<span class="${PILL} ${chip.tone}">${escapeHtml(chip.label)}</span><span class="text-xs text-[var(--muted)]">· ${escapeHtml(rec.confidence)} confidence</span>`;
+
+  const vals = (status: string) =>
+    escapeHtml(JSON.stringify({ source_url: row.source_url, employer: row.employer_text, requisition_id: row.requisition_id ?? "", status }));
+  const actionBtn = "rounded-md border border-[var(--line)] px-2 py-1 text-xs hover:bg-[var(--panel)]";
+  const button = (status: string, label: string, disabled = false) =>
+    `<button type="button" class="${actionBtn}" hx-post="/api/jobs/disposition" hx-vals='${vals(status)}' hx-target="#job-search-panel" hx-swap="outerHTML"${disabled ? " disabled" : ""}>${escapeHtml(label)}</button>`;
+  const statusButtons = STATUS_ACTIONS.map((action) => button(action.status, action.label, userStatus?.status === action.status)).join("");
+  const clearButton = userStatus ? button("clear", "Clear my status") : "";
+
+  return `
+    <div class="mt-3 border-t border-[var(--line)] pt-3">
+      <div class="flex flex-wrap items-center gap-2">${shown}</div>
+      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(rec.rationale)}</p>
+      <details class="mt-1">
+        <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Why / change</summary>
+        <ul class="mt-2 list-disc space-y-1 pl-4 text-xs text-[var(--muted)]">${rec.signals.map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>
+        <div class="mt-2 flex flex-wrap gap-2">${statusButtons}${clearButton}</div>
+      </details>
+    </div>`;
+}
+
+function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set<string>, annotations?: PostingAnnotations) {
   const href = safeHref(row.source_url);
   const label = VERIFICATION_LABEL[row.verification_state] ?? VERIFICATION_LABEL.discovered_unverified;
   const isNew = Boolean(newUrls?.has(row.source_url));
@@ -147,17 +212,38 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
       ${payLine ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pay: ${escapeHtml(payLine)}</p>` : ""}
       ${row.verification_note ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(row.verification_note)}${row.verification_checked_at ? ` (checked ${escapeHtml(formatDate(row.verification_checked_at))})` : ""}</p>` : ""}
       <p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(TIER_LABEL[row.source_tier] ?? "")}${row.source_tier === "general" && row.verification_state !== "verified_open" ? " (treat as a lead until verified)" : ""}${row.carried_forward ? " · carried forward from a prior search and re-checked" : ""}</p>
+      ${recommendationBlock(row, annotations)}
     </article>`;
 }
 
-function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null, newUrls?: Set<string>) {
+function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null, newUrls?: Set<string>, annotations?: PostingAnnotations) {
   if (!rows.length) return "";
   return `
     <section class="mt-5">
       <h3 class="text-sm font-semibold">${escapeHtml(title)} <span class="font-normal text-[var(--muted)]">(${rows.length})</span></h3>
       ${note ? `<p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(note)}</p>` : ""}
-      <div class="mt-2 grid gap-3">${rows.map((row) => postingCard(row, floorUsd, newUrls)).join("")}</div>
+      <div class="mt-2 grid gap-3">${rows.map((row) => postingCard(row, floorUsd, newUrls, annotations)).join("")}</div>
     </section>`;
+}
+
+// A one-line count of the app's suggestions, next to the weekly-diff banner. Skip is left out — it
+// is not a call to act on. Shown only when recommendations are available.
+function chipCountStrip(actionableRows: ObservationRow[], annotations?: PostingAnnotations) {
+  if (!annotations) return "";
+  const counts: Record<RecommendationCategory, number> = { talk_first: 0, check_funding: 0, apply: 0, monitor: 0, skip: 0 };
+  for (const row of actionableRows) {
+    const rec = annotations.recommendations.get(row.source_url);
+    if (rec) counts[rec.category] += 1;
+  }
+  const order: Array<[RecommendationCategory, string]> = [
+    ["apply", "to apply"],
+    ["talk_first", "talk first"],
+    ["check_funding", "funding check"],
+    ["monitor", "monitor"],
+  ];
+  const parts = order.filter(([category]) => counts[category] > 0).map(([category, label]) => `${counts[category]} ${label}`);
+  if (!parts.length) return "";
+  return `<p class="mt-3 text-xs text-[var(--muted)]">Suggested this week: ${escapeHtml(parts.join(" · "))}.</p>`;
 }
 
 // "What changed since your last search" (step 5). Counts are integers built into the markup; the
@@ -206,7 +292,7 @@ function detailsBlock(view: RunView) {
     </details>`;
 }
 
-export function renderJobSearchPanel(view: RunView | null, context: PanelContext): string {
+export function renderJobSearchPanel(view: RunView | null, context: PanelContext, annotations?: PostingAnnotations): string {
   const open = '<div id="job-search-panel">';
 
   // In progress: this element advances the run by one step on load and replaces itself.
@@ -274,9 +360,9 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
       : "";
 
   const newUrls = view.diff?.newSourceUrls;
-  return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${empty}
-    ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd, newUrls)}
-    ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd, newUrls)}
+  return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${chipCountStrip([...verified, ...notVerified], annotations)}${empty}
+    ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd, newUrls, annotations)}
+    ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd, newUrls, annotations)}
     ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd, newUrls)}
     ${group("Closed or gone", "The source says closed, its application deadline has passed, or the page no longer exists.", gone, floorUsd)}
     ${group("Excluded by your rules", "These match an exclusion you set and were not checked further.", excluded, floorUsd)}

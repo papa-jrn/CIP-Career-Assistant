@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { loadJobSearchConfig } from "@/lib/cip/job-search-config";
 import { readJobSearchEnv } from "@/lib/cip/server-env";
 import { loadDueState, loadRunView, startJobSearchRun } from "@/lib/cip/job-search-run";
+import { buildPostingAnnotations } from "@/lib/cip/opportunity-recommendations";
 import { renderJobSearchPanel, renderPanelError } from "@/lib/cip/job-search-view";
 import { checkRateLimit, clientRateLimitKey } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
@@ -36,7 +37,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const outcome = await startJobSearchRun(supabase, user.id, runKey, { config });
     const view = await loadRunView(supabase, user.id, outcome.runId);
     const due = await loadDueState(supabase, user.id, config, new Date().toISOString());
-    return html(renderJobSearchPanel(view, { runKey: crypto.randomUUID(), due, configured: config.configured }));
+    // A freshly started run is still advancing (chips render only when finished); an already-finished
+    // reused run gets its chips.
+    const finished = Boolean(view && view.run.status !== "running" && view.run.status !== "queued");
+    const annotations = finished && view ? await buildPostingAnnotations(supabase, user.id, view) : undefined;
+    return html(renderJobSearchPanel(view, { runKey: crypto.randomUUID(), due, configured: config.configured }, annotations));
   } catch (error) {
     return html(renderPanelError(error instanceof Error ? error.message : "Could not start the search."));
   }

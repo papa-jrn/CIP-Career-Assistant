@@ -3,6 +3,7 @@ import { loadJobSearchConfig } from "@/lib/cip/job-search-config";
 import { readJobSearchEnv } from "@/lib/cip/server-env";
 import { createOpenAiProvider } from "@/lib/cip/job-search-engine";
 import { advanceJobSearchRun, loadDueState } from "@/lib/cip/job-search-run";
+import { buildPostingAnnotations } from "@/lib/cip/opportunity-recommendations";
 import { renderJobSearchPanel, renderPanelError } from "@/lib/cip/job-search-view";
 import { checkRateLimit, clientRateLimitKey } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
@@ -43,7 +44,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
     if (!view) return html(renderPanelError("That search could not be found."), 404);
     const due = await loadDueState(supabase, user.id, config, new Date().toISOString());
-    return html(renderJobSearchPanel(view, { runKey: crypto.randomUUID(), due, configured: config.configured }));
+    // Chips render only on a finished run; skip the extra loads while the run is still advancing.
+    const finished = view.run.status !== "running" && view.run.status !== "queued";
+    const annotations = finished ? await buildPostingAnnotations(supabase, user.id, view) : undefined;
+    return html(renderJobSearchPanel(view, { runKey: crypto.randomUUID(), due, configured: config.configured }, annotations));
   } catch (error) {
     return html(renderPanelError(error instanceof Error ? error.message : "The search step failed."));
   }

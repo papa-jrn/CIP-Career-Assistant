@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-09-30 — steps 0-4, the weekly diff (step 5, item 1), and step 9 are built and unit-tested; the remaining Opportunities items (recommendation chips, action tracking, employer resolution) and the Employers redesign are not started. Lane-scoring ↔ evidence-analysis propagation fix is specced but not built. See §16 for the status board and build log.**
+Status: **Updated 2026-09-30 — steps 0-4, the weekly diff, the recommendation chips + user status / action tracking (items 1-3), and step 9 are built and unit-tested (216 tests). Remaining on Opportunities: only item 4 (employer resolution). Then the lane-scoring ↔ evidence-analysis propagation fix, then the Employers redesign incl. local-business discovery. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -835,6 +835,104 @@ Still to do on the Opportunities page: items 2-4 (recommendation chips, action t
 resolution). Then the lane-scoring ↔ evidence-analysis propagation fix, then the Employers-page
 reassessment incl. local-business discovery.
 
+### 2026-09-30 (later) — Recommendation chips + user status: finalized design (step 6, items 2 & 3)
+
+Founder-confirmed design for the per-posting recommendation chips, folding in items 2 (chips) and 3
+(action tracking) because they share one store.
+
+**Decisions (founder, 2026-09-30):**
+1. **Deterministic, no per-posting AI call.** The chip's category, rationale, and confidence come from
+   a transparent rules engine over signals we already have. Cheaper (25 postings/run), fully
+   explainable (§19: label it, attach confidence, let the user correct), and there is nothing to fall
+   back from. An AI-polished sentence, if ever wanted, is an additive layer with the deterministic text
+   as its fallback.
+2. **One shared table** for the user's override of the chip AND action tracking (item 3): the app's
+   chip is the *suggestion*; the user's status is what they *decided/did*. Same row.
+3. **Keep the Verified/Lead grouping** (a core integrity signal). Chips are inline per card, plus a
+   count strip by the weekly-diff banner. Do NOT re-group the whole board by recommendation.
+
+**The five app suggestions (deterministic chip), first match wins:**
+1. **Talk to someone first** — strongest trigger is the **network cross-reference**: a contact in the
+   user's network whose `company`/organization matches the posting's employer → "Reach out to <name>,
+   connected to <employer>, about this role," using the contact's existing `recommendedFirstAsk` /
+   `outreachStory`. Also fires on an open follow-up obligation tied to the employer/lane, or a senior
+   title at a high-priority watched employer whose strategic `nextMove` is relationship-oriented.
+2. **Check the funding first** — employer resolves to a nonprofit/public/education `category` AND it is
+   a senior/program role or pay is unstated → confirm grant vs endowed before investing time. (The
+   endowed-ED insight. Only fires when the employer actually resolves to a category — never invented.)
+3. **Apply now** — verified open, real lane match (`matched_role_term` non-empty and not `skill`),
+   within places or remote, pay ≥ floor or unknown.
+4. **Monitor** — the app's "worth watching": not-yet-verified lead, skill-match outside the lanes, pay
+   just under floor, or unknown location. (An unverified lead can never say Apply; it caps here.)
+5. **Skip** — live but weak: no lane match at a low-priority/unknown employer, or pay well below floor.
+   Never hidden; distinct from Excluded/Closed which are already their own groups.
+
+Confidence (high/medium/low) drops when the employer does not resolve or pay/location is unknown.
+
+**Grounding — all real, already stored:** `verification_state`, `matched_role_term`, `source_tier` +
+skill marker, `salary_text` vs brief `compensation.floorUsd`, `location_status`/`remote_status` on the
+observation; `watched_employers.category`/`priority`/`fit_score`; `StrategicEmployerScore.nextMove` and
+`followUpObligations` from strategic state; and network **contactMatches / contact.company** from the
+latest `network_analysis` in `career_sources`. Weak link: matching a posting's free-text `employer_text`
+to a watched employer / contact company. That is **employer resolution (item 4), not built** — so v1
+does best-effort normalized-name matching and **degrades gracefully**: unresolved → posting-level
+signals only, at lower confidence, and the funding/talk-first chips simply do not fire without their
+grounding. Item 4 later sharpens this.
+
+**User status (the shared store, `posting_dispositions`):** the user can set — and it persists across
+runs by the same identity key carry-forward uses (normalized URL, or employer+requisition) — one of:
+`watching` ("**Keep an eye on for now**": park without a forward/backward decision; the posting stays
+listed, and if it is later filled/removed carry-forward re-verifies it as closed — itself a useful data
+point), `applied`, `talking` (reached out / in conversation), or `passed` ("not for me"), plus clear.
+When set, the user's status takes visual precedence ("Your call: keeping an eye on this") while still
+honestly showing "(app suggested: Apply)". The app's **Monitor** suggestion and the user's **watching**
+status are deliberately distinct: one answers "what does the app think?", the other "what have I
+decided?".
+
+**UI:** inline chip (label + confidence + one-line why) with a "why / change" expander showing the
+named signals and the status buttons; a count strip next to the diff banner; verification grouping
+unchanged. Override/status writes go to a new same-origin, rate-limited `/api/jobs/disposition`
+endpoint and re-render the card.
+
+**Build order:** (A) `posting_dispositions` migration + loader/writer + tests; (B) `recommendation.ts`
+deterministic engine (pure, heavily tested); (C) network cross-reference loader (latest
+`network_analysis` contacts → employer match); (D) view wiring + the disposition endpoint; (E) docs.
+Everything deterministic; force the deterministic path is moot (no AI here). Migration must be applied
+to hosted Supabase before the endpoint can write.
+
+### 2026-09-30 (later still) — Recommendation chips + user status: BUILT and tested
+
+All five phases landed; full suite green (**216 tests**, +17), typecheck clean, production SSR build
+compiles.
+- **Engine** — `recommendation.ts`, pure `recommendPosting(posting, context)`. The five-chip ladder
+  above with confidence and a transparent `signals[]` list. Unverified leads can never reach Apply;
+  closed/excluded return a quiet skip. 13 unit tests pin every branch and the precedence.
+- **Store** — migration `20260930130000_posting_dispositions.sql` (one row per posting identity;
+  status ∈ watching/applied/talking/passed; RLS; secondary employer+requisition index). Module
+  `posting-dispositions.ts`: `dispositionKeys`, `loadDispositions`/`indexDispositions`/
+  `matchDisposition` (URL first, then employer+requisition), `setDisposition` (update-or-insert),
+  `clearDisposition`. Shared by the chip override AND action tracking (item 3). **Apply this
+  migration to hosted Supabase before the endpoint can write.**
+- **Grounding loader** — `opportunity-recommendations.ts`. `loadRecommendationInputs` pulls resolved
+  employers (`watched_employers.category`/priority/fit + `nextMove` from strategic state), network
+  contacts by company (parsed from the latest `network_analysis`), open follow-up obligations, and
+  the lanes. `recommendationForPosting` resolves each posting by best-effort normalized name
+  (`normOrg`) and recommends; `buildPostingAnnotations` returns a `Map<source_url, Recommendation>`
+  plus the disposition index — the single call the page/endpoints make. Degrades gracefully when an
+  employer does not resolve.
+- **View** — inline chip (label + confidence + one-line why) with a "Why / change" expander showing
+  the named signals and the status buttons ("Keep an eye on for now", "Mark applied", "Reached out",
+  "Not for me", "Clear my status"); the user's status takes visual precedence while still naming the
+  app's suggestion; a "Suggested this week: N to apply · M talk first · …" count strip by the diff
+  banner. Verification grouping unchanged; chips render on verified + lead cards only.
+- **Endpoint** — `POST /api/jobs/disposition` (same-origin, auth, rate-limited, http-URL + status
+  validated) writes/clears the status and re-renders the panel via htmx. Chips are computed only for a
+  finished run, so the advance loop is untouched.
+
+Fixtures: `fake-supabase` gained `delete`, `lt`, and `lte`. Next on the Opportunities page: none —
+items 1-3 are done; item 4 (employer resolution) will sharpen the chips' grounding. Then the
+lane-scoring ↔ evidence-analysis propagation fix, then the Employers-page reassessment.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -848,9 +946,11 @@ reassessment incl. local-business discovery.
 ### Migrations (apply in this order; each is safe to run twice)
 
 `20260923120000_search_preference_items.sql`, `20260923130000_job_search_runs.sql`, `20260923140000_archive_board_era_opportunities.sql`,
-`20260923150000_direct_read_tier.sql`, `20260930120000_posting_persistence.sql`. The middle two are needed for the archive marker and to
-save direct-read postings; the last adds `carried_forward` + the `(user_id, source_url)` index for cross-run persistence and **must be
-applied to hosted Supabase** (dashboard SQL editor) before the carry-forward path can write.
+`20260923150000_direct_read_tier.sql`, `20260930120000_posting_persistence.sql`, `20260930130000_posting_dispositions.sql`. The archive
+marker and direct-read migrations are needed for those features; `posting_persistence` adds `carried_forward` + the `(user_id, source_url)`
+index for cross-run persistence; `posting_dispositions` adds the user-status / action-tracking table. Both 2026-09-30 migrations **must be
+applied to hosted Supabase** (dashboard SQL editor) — `posting_persistence` before carry-forward can write, `posting_dispositions` before the
+chip status endpoint can write.
 
 ### Next, in order
 

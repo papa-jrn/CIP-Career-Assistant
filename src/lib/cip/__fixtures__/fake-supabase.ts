@@ -40,7 +40,7 @@ export function createFakeSupabase(seed: Db = {}) {
   }
 
   class Query implements PromiseLike<{ data: unknown; error: { message: string } | null; count?: number | null }> {
-    private op: "select" | "insert" | "update" = "select";
+    private op: "select" | "insert" | "update" | "delete" = "select";
     private filters: Array<(row: Row) => boolean> = [];
     private patch: Row = {};
     private inserted: Row[] = [];
@@ -71,6 +71,10 @@ export function createFakeSupabase(seed: Db = {}) {
     update(patch: Row) {
       this.op = "update";
       this.patch = patch;
+      return this;
+    }
+    delete() {
+      this.op = "delete";
       return this;
     }
     eq(column: string, value: unknown) {
@@ -140,6 +144,12 @@ export function createFakeSupabase(seed: Db = {}) {
         const updated = matches();
         for (const row of updated) Object.assign(row, this.patch);
         return { data: structuredClone(updated), error: null };
+      }
+
+      if (this.op === "delete") {
+        const removed = matches();
+        db[this.table] = rows.filter((row) => !removed.includes(row));
+        return { data: structuredClone(removed), error: null };
       }
 
       let found = matches();
