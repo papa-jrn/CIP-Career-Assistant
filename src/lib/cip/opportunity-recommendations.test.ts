@@ -71,11 +71,12 @@ describe("recommendationForPosting (resolution + matching)", () => {
   it("labels the matched lane when a lane's text overlaps the matched role term", () => {
     const rec = recommendationForPosting(
       drow({ title: "Operations Manager", matched_role_term: "operations", salary_text: "$95,000" }),
-      inputs({ lanes: [{ lane: "program operations", label: "Primary" }], employers: [employerRow({ category: "advanced manufacturing", priority: "medium", fitScore: 70 })] }),
+      inputs({ lanes: [{ lane: "program operations", label: "Primary lane" }], employers: [employerRow({ category: "advanced manufacturing", priority: "medium", fitScore: 70 })] }),
     );
     // Operations Manager is senior, but the employer is not a mission org, so it applies.
     expect(rec.category).toBe("apply");
     expect(rec.rationale).toMatch(/matches your Primary lane/);
+    expect(rec.rationale).not.toMatch(/lane lane/);
   });
 });
 

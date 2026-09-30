@@ -103,7 +103,7 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   if (context.networkLink) signals.push(`${context.networkLink.contactName} in your network is connected to ${employerName}`);
   if (context.followUp) signals.push(`Open follow-up with ${context.followUp.contactName} tied to this employer`);
   if (isSkillMatch) signals.push("Outside your lanes, but matches your proven experience");
-  else if (laneMatch) signals.push(context.laneLabel ? `Matches your ${context.laneLabel} lane` : "Matches one of your target roles");
+  else if (laneMatch) signals.push(context.laneLabel ? `Matches your ${context.laneLabel}` : "Matches one of your target roles");
   else signals.push("No clear lane match");
   if (context.employer?.category) signals.push(`Employer type: ${context.employer.category}`);
   signals.push(floor.note);
@@ -156,7 +156,7 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
 
   // 3. Apply now — clean, high-confidence fit. An unverified lead can never reach here.
   if (verified && laneMatch && !outsideArea && !payBelow) {
-    const laneBit = context.laneLabel ? `, matches your ${context.laneLabel} lane` : ", matches a target role";
+    const laneBit = context.laneLabel ? `, matches your ${context.laneLabel}` : ", matches a target role";
     const payBit = payMeets ? ", pay meets your floor" : "";
     const confidence: Confidence = !payUnknown && !locUnknown && Boolean(context.employer) ? "high" : "medium";
     return {

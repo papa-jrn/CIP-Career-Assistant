@@ -13,7 +13,7 @@ const drow = (over: Partial<ObservationRow> = {}): ObservationRow => ({
 });
 
 const ctx = (over: Partial<RecommendationContext> = {}): RecommendationContext => ({
-  floorUsd: 85_000, laneLabel: "Primary", employer: null, networkLink: null, followUp: null, ...over,
+  floorUsd: 85_000, laneLabel: "Primary lane", employer: null, networkLink: null, followUp: null, ...over,
 });
 
 const employer = (over: Partial<ResolvedEmployer> = {}): ResolvedEmployer => ({
@@ -108,7 +108,8 @@ describe("recommendPosting", () => {
   it("always includes the evidence signals for the expander", () => {
     const rec = recommendPosting(drow({ salary_text: "$92,000" }), ctx({ employer: employer({ category: "advanced manufacturing" }) }));
     expect(rec.signals).toContain("Verified open on its own page");
-    expect(rec.signals).toContain("Matches your Primary lane");
+    expect(rec.signals).toContain("Matches your Primary lane"); // label already ends in "lane"; no double word
+    expect(rec.rationale).not.toMatch(/lane lane/);
     expect(rec.signals).toContain("Within your places");
     expect(rec.signals.some((s) => /Employer type: advanced manufacturing/.test(s))).toBe(true);
   });
