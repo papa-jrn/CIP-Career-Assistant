@@ -114,6 +114,22 @@ export interface ObservationRow {
 export interface RunView {
   run: RunRow;
   observations: ObservationRow[];
+  /** What changed since the previous searched run; present only on a finished run with a prior run. */
+  diff?: WeeklyDiff;
+}
+
+/** The weekly change readout (Rethink §10 / step 5): new, still-open, and newly-closed since last run. */
+export interface WeeklyDiff {
+  /** finished_at of the run this one is compared against; null when there is no prior run to compare. */
+  previousRunAt: string | null;
+  /** Postings not present in the previous run (matched by canonical URL or employer+requisition). */
+  newCount: number;
+  /** Postings present last run and still live (not closed/gone) this run. */
+  returningCount: number;
+  /** Postings that were live last run and are now closed/gone, or no longer listed at all. */
+  closedCount: number;
+  /** Raw source_urls of the "new" postings, so the view can badge exactly those cards. */
+  newSourceUrls: Set<string>;
 }
 
 export interface RunDeps {
@@ -789,10 +805,101 @@ async function carryForwardPriorPostings(
   await supabase.from("job_search_observations").insert(rows);
 }
 
+// A run whose results are worth diffing against: it actually searched and finished.
+const SEARCHED_STATUSES: RunStatus[] = ["succeeded", "partial", "budget_limited"];
+
+export function isClosedOrGone(row: { verification_state: string }): boolean {
+  return row.verification_state === "source_reports_closed" || row.verification_state === "no_longer_visible";
+}
+
+function identityKeys(row: ObservationRow): { url: string; req: string | null } {
+  return {
+    url: normalizeUrl(row.source_url),
+    req: row.requisition_id ? `${row.employer_text.toLowerCase()}|${row.requisition_id.toLowerCase()}` : null,
+  };
+}
+
+/**
+ * "What changed since your last search." Compares this run's shown postings against the previous
+ * run's, by the same identity carry-forward uses (canonical URL or employer+requisition). New =
+ * absent last run; returning = seen last run and still live; closed = was live last run and is now
+ * closed/gone this run OR no longer listed at all. Excluded rows are not part of the change story.
+ */
+export function computeWeeklyDiff(
+  current: ObservationRow[],
+  previous: ObservationRow[],
+  previousRunAt: string | null,
+): WeeklyDiff {
+  const cur = current.filter((row) => !row.exclusion_hit);
+  const prev = previous.filter((row) => !row.exclusion_hit);
+  const prevUrls = new Set(prev.map((row) => identityKeys(row).url));
+  const prevReqs = new Set(prev.map((row) => identityKeys(row).req).filter((key): key is string => key !== null));
+  const wasSeen = (row: ObservationRow) => {
+    const { url, req } = identityKeys(row);
+    return prevUrls.has(url) || (req !== null && prevReqs.has(req));
+  };
+
+  const newSourceUrls = new Set<string>();
+  let newCount = 0;
+  let returningCount = 0;
+  let closedCount = 0;
+  for (const row of cur) {
+    if (wasSeen(row)) {
+      if (isClosedOrGone(row)) closedCount += 1;
+      else returningCount += 1;
+    } else {
+      newCount += 1;
+      newSourceUrls.add(row.source_url);
+    }
+  }
+
+  // Postings that were live last run but do not appear at all this run (carry-forward disabled or
+  // over the cap): counted as no-longer-listed so the change total stays honest.
+  const curUrls = new Set(cur.map((row) => identityKeys(row).url));
+  const curReqs = new Set(cur.map((row) => identityKeys(row).req).filter((key): key is string => key !== null));
+  for (const row of prev) {
+    if (isClosedOrGone(row)) continue;
+    const { url, req } = identityKeys(row);
+    if (!curUrls.has(url) && !(req !== null && curReqs.has(req))) closedCount += 1;
+  }
+
+  return { previousRunAt, newCount, returningCount, closedCount, newSourceUrls };
+}
+
+// The most recent searched run before this one (used to diff "what changed").
+async function loadPreviousSearchedRun(
+  supabase: SupabaseClient,
+  userId: string,
+  currentRunId: string,
+  currentFinishedAt: string | null,
+): Promise<{ id: string; finished_at: string | null } | null> {
+  let query = supabase
+    .from("job_search_runs")
+    .select("id,finished_at")
+    .eq("user_id", userId)
+    .in("status", SEARCHED_STATUSES)
+    .neq("id", currentRunId)
+    .order("finished_at", { ascending: false })
+    .limit(1);
+  if (currentFinishedAt) query = query.lt("finished_at", currentFinishedAt);
+  const { data } = await query.maybeSingle();
+  return (data as { id: string; finished_at: string | null } | null) ?? null;
+}
+
 export async function loadRunView(supabase: SupabaseClient, userId: string, runId: string): Promise<RunView | null> {
   const run = await loadRun(supabase, userId, runId);
   if (!run) return null;
-  return { run, observations: await loadObservations(supabase, userId, runId) };
+  const observations = await loadObservations(supabase, userId, runId);
+  const view: RunView = { run, observations };
+  // Attach the weekly diff only for a finished, real search — never mid-run.
+  if (SEARCHED_STATUSES.includes(run.status)) {
+    const previous = await loadPreviousSearchedRun(supabase, userId, run.id, run.finished_at);
+    if (previous) {
+      const priorObservations = await loadObservations(supabase, userId, previous.id);
+      view.diff = computeWeeklyDiff(observations, priorObservations, previous.finished_at);
+    }
+  }
+  return view;
 }
 
 export async function loadLatestRunView(supabase: SupabaseClient, userId: string): Promise<RunView | null> {

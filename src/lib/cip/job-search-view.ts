@@ -1,4 +1,4 @@
-import type { ObservationRow, RunView } from "@/lib/cip/job-search-run";
+import type { ObservationRow, RunView, WeeklyDiff } from "@/lib/cip/job-search-run";
 import { countByState, isOutsideArea } from "@/lib/cip/job-search-run";
 import { describePay } from "@/lib/cip/pay";
 
@@ -116,9 +116,10 @@ function isSkillMatch(row: ObservationRow) {
   return row.source_tier === "direct_read" && row.matched_role_term === "skill";
 }
 
-function postingCard(row: ObservationRow, floorUsd: number | null) {
+function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set<string>) {
   const href = safeHref(row.source_url);
   const label = VERIFICATION_LABEL[row.verification_state] ?? VERIFICATION_LABEL.discovered_unverified;
+  const isNew = Boolean(newUrls?.has(row.source_url));
   const title = href
     ? `<a class="font-semibold underline" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.title)}</a>`
     : `<span class="font-semibold">${escapeHtml(row.title)}</span>`;
@@ -136,7 +137,10 @@ function postingCard(row: ObservationRow, floorUsd: number | null) {
           <p class="text-sm">${title}</p>
           <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(row.employer_text)}</p>
         </div>
-        <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${label.tone}">${escapeHtml(label.text)}</span>
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          ${isNew ? `<span class="inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">New since your last search</span>` : ""}
+          <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${label.tone}">${escapeHtml(label.text)}</span>
+        </div>
       </div>
       ${isSkillMatch(row) ? `<p class="mt-2 inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">Outside your current lanes — matches your proven experience</p>` : ""}
       <p class="mt-2 text-xs leading-5 text-[var(--muted)]">${escapeHtml(locationLine(row))}${bits.length ? ` · ${bits.join(" · ")}` : ""}</p>
@@ -146,14 +150,30 @@ function postingCard(row: ObservationRow, floorUsd: number | null) {
     </article>`;
 }
 
-function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null) {
+function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null, newUrls?: Set<string>) {
   if (!rows.length) return "";
   return `
     <section class="mt-5">
       <h3 class="text-sm font-semibold">${escapeHtml(title)} <span class="font-normal text-[var(--muted)]">(${rows.length})</span></h3>
       ${note ? `<p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(note)}</p>` : ""}
-      <div class="mt-2 grid gap-3">${rows.map((row) => postingCard(row, floorUsd)).join("")}</div>
+      <div class="mt-2 grid gap-3">${rows.map((row) => postingCard(row, floorUsd, newUrls)).join("")}</div>
     </section>`;
+}
+
+// "What changed since your last search" (step 5). Counts are integers built into the markup; the
+// only free text is the previous run's date, which is escaped. Shown only when a prior run exists.
+function diffBanner(diff?: WeeklyDiff): string {
+  if (!diff) return "";
+  const when = diff.previousRunAt ? ` on ${escapeHtml(formatDate(diff.previousRunAt))}` : "";
+  if (!diff.newCount && !diff.closedCount) {
+    return `<p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">No new or newly-closed postings since your last search${when}. ${diff.returningCount} still open.</p>`;
+  }
+  const parts = [
+    diff.newCount ? `<strong>${diff.newCount}</strong> new` : "",
+    `<strong>${diff.returningCount}</strong> still open`,
+    diff.closedCount ? `<strong>${diff.closedCount}</strong> newly closed or gone` : "",
+  ].filter(Boolean);
+  return `<p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm">Since your last search${when}: ${parts.join(", ")}.</p>`;
 }
 
 function coverageBlock(view: RunView) {
@@ -253,10 +273,11 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
       ? `<p class="mt-4 text-sm text-[var(--muted)]">Nothing matching was found in the places the search could read. That is different from a failed search. See "What was checked" below for what could and could not be read. Widening your places or roles is your call; the search will not do it on its own.</p>`
       : "";
 
-  return `${open}${head}${runForm(context, label)}${banner}${empty}
-    ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd)}
-    ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd)}
-    ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd)}
+  const newUrls = view.diff?.newSourceUrls;
+  return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${empty}
+    ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd, newUrls)}
+    ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd, newUrls)}
+    ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd, newUrls)}
     ${group("Closed or gone", "The source says closed, its application deadline has passed, or the page no longer exists.", gone, floorUsd)}
     ${group("Excluded by your rules", "These match an exclusion you set and were not checked further.", excluded, floorUsd)}
     ${coverageBlock(view)}${detailsBlock(view)}
@@ -295,6 +316,7 @@ export function renderJobSearchSummary(view: RunView | null, context: PanelConte
     <div class="mt-3 rounded-md border ${bad ? "border-yellow-300 bg-yellow-50 text-yellow-900" : "border-[var(--line)] bg-[var(--background)]"} p-3 text-sm">
       <p class="font-semibold">${escapeHtml(STATUS_LABEL[run.status] ?? run.status)} · ${escapeHtml(formatDate(run.started_at))}</p>
       <p class="mt-1 leading-6">${escapeHtml(run.summary)}</p>
+      ${view.diff && (view.diff.newCount || view.diff.closedCount) ? `<p class="mt-2 leading-6">Since your last search: ${view.diff.newCount} new, ${view.diff.returningCount} still open${view.diff.closedCount ? `, ${view.diff.closedCount} newly closed` : ""}.</p>` : ""}
     </div>
     ${link(context.due.due ? "Run this week's search" : "Open Opportunities")}
   </div>`;

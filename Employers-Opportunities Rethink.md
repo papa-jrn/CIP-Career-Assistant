@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-09-30 — steps 0-4 and 9 are built (step 4 = cross-run persistence + robots-block messaging, unit-tested); steps 5-8 and the Employers redesign are not started. Lane-scoring ↔ evidence-analysis propagation fix is specced but not built. See §16 for the status board and build log.**
+Status: **Updated 2026-09-30 — steps 0-4, the weekly diff (step 5, item 1), and step 9 are built and unit-tested; the remaining Opportunities items (recommendation chips, action tracking, employer resolution) and the Employers redesign are not started. Lane-scoring ↔ evidence-analysis propagation fix is specced but not built. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -802,13 +802,38 @@ readers not to access its job list (robots.txt), so CIP could not read it direct
 hand." — so the user understands CIP is being *blocked by the site's own rules*, not that the reader
 is broken. This addresses the "Minor UX" note above. Test added in `job-search-direct.test.ts`.
 
-**"Anything else on the Opportunities page?"** — recommended next, not built: (1) a **weekly diff**
-(new since last run / still open / newly closed), now cheap because postings persist across runs;
-(2) per-posting **recommendation chips** (apply / talk-first / research-funding / skip) tied to the
-lanes, per §8; (3) minimal **action tracking** (applied / talked / passed) so the board reflects what
-the user did; (4) **employer resolution** (Dartmouth Health vs DHMC vs member hospitals vs Dartmouth
-College) so counts and dedupe are per real entity. These are steps 5-8 below; persistence was the
-prerequisite for the diff.
+**"Anything else on the Opportunities page?"** — sequenced by the founder (2026-09-30): finish the
+Opportunities page (items 1-4) before the lane-scoring fix, then reassess the Employers page
+(including *how we find businesses in a local area*). The four items: (1) a **weekly diff** (new /
+still open / newly closed); (2) per-posting **recommendation chips** (apply / talk-first /
+research-funding / skip) tied to the lanes, per §8; (3) minimal **action tracking** (applied / talked
+/ passed); (4) **employer resolution** (Dartmouth Health vs DHMC vs member hospitals vs Dartmouth
+College) so counts and dedupe are per real entity.
+
+### 2026-09-30 (later) — Weekly diff (item 1) is built and tested
+
+"What changed since your last search" now renders on the Opportunities panel and the Briefing summary.
+`computeWeeklyDiff(current, previous, previousRunAt)` (pure, in `job-search-run.ts`) compares this
+run's shown postings against the previous searched run's, using the **same identity as carry-forward**
+(canonical `normalizeUrl` OR `employer|requisition_id`): **new** = absent last run; **returning** =
+seen last run and still live; **closed** = was live last run and is now closed/gone this run OR no
+longer listed at all. Excluded rows are left out of the change story.
+- `loadRunView` attaches `diff` only for a finished searched run (`succeeded | partial |
+  budget_limited`) that has a prior searched run — never mid-run, so the advance loop stays cheap. The
+  prior run is the most recent searched run with `finished_at` before this one's.
+- View: a "Since your last search on <date>: N new, M still open, K newly closed or gone" banner (or
+  "No new or newly-closed postings…"); each brand-new card gets a **"New since your last search"**
+  badge; the Briefing shows a one-line version. Counts are integers built into the markup; the only
+  free text (the prior run's date) is escaped.
+- This is the payoff of persistence: without carry-forward, a role the discovery pass missed would
+  look "closed" every week; now it is correctly re-verified and shown as still open.
+- Tests: pure classification (new/returning/closed/dropped, requisition-match, first-run), plus an
+  end-to-end two-run test (kept / brand-new / vanished) asserting the diff counts and the rendered
+  banner + badge. Full suite green: **199 tests**.
+
+Still to do on the Opportunities page: items 2-4 (recommendation chips, action tracking, employer
+resolution). Then the lane-scoring ↔ evidence-analysis propagation fix, then the Employers-page
+reassessment incl. local-business discovery.
 
 ### Decisions made by the founder (2026-09-23)
 
@@ -833,8 +858,9 @@ applied to hosted Supabase** (dashboard SQL editor) before the carry-forward pat
    through brief, search, saved observations, and the visible result. Include a successful-zero-result and a simulated-failure path.
 2. ~~**Step 4: posting identity across runs** and re-verification of earlier finds each run (no model call).~~ **DONE 2026-09-30** — carry-forward + robots-block messaging (see the 2026-09-30 entry above).
 3. **Remember each target's real career-page URL** (user-supplied or discovered) and give it back to the search and the direct reader.
-4. **Steps 5-8:** employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College), the weekly diff, the apply / talk-first /
-   research-funding / monitor / skip recommendation, minimal action tracking; then the Employers (target workspace) redesign (§14).
+4. **Steps 5-8:** ~~the weekly diff~~ **DONE 2026-09-30**; then per-posting recommendation chips (apply / talk-first / research-funding /
+   monitor / skip), minimal action tracking, and employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College); then the
+   Employers (target workspace) redesign (§14), including **how we find businesses in a local area**.
 5. **De-founder and state-layer tests** (Autumn Phases 5-6), lane configuration, and the 990 enrichment, per the Autumn plan.
 
 ### Parked (not decided or not started)

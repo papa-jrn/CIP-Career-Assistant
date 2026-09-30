@@ -97,6 +97,14 @@ export function createFakeSupabase(seed: Db = {}) {
       this.filters.push((row) => (row[column] as number | string) >= value);
       return this;
     }
+    lt(column: string, value: number | string) {
+      this.filters.push((row) => (row[column] as number | string) < value);
+      return this;
+    }
+    lte(column: string, value: number | string) {
+      this.filters.push((row) => (row[column] as number | string) <= value);
+      return this;
+    }
     order(column: string, options?: { ascending?: boolean }) {
       this.orderBy = { column, ascending: options?.ascending ?? true };
       return this;

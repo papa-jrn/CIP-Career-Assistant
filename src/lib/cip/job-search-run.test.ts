@@ -7,10 +7,12 @@ import {
   advanceJobSearchRun,
   buildSummary,
   computeDueState,
+  computeWeeklyDiff,
   countByState,
   loadLatestVerifiedPostings,
   loadRunView,
   startJobSearchRun,
+  type ObservationRow,
   type RunView,
 } from "@/lib/cip/job-search-run";
 import { escapeHtml, renderJobSearchPanel, renderJobSearchSummary } from "@/lib/cip/job-search-view";
@@ -343,6 +345,89 @@ describe("advanceJobSearchRun", () => {
     expect(titles).not.toContain("Closed one");
     expect((view?.observations ?? []).filter((row) => row.source_url === "https://jobs.example.org/postings/1")).toHaveLength(1);
     expect((view?.observations ?? []).some((row) => row.carried_forward)).toBe(false);
+  });
+});
+
+describe("weekly diff (what changed since last run)", () => {
+  const drow = (over: Partial<ObservationRow>): ObservationRow => ({
+    id: "x", run_id: "r", title: "T", employer_text: "E", worksite_text: null,
+    source_url: "https://x.org/p/1", requisition_id: null, posted_text: null, salary_text: null,
+    remote_status: "not_stated", matched_role_term: null, source_tier: "general",
+    verification_state: "verified_open", verification_note: null, verification_checked_at: null,
+    location_status: null, location_distance_miles: null, location_note: null, exclusion_hit: null,
+    first_seen_at: NOW, carried_forward: false, ...over,
+  });
+
+  it("classifies new, still-open, newly-closed, and no-longer-listed postings", () => {
+    const previous = [
+      drow({ title: "A", source_url: "https://x.org/a", requisition_id: "R-A" }),
+      drow({ title: "B", source_url: "https://x.org/b", requisition_id: "R-B" }),
+      drow({ title: "D", source_url: "https://x.org/d", requisition_id: "R-D" }), // dropped this run
+    ];
+    const current = [
+      drow({ title: "A", source_url: "https://x.org/a", requisition_id: "R-A" }), // returning
+      drow({ title: "C", source_url: "https://x.org/c", requisition_id: "R-C" }), // new
+      drow({ title: "B", source_url: "https://x.org/b", requisition_id: "R-B", verification_state: "no_longer_visible" }), // newly closed
+      drow({ title: "X", source_url: "https://x.org/x", exclusion_hit: "employer: X" }), // excluded, ignored
+    ];
+    const diff = computeWeeklyDiff(current, previous, "2026-09-16T00:00:00.000Z");
+    expect(diff).toMatchObject({ previousRunAt: "2026-09-16T00:00:00.000Z", newCount: 1, returningCount: 1, closedCount: 2 });
+    expect([...diff.newSourceUrls]).toEqual(["https://x.org/c"]);
+  });
+
+  it("treats a re-found posting at a new URL as returning when employer+requisition still match", () => {
+    const previous = [drow({ title: "Role", source_url: "https://x.org/old", requisition_id: "R-9", employer_text: "Acme" })];
+    const current = [drow({ title: "Role", source_url: "https://x.org/new-path", requisition_id: "R-9", employer_text: "Acme" })];
+    const diff = computeWeeklyDiff(current, previous, null);
+    expect(diff).toMatchObject({ newCount: 0, returningCount: 1, closedCount: 0 });
+  });
+
+  it("reports every posting as new on the first run (no prior run to compare)", () => {
+    const diff = computeWeeklyDiff([drow({ source_url: "https://x.org/a" })], [], null);
+    expect(diff).toMatchObject({ newCount: 1, returningCount: 0, closedCount: 0, previousRunAt: null });
+  });
+});
+
+describe("weekly diff, end to end across two runs", () => {
+  const uncapped = () => config({ limits: { ...DEFAULT_LIMITS, maxRunsPerWeek: 0 } });
+  const page = (title: string, req: string) => ({ status: 200, text: `<h1>${title}</h1> Req ${req} ${"details ".repeat(80)}` });
+
+  it("carries the prior run's finds and reports new / still-open / newly-closed on the run view", async () => {
+    const fake = createFakeSupabase({ watched_employers: employers(2) });
+    const T1 = "2026-09-16T12:00:00.000Z";
+
+    // Run 1 (last week): finds a role we keep and a role that later vanishes.
+    const week1Fetcher = async (url: string) =>
+      url.endsWith("/keep") ? page("Kept Role", "R-KEEP") : url.endsWith("/gone") ? page("Vanishing Role", "R-GONE") : { status: 404, text: "" };
+    const start1 = await startJobSearchRun(fake.client, USER, "key-week1", { config: uncapped(), now: () => T1 });
+    await advanceJobSearchRun(fake.client, USER, (start1 as { runId: string }).runId, {
+      config: uncapped(), now: () => T1, fetcher: week1Fetcher,
+      provider: providerReturning([
+        posting({ title: "Kept Role", source_url: "https://jobs.example.org/keep", requisition_id: "R-KEEP" }),
+        posting({ title: "Vanishing Role", source_url: "https://jobs.example.org/gone", requisition_id: "R-GONE" }),
+      ]),
+    });
+
+    // Run 2 (this week): re-finds the kept role and a brand-new one; does NOT re-find the vanishing
+    // one, whose page is now gone — carry-forward re-checks it and records it closed.
+    const week2Fetcher = async (url: string) =>
+      url.endsWith("/keep") ? page("Kept Role", "R-KEEP") : url.endsWith("/new") ? page("Brand New Role", "R-NEW") : { status: 404, text: "" };
+    const start2 = await startJobSearchRun(fake.client, USER, "key-week2", { config: uncapped(), now });
+    const view = await advanceJobSearchRun(fake.client, USER, (start2 as { runId: string }).runId, {
+      config: uncapped(), now, fetcher: week2Fetcher,
+      provider: providerReturning([
+        posting({ title: "Kept Role", source_url: "https://jobs.example.org/keep", requisition_id: "R-KEEP" }),
+        posting({ title: "Brand New Role", source_url: "https://jobs.example.org/new", requisition_id: "R-NEW" }),
+      ]),
+    });
+
+    expect(view?.run.status).toBe("succeeded");
+    expect(view?.diff).toMatchObject({ previousRunAt: T1, newCount: 1, returningCount: 1, closedCount: 1 });
+    expect([...(view?.diff?.newSourceUrls ?? [])]).toEqual(["https://jobs.example.org/new"]);
+
+    const html = renderJobSearchPanel(view, { runKey: "abc12345", due: computeDueState(T1, 7, NOW), configured: true });
+    expect(html).toContain("Since your last search");
+    expect(html).toContain("New since your last search"); // the brand-new card is badged
   });
 });
 
