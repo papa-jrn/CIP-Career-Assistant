@@ -11,6 +11,7 @@ import {
 import {
   buildStepRequest,
   dedupeWithinRun,
+  normalizeUrl,
   parseStepPayload,
   planSearchSteps,
   type JobSearchProvider,
@@ -106,6 +107,8 @@ export interface ObservationRow {
   location_note: string | null;
   exclusion_hit: string | null;
   first_seen_at: string;
+  /** True when this row was re-verified and carried forward from an earlier run (build step 4). */
+  carried_forward: boolean;
 }
 
 export interface RunView {
@@ -129,7 +132,7 @@ const RUN_COLUMNS =
   "id,status,model,brief,outbound_facets,plan,next_step,limits,trace,coverage,usage,estimated_cost_usd,cost_basis,summary,error,started_at,finished_at,updated_at";
 
 const OBSERVATION_COLUMNS =
-  "id,run_id,title,employer_text,worksite_text,source_url,requisition_id,posted_text,salary_text,remote_status,matched_role_term,source_tier,verification_state,verification_note,verification_checked_at,location_status,location_distance_miles,location_note,exclusion_hit,first_seen_at";
+  "id,run_id,title,employer_text,worksite_text,source_url,requisition_id,posted_text,salary_text,remote_status,matched_role_term,source_tier,verification_state,verification_note,verification_checked_at,location_status,location_distance_miles,location_note,exclusion_hit,first_seen_at,carried_forward";
 
 const ACTIVE: RunStatus[] = ["queued", "running"];
 
@@ -306,11 +309,11 @@ export async function advanceJobSearchRun(
 
   const usedSoFar = normalizeUsage(run.usage);
   const step = run.plan[run.next_step];
-  if (!step) return finalize(supabase, userId, run, { now, config, forcedStatus: null });
+  if (!step) return finalize(supabase, userId, run, { now, config, forcedStatus: null, fetcher: deps.fetcher ?? safePageFetcher });
 
   const verdict = checkBudget(usedSoFar, run.next_step, config);
   if (!verdict.ok) {
-    return finalize(supabase, userId, run, { now, config, forcedStatus: "budget_limited", note: `Stopped early: ${verdict.reason}.` });
+    return finalize(supabase, userId, run, { now, config, forcedStatus: "budget_limited", note: `Stopped early: ${verdict.reason}.`, fetcher: deps.fetcher ?? safePageFetcher });
   }
 
   // Claim the step (compare-and-set). If another call already claimed it, just report state.
@@ -502,7 +505,7 @@ export async function advanceJobSearchRun(
 
   const refreshed = await loadRun(supabase, userId, run.id);
   if (refreshed && refreshed.next_step >= refreshed.plan.length) {
-    return finalize(supabase, userId, refreshed, { now, config, forcedStatus: null });
+    return finalize(supabase, userId, refreshed, { now, config, forcedStatus: null, fetcher: deps.fetcher ?? safePageFetcher });
   }
   return loadRunView(supabase, userId, run.id);
 }
@@ -549,10 +552,18 @@ async function finalize(
   supabase: SupabaseClient,
   userId: string,
   run: RunRow,
-  options: { now: () => string; config: JobSearchConfig; forcedStatus: "budget_limited" | "failed_step" | null; note?: string },
+  options: { now: () => string; config: JobSearchConfig; forcedStatus: "budget_limited" | "failed_step" | null; note?: string; fetcher?: PageFetcher },
 ): Promise<RunView | null> {
+  // Persistence (build step 4): re-verify still-live postings from the last run that this run did
+  // not re-surface, and carry them forward so good finds do not vanish between runs (matters most
+  // for web-search-only employers). Skipped on a hard failure, or when disabled/without a fetcher.
+  if (options.forcedStatus !== "failed_step" && options.fetcher && options.config.limits.carryForwardMax > 0) {
+    await carryForwardPriorPostings(supabase, userId, run.id, options.fetcher, options.config);
+  }
+
   const observations = await loadObservations(supabase, userId, run.id);
   const counts = countByState(observations);
+  const carriedCount = observations.filter((entry) => entry.carried_forward).length;
   const hadFailure = run.trace.some((entry) => entry.error) || options.forcedStatus === "failed_step";
   const hadTruncation = run.trace.some((entry) => entry.incomplete);
   const stepsRun = run.trace.length;
@@ -565,7 +576,8 @@ async function finalize(
   const cost = estimateCost(normalizeUsage(run.usage), options.config.pricing);
   const directNames = [...new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.employer))];
   const unreadNames = [...new Set(run.coverage.filter((entry) => entry.status === "direct_read_failed" || entry.status === "direct_read_unsupported").map((entry) => entry.name))];
-  const summary = buildSummary({ status, observationsCount: observations.length, counts, stepsPlanned: run.plan.length, stepsRun, note: options.note, cost, directNames, unreadNames });
+  const blockedNames = [...new Set(run.coverage.filter((entry) => entry.status === "direct_read_blocked").map((entry) => entry.name))];
+  const summary = buildSummary({ status, observationsCount: observations.length, counts, stepsPlanned: run.plan.length, stepsRun, note: options.note, cost, directNames, unreadNames, blockedNames, carriedCount });
 
   await supabase
     .from("job_search_runs")
@@ -611,6 +623,10 @@ export function buildSummary(input: {
   cost: { usd: number | null; basis: "estimated" | "unavailable" };
   directNames?: string[];
   unreadNames?: string[];
+  /** Employers whose robots.txt asked automated readers not to access the job list. */
+  blockedNames?: string[];
+  /** Postings re-verified and carried forward from the previous run. */
+  carriedCount?: number;
 }) {
   const { counts } = input;
   const found = input.observationsCount
@@ -632,7 +648,13 @@ export function buildSummary(input: {
     ? `For ${input.directNames.join(", ")}, the search could not read the job list, so the app read the employer's own public job list directly.`
     : "";
   const unread = input.unreadNames?.length ? `Could not read the job list for ${input.unreadNames.join(", ")}; please check ${input.unreadNames.length === 1 ? "it" : "them"} by hand.` : "";
-  return [lead, found, coverage, direct, unread, input.note, cost].filter(Boolean).join(" ");
+  const blocked = input.blockedNames?.length
+    ? `${input.blockedNames.join(", ")} ${input.blockedNames.length === 1 ? "asks" : "ask"} automated readers not to access ${input.blockedNames.length === 1 ? "its" : "their"} job list${input.blockedNames.length === 1 ? "" : "s"} (robots.txt), so CIP could not read ${input.blockedNames.length === 1 ? "it" : "them"} directly; please check by hand.`
+    : "";
+  const carried = input.carriedCount
+    ? `${input.carriedCount} posting${input.carriedCount === 1 ? " was" : "s were"} carried forward from your last search and re-checked.`
+    : "";
+  return [lead, found, carried, coverage, direct, unread, blocked, input.note, cost].filter(Boolean).join(" ");
 }
 
 function normalizeUsage(value: RunRow["usage"]): RunUsage {
@@ -684,6 +706,87 @@ async function loadTargetCareerUrls(
     if (name && url) byName.set(name, url);
   }
   return [...byName].map(([name, url]) => ({ name, url }));
+}
+
+/**
+ * Persistence (build step 4): re-verify still-live postings from the user's previous searched run
+ * that this run did not re-surface, and insert them as observations on this run with their original
+ * first_seen_at preserved. Re-verification is one page fetch per posting (no model call), bounded by
+ * verifyConcurrency and carryForwardMax. A posting now closed/gone carries forward in that honest
+ * state and is not carried again after that.
+ */
+async function carryForwardPriorPostings(
+  supabase: SupabaseClient,
+  userId: string,
+  currentRunId: string,
+  fetcher: PageFetcher,
+  config: JobSearchConfig,
+): Promise<void> {
+  const { data: prev } = await supabase
+    .from("job_search_runs")
+    .select("id")
+    .eq("user_id", userId)
+    .in("status", ["succeeded", "partial", "budget_limited"])
+    .neq("id", currentRunId)
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!prev) return;
+
+  const [prior, current] = await Promise.all([
+    loadObservations(supabase, userId, prev.id),
+    loadObservations(supabase, userId, currentRunId),
+  ]);
+
+  // Keep only postings still worth carrying: not already known closed/gone, not excluded.
+  const live = prior.filter(
+    (row) => row.verification_state !== "source_reports_closed" && row.verification_state !== "no_longer_visible" && !row.exclusion_hit,
+  );
+  if (!live.length) return;
+
+  // Skip anything this run already re-discovered, by canonical URL or by employer + requisition id.
+  const seenUrls = new Set(current.map((row) => normalizeUrl(row.source_url)));
+  const reqKey = (employer: string, req: string) => `${employer.toLowerCase()}|${req.toLowerCase()}`;
+  const seenReqs = new Set(current.filter((row) => row.requisition_id).map((row) => reqKey(row.employer_text, row.requisition_id as string)));
+  const toCarry = live
+    .filter((row) => {
+      if (seenUrls.has(normalizeUrl(row.source_url))) return false;
+      if (row.requisition_id && seenReqs.has(reqKey(row.employer_text, row.requisition_id))) return false;
+      return true;
+    })
+    .slice(0, config.limits.carryForwardMax);
+  if (!toCarry.length) return;
+
+  const results = await verifyPostings(
+    toCarry.map((row) => ({ title: row.title, requisitionId: row.requisition_id, sourceUrl: row.source_url, statedDates: row.posted_text })),
+    config.limits.verifyConcurrency,
+    fetcher,
+  );
+
+  const rows = toCarry.map((row, index) => ({
+    user_id: userId,
+    run_id: currentRunId,
+    title: row.title,
+    employer_text: row.employer_text,
+    worksite_text: row.worksite_text,
+    source_url: row.source_url,
+    requisition_id: row.requisition_id,
+    posted_text: row.posted_text,
+    salary_text: row.salary_text,
+    remote_status: row.remote_status,
+    matched_role_term: row.matched_role_term,
+    source_tier: row.source_tier,
+    verification_state: results[index].state,
+    verification_note: `Carried forward from your last search and re-checked. ${results[index].note}`,
+    verification_checked_at: results[index].checkedAt,
+    location_status: row.location_status,
+    location_distance_miles: row.location_distance_miles,
+    location_note: row.location_note,
+    exclusion_hit: row.exclusion_hit,
+    first_seen_at: row.first_seen_at,
+    carried_forward: true,
+  }));
+  await supabase.from("job_search_observations").insert(rows);
 }
 
 export async function loadRunView(supabase: SupabaseClient, userId: string, runId: string): Promise<RunView | null> {

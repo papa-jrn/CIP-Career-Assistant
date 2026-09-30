@@ -290,6 +290,23 @@ describe("fallback inside a run", () => {
     expect((view?.observations ?? []).map((row) => row.title)).toEqual(["Registered Nurse (RN) - Emergency"]);
   });
 
+  it("tells the user when a site's robots.txt blocks the direct read, and never fetches its list", async () => {
+    const { provider, calls } = providerFor("page_found_but_could_not_read_listings");
+    const urls: string[] = [];
+    const fetcher: PageFetcher = async (url) => {
+      urls.push(url);
+      if (url === SHELL_URL) return { status: 200, text: `<html><a href="https://${HOST}/jobs/login?loginOnly=1">Sign in</a></html>` };
+      if (url.endsWith("/robots.txt")) return { status: 200, text: "User-agent: *\nDisallow: /jobs/search" };
+      return { status: 200, text: listPage(JOBS, 1) };
+    };
+    const view = await run(provider, fetcher);
+    expect(calls).toEqual(["search"]); // nothing was read, so no selection call
+    expect(view?.observations).toHaveLength(0);
+    expect(view?.run.coverage.find((item) => item.status === "direct_read_blocked")?.note).toMatch(/robots\.txt/);
+    expect(urls.some((url) => url.includes("/jobs/search"))).toBe(false); // the list itself was left alone
+    expect(view?.run.summary).toMatch(/robots\.txt/);
+  });
+
   it("labels a direct-read pick chosen for proven skills (not a lane) as a skill match", async () => {
     const { provider } = providerFor("page_found_but_could_not_read_listings", [{ index: 0, reason: "matches web dev", basis: "skill" }]);
     const { fetcher } = fetcherFor();

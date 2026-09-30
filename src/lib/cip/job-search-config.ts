@@ -39,6 +39,8 @@ export interface JobSearchLimits {
   directReadMaxListings: number;
   directReadDelayMs: number;
   directReadMaxSelected: number;
+  /** Prior-run postings re-verified and carried forward at the end of a run (0 disables). */
+  carryForwardMax: number;
 }
 
 export interface JobSearchPricing {
@@ -79,6 +81,7 @@ export const DEFAULT_LIMITS: JobSearchLimits = {
   directReadMaxListings: 600,
   directReadDelayMs: 600,
   directReadMaxSelected: 10,
+  carryForwardMax: 40,
 };
 
 export type EnvReader = (name: string) => string | undefined;

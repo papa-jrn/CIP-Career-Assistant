@@ -41,6 +41,7 @@ const COVERAGE_LABEL: Record<string, string> = {
   read_directly_by_app: "Search could not read it, so the app read the employer's job list directly",
   direct_read_failed: "Could not be read, even directly. Check it by hand",
   direct_read_unsupported: "Could not be read, and no supported job-list format was found. Check it by hand",
+  direct_read_blocked: "The site asks automated readers not to access its job list (robots.txt). Check it by hand",
 };
 
 const TIER_LABEL: Record<string, string> = {
@@ -141,7 +142,7 @@ function postingCard(row: ObservationRow, floorUsd: number | null) {
       <p class="mt-2 text-xs leading-5 text-[var(--muted)]">${escapeHtml(locationLine(row))}${bits.length ? ` · ${bits.join(" · ")}` : ""}</p>
       ${payLine ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pay: ${escapeHtml(payLine)}</p>` : ""}
       ${row.verification_note ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(row.verification_note)}${row.verification_checked_at ? ` (checked ${escapeHtml(formatDate(row.verification_checked_at))})` : ""}</p>` : ""}
-      <p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(TIER_LABEL[row.source_tier] ?? "")}${row.source_tier === "general" && row.verification_state !== "verified_open" ? " (treat as a lead until verified)" : ""}</p>
+      <p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(TIER_LABEL[row.source_tier] ?? "")}${row.source_tier === "general" && row.verification_state !== "verified_open" ? " (treat as a lead until verified)" : ""}${row.carried_forward ? " · carried forward from a prior search and re-checked" : ""}</p>
     </article>`;
 }
 

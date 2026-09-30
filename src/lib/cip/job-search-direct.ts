@@ -37,7 +37,7 @@ export interface DirectReadTrace {
 
 export interface DirectCoverage {
   name: string;
-  status: "read_directly_by_app" | "direct_read_failed" | "direct_read_unsupported";
+  status: "read_directly_by_app" | "direct_read_failed" | "direct_read_unsupported" | "direct_read_blocked";
   note: string;
   careersPageUrl: string | null;
 }
@@ -108,8 +108,9 @@ async function attemptTargetDirectRead(
   const { name, url } = target;
   const report = (status: DirectCoverage["status"], note: string) => {
     // The known trigger runs for readable boards too, so it stays quiet on unsupported/already-read;
-    // only genuine failures are surfaced. The fallback trigger reports every case.
-    if (trigger === "stuck" || status === "direct_read_failed") {
+    // genuine failures AND a robots block are surfaced (the user should know when a site blocks us).
+    // The fallback trigger reports every case.
+    if (trigger === "stuck" || status === "direct_read_failed" || status === "direct_read_blocked") {
       outcome.coverage.push({ name, status, note, careersPageUrl: url });
     }
   };
@@ -142,6 +143,10 @@ async function attemptTargetDirectRead(
       ? await readIcimsListings(args.fetcher, source.host, readOptions)
       : await readPeopleAdminListings(args.fetcher, source.base, readOptions);
   if (!read.ok) {
+    if (read.blockedByRobots) {
+      report("direct_read_blocked", `${name}'s site asks automated readers not to access its job list (robots.txt), so the app left it alone. Please check it by hand.`);
+      return;
+    }
     const lead = trigger === "stuck" ? "The search could not read this job list and the app's own attempt also failed." : `The app tried to read ${name}'s job list directly but could not.`;
     report("direct_read_failed", `${lead} ${read.problem ?? ""} Please check it by hand.`.trim());
     return;

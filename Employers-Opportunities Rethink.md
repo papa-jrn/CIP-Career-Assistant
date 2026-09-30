@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-09-23 (evening) — steps 0-3 and 9 are built and live-tested; steps 4-8 and the Employers redesign are not started. See §16 for the status board and build log.**
+Status: **Updated 2026-09-30 — steps 0-4 and 9 are built (step 4 = cross-run persistence + robots-block messaging, unit-tested); steps 5-8 and the Employers redesign are not started. Lane-scoring ↔ evidence-analysis propagation fix is specced but not built. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -770,6 +770,46 @@ Minor UX: the run summary says only "could not read… check by hand"; the per-e
 not to access its job list (robots.txt)" distinctly from a technical failure, so the user is not
 confused into thinking the reader is broken.
 
+### 2026-09-30 — Persistence (build step 4) + robots-block messaging are built and tested
+
+Both halves of the step-4 fix above are now implemented, typechecked, and unit-tested (full suite
+green: 195 tests).
+
+**Persistence / carry-forward.** At the end of every run (`finalize` in `job-search-run.ts`), before
+computing status and summary, `carryForwardPriorPostings` runs: it finds the most recent prior run
+that actually searched (`succeeded | partial | budget_limited`), loads that run's observations, keeps
+only ones still worth carrying (not `no_longer_visible` / `source_reports_closed`, not excluded),
+drops any this run already re-discovered (matched by canonical `normalizeUrl` OR by
+`employer|requisition_id`), caps the set at `limits.carryForwardMax` (default **40**, `0` disables),
+**re-verifies each one with no model call** (`verifyPostings`, the same page-fetch check the run
+uses), and inserts them into the current run with `carried_forward = true`, `first_seen_at`
+**preserved** from the original find, and a verification note prefixed "Carried forward from your last
+search and re-checked." This is what keeps a web-search-only / robots-blocked employer's finds
+(Dartmouth College's endowed roles) from vanishing between runs. Freshly discovered postings are
+inserted as before and rely on the column's `default false`.
+- New column: `job_search_observations.carried_forward boolean not null default false`, plus a
+  `(user_id, source_url)` index — migration `20260930120000_posting_persistence.sql`.
+- View: carried postings show "· carried forward from a prior search and re-checked" on the card;
+  the run summary adds "N posting(s) were carried forward from your last search and re-checked."
+- Tests (`job-search-run.test.ts`): carries a live prior posting forward re-verified with its
+  original first-seen date; does NOT carry one this run re-found (no duplicate) or a closed one.
+
+**Robots-block messaging.** When a target's own board is blocked by `robots.txt`, the reader now
+returns `blockedByRobots: true` (`ats-reader.ts`), and the run surfaces a distinct
+`direct_read_blocked` coverage status (not the generic `direct_read_failed`) on both the fallback and
+known-target triggers. The run summary now says plainly, e.g., "Dartmouth College asks automated
+readers not to access its job list (robots.txt), so CIP could not read it directly; please check by
+hand." — so the user understands CIP is being *blocked by the site's own rules*, not that the reader
+is broken. This addresses the "Minor UX" note above. Test added in `job-search-direct.test.ts`.
+
+**"Anything else on the Opportunities page?"** — recommended next, not built: (1) a **weekly diff**
+(new since last run / still open / newly closed), now cheap because postings persist across runs;
+(2) per-posting **recommendation chips** (apply / talk-first / research-funding / skip) tied to the
+lanes, per §8; (3) minimal **action tracking** (applied / talked / passed) so the board reflects what
+the user did; (4) **employer resolution** (Dartmouth Health vs DHMC vs member hospitals vs Dartmouth
+College) so counts and dedupe are per real entity. These are steps 5-8 below; persistence was the
+prerequisite for the diff.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -783,13 +823,15 @@ confused into thinking the reader is broken.
 ### Migrations (apply in this order; each is safe to run twice)
 
 `20260923120000_search_preference_items.sql`, `20260923130000_job_search_runs.sql`, `20260923140000_archive_board_era_opportunities.sql`,
-`20260923150000_direct_read_tier.sql`. The last two are needed for the archive marker and to save direct-read postings.
+`20260923150000_direct_read_tier.sql`, `20260930120000_posting_persistence.sql`. The middle two are needed for the archive marker and to
+save direct-read postings; the last adds `carried_forward` + the `(user_id, source_url)` index for cross-run persistence and **must be
+applied to hosted Supabase** (dashboard SQL editor) before the carry-forward path can write.
 
 ### Next, in order
 
 1. **Two live acceptance passes** (§15.3): establish a baseline run, change a constraint or add evidence, run again, and trace the change
    through brief, search, saved observations, and the visible result. Include a successful-zero-result and a simulated-failure path.
-2. **Step 4: posting identity across runs** and re-verification of earlier finds each run (no model call).
+2. ~~**Step 4: posting identity across runs** and re-verification of earlier finds each run (no model call).~~ **DONE 2026-09-30** — carry-forward + robots-block messaging (see the 2026-09-30 entry above).
 3. **Remember each target's real career-page URL** (user-supplied or discovered) and give it back to the search and the direct reader.
 4. **Steps 5-8:** employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College), the weekly diff, the apply / talk-first /
    research-funding / monitor / skip recommendation, minimal action tracking; then the Employers (target workspace) redesign (§14).

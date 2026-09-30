@@ -207,6 +207,8 @@ export interface DirectReadResult {
   totalPages: number;
   /** Set when the list could not be read, in plain language. */
   problem?: string;
+  /** True when the site's robots.txt disallowed reading (a deliberate block, not a failure). */
+  blockedByRobots?: boolean;
 }
 
 export interface ReadBoardOptions {
@@ -246,7 +248,7 @@ async function readPagedBoard(
 
   const robots = await fetcher(reader.robotsUrl);
   if (robots && robots.status === 200 && !robotsAllows(robots.text, reader.robotsPath)) {
-    return { ...base, problem: "The site's robots.txt does not allow automated reading of its job list, so it was left alone." };
+    return { ...base, blockedByRobots: true, problem: "The site's robots.txt asks automated readers not to access its job list, so it was left alone." };
   }
 
   const seen = new Set<string>();

@@ -281,6 +281,69 @@ describe("advanceJobSearchRun", () => {
     expect(await advanceJobSearchRun(client, "someone-else", runId, { config: cfg, provider: providerReturning([]), now })).toBeNull();
     expect(await loadRunView(client, "someone-else", runId)).toBeNull();
   });
+
+  // Persistence (build step 4): a still-live posting from the last run that this run did not
+  // re-surface is re-checked and carried forward, so good finds do not vanish between runs. This
+  // is what makes a web-search-only employer (e.g. a robots-blocked board) keep its results.
+  const PRIOR_SEEN = "2026-09-09T00:00:00.000Z";
+  function priorObservation(overrides: Record<string, unknown> = {}) {
+    return {
+      id: `prior-${Math.random().toString(36).slice(2, 8)}`, user_id: USER, run_id: "prev-run",
+      title: "Carried Role", employer_text: "Nonprofit Co", worksite_text: null,
+      source_url: "https://carry.example.org/postings/9", requisition_id: "R-9", posted_text: null,
+      salary_text: null, remote_status: "not_stated", matched_role_term: null, source_tier: "general",
+      verification_state: "verified_open", verification_note: null, verification_checked_at: PRIOR_SEEN,
+      location_status: null, location_distance_miles: null, location_note: null, exclusion_hit: null,
+      first_seen_at: PRIOR_SEEN, carried_forward: false, ...overrides,
+    };
+  }
+  const carryFetcher = async (url: string) =>
+    url.endsWith("/9")
+      ? { status: 200, text: `<h1>Carried Role</h1> Req R-9 ${"details ".repeat(80)}` }
+      : pageFetcher(url);
+
+  async function withPrior(prior: Record<string, unknown>[]) {
+    const fake = createFakeSupabase({ watched_employers: employers(2) });
+    fake.db.job_search_runs.push({ id: "prev-run", user_id: USER, status: "succeeded", finished_at: "2026-09-10T00:00:00.000Z" });
+    for (const row of prior) fake.db.job_search_observations.push(row);
+    // Disable the weekly cap so the seeded prior run cannot block starting this one.
+    const cfg = config({ limits: { ...DEFAULT_LIMITS, maxRunsPerWeek: 0 } });
+    const outcome = await startJobSearchRun(fake.client, USER, `key-carry-${Math.random().toString(36).slice(2, 8)}`, { config: cfg, now });
+    return { ...fake, runId: (outcome as { runId: string }).runId, cfg };
+  }
+
+  it("carries a still-live prior posting forward, re-verified, preserving its first-seen date", async () => {
+    const { client, runId, cfg } = await withPrior([priorObservation()]);
+    const view = await advanceJobSearchRun(client, USER, runId, {
+      config: cfg, provider: providerReturning([posting()]), fetcher: carryFetcher, now,
+    });
+    expect(view?.run.status).toBe("succeeded");
+    const carried = view?.observations.find((row) => row.title === "Carried Role");
+    expect(carried?.carried_forward).toBe(true);
+    expect(carried?.verification_state).toBe("verified_open");
+    expect(carried?.first_seen_at).toBe(PRIOR_SEEN); // not reset to this run
+    expect(carried?.verification_note).toMatch(/Carried forward/);
+    const fresh = view?.observations.find((row) => row.title === "Program Operations Lead");
+    expect(fresh?.carried_forward).toBeFalsy();
+    expect(view?.run.summary).toMatch(/carried forward from your last search/i);
+  });
+
+  it("does not carry forward a prior posting this run already re-found, nor a closed one", async () => {
+    const { client, runId, cfg } = await withPrior([
+      // Same URL as the fresh posting() → re-found, so not duplicated.
+      priorObservation({ title: "Re-found", source_url: "https://jobs.example.org/postings/1", requisition_id: "R-1" }),
+      // Closed at the source → never carried.
+      priorObservation({ title: "Closed one", source_url: "https://carry.example.org/postings/closed", requisition_id: "R-C", verification_state: "no_longer_visible" }),
+    ]);
+    const view = await advanceJobSearchRun(client, USER, runId, {
+      config: cfg, provider: providerReturning([posting()]), fetcher: carryFetcher, now,
+    });
+    const titles = (view?.observations ?? []).map((row) => row.title);
+    expect(titles).not.toContain("Re-found");
+    expect(titles).not.toContain("Closed one");
+    expect((view?.observations ?? []).filter((row) => row.source_url === "https://jobs.example.org/postings/1")).toHaveLength(1);
+    expect((view?.observations ?? []).some((row) => row.carried_forward)).toBe(false);
+  });
 });
 
 describe("worksite location", () => {
@@ -323,6 +386,7 @@ describe("worksite location", () => {
       id: "o", run_id: "r", employer_text: "E", worksite_text: null, source_url: "https://x.org/p/1", requisition_id: null, posted_text: null,
       salary_text: null, matched_role_term: null, source_tier: "general" as const, verification_note: null, verification_checked_at: null,
       location_distance_miles: null, location_note: null, exclusion_hit: null, first_seen_at: NOW, verification_state: "verified_open",
+      carried_forward: false,
     };
     const view: RunView = {
       run: { id: "r", status: "succeeded", model: "m", plan: [], trace: [], coverage: [], usage: {}, estimated_cost_usd: null, summary: "s", started_at: NOW } as never,
@@ -355,6 +419,7 @@ describe("pay on posting cards", () => {
           requisition_id: null, posted_text: null, salary_text: "USD $35 / hour", remote_status: "remote", matched_role_term: null,
           source_tier: "preferred_source", verification_state: "verified_open", verification_note: null, verification_checked_at: null,
           location_status: null, location_distance_miles: null, location_note: null, exclusion_hit: null, first_seen_at: NOW,
+          carried_forward: false,
         },
       ],
     };
@@ -422,6 +487,7 @@ describe("summary, due state, and the panel", () => {
           location_note: null,
           exclusion_hit: null,
           first_seen_at: NOW,
+          carried_forward: false,
         },
       ],
     };
@@ -443,6 +509,7 @@ describe("summary, due state, and the panel", () => {
       id: "o", run_id: "r", employer_text: "E", worksite_text: null, source_url: "https://x.org/p/1", requisition_id: null, posted_text: null,
       salary_text: null, remote_status: "not_stated", matched_role_term: null, source_tier: "target_page" as const, verification_note: null,
       verification_checked_at: null, location_status: null, location_distance_miles: null, location_note: null, exclusion_hit: null, first_seen_at: NOW,
+      carried_forward: false,
     };
     const view: RunView = {
       run: { id: "r", status: "succeeded", model: "m", plan: [], trace: [], coverage: [], usage: {}, estimated_cost_usd: null, summary: "s", started_at: NOW } as never,
