@@ -967,6 +967,24 @@ user's saved corrections always win.
 The Opportunities-page redesign (items 1-4) is now complete. Next: the lane-scoring ↔
 evidence-analysis propagation fix, then the Employers-page reassessment incl. local-business discovery.
 
+### 2026-09-30 — first live full run (37 postings) + chip polish from what it showed
+
+First full live run with everything wired: 37 postings (up from ~24), 28 verified, 12 carried
+forward, diff "15 new / 22 still open", the network cross-reference naming a real contact on six
+Dartmouth Health roles, employer resolution keeping Dartmouth Health vs Dartmouth College distinct, and
+a persisted user override round-tripping. Four fixes from reading that output:
+- **"Primary lane lane"** — the chip appended " lane" to labels that already end in "lane". Fixed.
+- **Funding over-fired on core leadership** — "senior" included bare "manager" (too broad), and a CIO
+  got "grant vs endowed". Narrowed `SENIOR_TITLE` (dropped "manager") and added an `OPERATIONAL_LEADER`
+  exemption (CIO/CFO/CTO/HR/IT leadership are operating-budget, never funding-cautioned).
+- **Below-floor now dominates** — a clearly below-floor role skips before the funding caution (a named
+  network contact still wins talk-first above it, since the relationship outlasts one underpaid role).
+- **Nonprofit-board source heuristic** — a posting from a nonprofit-only board (idealist.org, etc.)
+  now counts as a mission role for the funding caution even when the employer is not on the watched
+  list, extending the endowed-ED insight to exactly those postings. Full suite: **234 tests**.
+
+Still noted, not changed: "Conversation research lane" reads as jargon when surfaced as a lane label.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.

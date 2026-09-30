@@ -45,6 +45,8 @@ export interface RecommendationContext {
   employer: ResolvedEmployer | null;
   networkLink: NetworkLink | null;
   followUp: FollowUpLink | null;
+  /** True when the posting came from a nonprofit-only job board (funding still matters off the watched list). */
+  missionBySource?: boolean;
 }
 
 export interface Recommendation {
@@ -56,7 +58,12 @@ export interface Recommendation {
   namedContact: string | null;
 }
 
-const SENIOR_TITLE = /\b(director|chief|c[eofot]o|vice president|vp|head of|executive|principal|dean|superintendent|president|manager)\b/i;
+// "Senior" for the talk-first and funding cues. Deliberately excludes bare "manager" — a program or
+// project manager is mid-level, and treating every manager as senior over-fired the funding caution.
+const SENIOR_TITLE = /\b(director|chief|c[eofot]o|vice president|vp|head of|executive|principal|dean|superintendent|president)\b/i;
+// Core institutional leadership funded from the operating budget, not grants/endowment. The funding
+// caution does not apply to these even at a mission employer (a CIO is not "grant vs endowed").
+const OPERATIONAL_LEADER = /\bc[ifeot]o\b|chief (information|financial|technology|operating|administrative|human)|information officer|financial officer|technology officer|human resources/i;
 const MISSION_EMPLOYER =
   /nonprofit|non-profit|not-for-profit|human services|charit|foundation|municipal|public school|school district|\beducation\b|universit|college|community|county|town of|city of/i;
 
@@ -84,6 +91,7 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   const targetedSource = posting.source_tier === "target_page" || posting.source_tier === "preferred_source" || posting.source_tier === "direct_read";
   const laneMatch = !isSkillMatch && (Boolean(posting.matched_role_term && posting.matched_role_term !== "skill") || targetedSource);
   const senior = SENIOR_TITLE.test(posting.title);
+  const operationalLeader = OPERATIONAL_LEADER.test(posting.title);
 
   const outsideArea = posting.location_status === "outside" && posting.remote_status !== "remote";
   const within = posting.location_status === "within" || posting.remote_status === "remote";
@@ -95,7 +103,7 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   const payMeets = floor.status === "meets";
   const payUnknown = floor.status === "unknown";
 
-  const mission = isMissionEmployer(context.employer);
+  const mission = isMissionEmployer(context.employer) || Boolean(context.missionBySource);
 
   // The transparent evidence list shown in the expander — everything that applies, in reading order.
   const signals: string[] = [];
@@ -142,20 +150,27 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
     };
   }
 
-  // 2. Check the funding first — mission employer where role viability may hinge on grants/endowment.
-  if (mission && (senior || payUnknown)) {
+  // 2. Clearly below your floor dominates — no amount of funding confirmation fixes the pay. (A named
+  // network contact still won a talk-first above, since the relationship outlasts any one role.)
+  if (payBelow) {
+    return { category: "skip", confidence: "medium", rationale: "Pay is below your floor.", signals, namedContact: null };
+  }
+
+  // 3. Check the funding first — a mission role whose viability may hinge on grants/endowment. Core
+  // operating-budget leadership (CIO, CFO, HR) is exempt: "grant vs endowed" does not apply to them.
+  if (mission && !operationalLeader && (senior || payUnknown)) {
     const bits = [senior ? "senior role" : "", payUnknown ? "no stated pay" : ""].filter(Boolean).join(", ");
     return {
       category: "check_funding",
       confidence: "medium",
-      rationale: `${context.employer?.category ?? "Mission"} employer${bits ? `, ${bits}` : ""} — confirm it's funded (grant vs endowed) before investing time.`,
+      rationale: `${context.employer?.category ?? "Nonprofit"} employer${bits ? `, ${bits}` : ""} — confirm it's funded (grant vs endowed) before investing time.`,
       signals,
       namedContact: null,
     };
   }
 
-  // 3. Apply now — clean, high-confidence fit. An unverified lead can never reach here.
-  if (verified && laneMatch && !outsideArea && !payBelow) {
+  // 4. Apply now — clean, high-confidence fit. An unverified lead can never reach here.
+  if (verified && laneMatch && !outsideArea) {
     const laneBit = context.laneLabel ? `, matches your ${context.laneLabel}` : ", matches a target role";
     const payBit = payMeets ? ", pay meets your floor" : "";
     const confidence: Confidence = !payUnknown && !locUnknown && Boolean(context.employer) ? "high" : "medium";
@@ -168,11 +183,8 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
     };
   }
 
-  // 5. Skip — live but weak. Clear below-floor, or no lane relevance at an unresolved/low employer.
+  // 5. Skip — live but weak: no lane relevance at an unresolved/low employer.
   const lowEmployer = !context.employer || context.employer.priority === "low";
-  if (payBelow) {
-    return { category: "skip", confidence: "medium", rationale: "Pay is below your floor.", signals, namedContact: null };
-  }
   if (!laneMatch && !isSkillMatch && lowEmployer) {
     return { category: "skip", confidence: "medium", rationale: "No clear lane match, and not one of your priority employers.", signals, namedContact: null };
   }

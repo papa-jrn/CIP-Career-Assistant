@@ -29,6 +29,17 @@ export { normOrg } from "@/lib/cip/employer-resolution";
  */
 
 const RELATIONAL_NEXT_MOVE = /reach out|intro|introduc|conversation|connect|coffee|\bmeet\b|\btalk\b|\bcall\b|email|message|warm/i;
+// Nonprofit-only job boards: a posting from one is a mission role even when the employer is not on the
+// watched list, so the funding caution still applies. Matched against the posting's source host.
+const MISSION_BOARDS = /idealist\.org|workforgood|foundationlist|councilofnonprofits|philanthropy|nonprofitjobs|opportunityknocks/i;
+
+function isMissionBoard(url: string): boolean {
+  try {
+    return MISSION_BOARDS.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
 
 export interface ResolvedEmployerRow {
   canonical: string;
@@ -93,6 +104,7 @@ export function recommendationForPosting(posting: ObservationRow, inputs: Recomm
     employer: employer ? { category: employer.category, priority: employer.priority, fitScore: employer.fitScore, nextMove: employer.nextMove, nextMoveIsRelational: employer.nextMoveIsRelational } : null,
     networkLink: contact ? { contactName: contact.name, firstAsk: contact.firstAsk } : null,
     followUp: followUp ? { contactName: followUp.contactName, nextAction: followUp.nextAction } : null,
+    missionBySource: isMissionBoard(posting.source_url),
   };
   return recommendPosting(posting, context);
 }

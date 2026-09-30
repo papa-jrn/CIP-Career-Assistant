@@ -61,6 +61,41 @@ describe("recommendPosting", () => {
     expect(rec.category).toBe("apply");
   });
 
+  it("exempts core operational leadership (a CIO) from the funding caution", () => {
+    const rec = recommendPosting(
+      drow({ title: "Vice President and Chief Information Officer", salary_text: null }),
+      ctx({ employer: employer({ category: "higher education" }) }),
+    );
+    expect(rec.category).not.toBe("check_funding");
+    expect(rec.category).toBe("apply");
+  });
+
+  it("lets a clearly below-floor role skip even at a mission employer — funding does not fix the pay", () => {
+    const rec = recommendPosting(
+      drow({ title: "Program Director", salary_text: "$50,000" }),
+      ctx({ employer: employer({ category: "human services nonprofit" }) }),
+    );
+    expect(rec.category).toBe("skip");
+    expect(rec.rationale).toMatch(/below your floor/);
+  });
+
+  it("still talks first for a below-floor role when a named network contact is there", () => {
+    const rec = recommendPosting(
+      drow({ title: "Program Director", salary_text: "$50,000" }),
+      ctx({ employer: employer({ category: "human services nonprofit" }), networkLink: { contactName: "Sarah Lin", firstAsk: null } }),
+    );
+    expect(rec).toMatchObject({ category: "talk_first", namedContact: "Sarah Lin" });
+  });
+
+  it("raises a funding caution for a nonprofit-board posting even when the employer is not on the watched list", () => {
+    const rec = recommendPosting(
+      drow({ title: "Executive Director", salary_text: null }),
+      ctx({ employer: null, missionBySource: true }),
+    );
+    expect(rec.category).toBe("check_funding");
+    expect(rec.rationale).toMatch(/Nonprofit employer/);
+  });
+
   it("recommends applying, at high confidence, for a verified lane match within places that meets pay", () => {
     const rec = recommendPosting(drow({ salary_text: "$92,000" }), ctx({ employer: employer() }));
     expect(rec).toMatchObject({ category: "apply", confidence: "high" });

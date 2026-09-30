@@ -68,6 +68,14 @@ describe("recommendationForPosting (resolution + matching)", () => {
     expect(rec).toMatchObject({ category: "talk_first", namedContact: "Sarah Lin" });
   });
 
+  it("treats a posting from a nonprofit board (idealist.org) as a mission role even off the watched list", () => {
+    const rec = recommendationForPosting(
+      drow({ title: "Executive Director", employer_text: "Faunalytics", source_url: "https://www.idealist.org/en/nonprofit-job/abc-executive-director", salary_text: null }),
+      inputs({ employers: [], canon: canonFor(HAVEN) }),
+    );
+    expect(rec.category).toBe("check_funding");
+  });
+
   it("labels the matched lane when a lane's text overlaps the matched role term", () => {
     const rec = recommendationForPosting(
       drow({ title: "Operations Manager", matched_role_term: "operations", salary_text: "$95,000" }),
