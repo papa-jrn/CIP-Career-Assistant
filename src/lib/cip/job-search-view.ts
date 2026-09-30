@@ -177,8 +177,32 @@ function recommendationBlock(row: ObservationRow, annotations?: PostingAnnotatio
         <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Why / change</summary>
         <ul class="mt-2 list-disc space-y-1 pl-4 text-xs text-[var(--muted)]">${rec.signals.map((signal) => `<li>${escapeHtml(signal)}</li>`).join("")}</ul>
         <div class="mt-2 flex flex-wrap gap-2">${statusButtons}${clearButton}</div>
+        ${employerFix(row, annotations)}
       </details>
     </div>`;
+}
+
+// The on-card employer-resolution fix (item 4). Shows what the posting's employer was treated as, and
+// lets the user correct it; the correction persists as a learned alias applied to every future run.
+function employerFix(row: ObservationRow, annotations: PostingAnnotations) {
+  const res = annotations.resolution.byUrl.get(row.source_url);
+  const names = annotations.resolution.watchedNames;
+  if (!res || !names.length) return "";
+  const treatedAs = res.canonical
+    ? `treated as <span class="font-semibold">${escapeHtml(res.canonical)}</span>${res.hasAlias ? " (your correction)" : ""}`
+    : "not matched to one of your saved employers";
+  const actionBtn = "rounded-md border border-[var(--line)] px-2 py-1 text-xs hover:bg-[var(--panel)]";
+  const options = [`<option value="">— not one of my saved employers —</option>`]
+    .concat(names.map((name) => `<option value="${escapeHtml(name)}"${res.canonical === name ? " selected" : ""}>${escapeHtml(name)}</option>`))
+    .join("");
+  return `
+    <form class="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3" hx-post="/api/jobs/employer-alias" hx-target="#job-search-panel" hx-swap="outerHTML">
+      <input type="hidden" name="observed" value="${escapeHtml(res.observed)}" />
+      <span class="text-xs text-[var(--muted)]">Employer "${escapeHtml(res.observed)}" is ${treatedAs}. Fix:</span>
+      <select name="canonical" class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs">${options}</select>
+      <button type="submit" class="${actionBtn}">Save employer</button>
+      ${res.hasAlias ? `<button type="submit" name="clear" value="1" class="${actionBtn}">Reset to automatic</button>` : ""}
+    </form>`;
 }
 
 function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set<string>, annotations?: PostingAnnotations) {

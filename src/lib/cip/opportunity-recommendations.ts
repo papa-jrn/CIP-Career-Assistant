@@ -2,52 +2,58 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ObservationRow, RunView } from "@/lib/cip/job-search-run";
 import { loadStrategicState } from "@/lib/cip/strategic-state";
 import {
+  buildCanonicalEmployers,
+  employerMatch,
+  loadEmployerAliases,
+  normOrg,
+  resolveEmployerName,
+  type CanonicalEmployer,
+} from "@/lib/cip/employer-resolution";
+import {
   recommendPosting,
   type Recommendation,
   type RecommendationContext,
-  type ResolvedEmployer,
 } from "@/lib/cip/recommendation";
 import { indexDispositions, loadDispositions, type DispositionIndex } from "@/lib/cip/posting-dispositions";
 
+export { normOrg } from "@/lib/cip/employer-resolution";
+
 /**
- * Integration layer for the recommendation chips (Opportunities step 6). Loads the honest grounding
- * — resolved employers (category/priority/next move), network contacts by employer, open follow-up
- * obligations, and the lanes — then computes a deterministic recommendation per posting. Employer
- * matching is best-effort by normalized name (employer resolution is item 4); when a posting's
- * employer does not resolve, the chip degrades to posting-level signals and the employer-dependent
- * chips (talk-first via network/obligation, funding) simply do not fire.
+ * Integration layer for the recommendation chips (Opportunities step 6) with employer resolution
+ * (item 4). Loads the honest grounding — resolved employers (category/priority/next move), network
+ * contacts by employer, open follow-up obligations, and the lanes — then computes a deterministic
+ * recommendation per posting. A posting's free-text employer is resolved to a canonical watched
+ * employer via `employer-resolution` (conservative auto-match, overridden by the user's saved
+ * aliases). Contacts and follow-ups match a posting when both resolve to the same canonical employer,
+ * or — for employers not on the watched list — by a direct conservative name match.
  */
+
+const RELATIONAL_NEXT_MOVE = /reach out|intro|introduc|conversation|connect|coffee|\bmeet\b|\btalk\b|\bcall\b|email|message|warm/i;
+
+export interface ResolvedEmployerRow {
+  canonical: string;
+  category: string | null;
+  priority: string | null;
+  fitScore: number | null;
+  nextMove: string | null;
+  nextMoveIsRelational: boolean;
+}
 
 export interface RecommendationInputs {
   floorUsd: number | null;
-  employers: Array<{ key: string } & ResolvedEmployer>;
-  /** Network contacts keyed by their normalized company. */
-  contacts: Array<{ key: string; name: string; firstAsk: string | null }>;
-  /** Open follow-up obligations keyed by normalized related employer. */
-  followUps: Array<{ key: string; contactName: string; nextAction: string | null }>;
+  canon: CanonicalEmployer[];
+  aliases: Map<string, string>;
+  employers: ResolvedEmployerRow[];
+  contacts: Array<{ norm: string; canonical: string | null; name: string; firstAsk: string | null }>;
+  followUps: Array<{ norm: string; canonical: string | null; contactName: string; nextAction: string | null }>;
   lanes: Array<{ lane: string; label: string }>;
 }
 
-const ORG_SUFFIX = /\b(inc|llc|l\.l\.c|ltd|corp|corporation|company|co|the|group|holdings|plc)\b/g;
-const RELATIONAL_NEXT_MOVE = /reach out|intro|introduc|conversation|connect|coffee|\bmeet\b|\btalk\b|\bcall\b|email|message|warm/i;
-
-/** Normalize an organization name for fuzzy matching (lowercase, strip punctuation and common suffixes). */
-export function normOrg(value: string | null | undefined): string {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/[.,/&'"()-]/g, " ")
-    .replace(ORG_SUFFIX, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Two org names match when one normalized name equals or contains the other (guarded so a short
-// token like "co" cannot swallow everything).
-function orgMatches(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  return short.length >= 4 && long.includes(short);
+// Two employer references are the same when both resolved to one canonical employer, or — when at
+// least one did not resolve — by a direct conservative name match on the raw names.
+function sameEmployer(postingCanonical: string | null, postingNorm: string, otherCanonical: string | null, otherNorm: string): boolean {
+  if (postingCanonical && otherCanonical) return postingCanonical === otherCanonical;
+  return employerMatch(postingNorm, otherNorm) !== null;
 }
 
 function laneLabelForTerm(term: string | null, lanes: RecommendationInputs["lanes"]): string | null {
@@ -60,12 +66,26 @@ function laneLabelForTerm(term: string | null, lanes: RecommendationInputs["lane
   return hit?.label ?? null;
 }
 
+export interface EmployerResolution {
+  observed: string;
+  canonical: string | null;
+  hasAlias: boolean;
+}
+
+/** Resolve a posting's employer (used by both the recommendation and the on-card fix control). */
+export function resolvePostingEmployer(posting: ObservationRow, inputs: RecommendationInputs): EmployerResolution {
+  const observed = posting.employer_text || "";
+  const resolution = resolveEmployerName(observed, inputs.canon, inputs.aliases);
+  return { observed, canonical: resolution.canonical, hasAlias: inputs.aliases.has(normOrg(observed)) };
+}
+
 /** Assemble a posting's recommendation context from the loaded inputs, then recommend. Pure. */
 export function recommendationForPosting(posting: ObservationRow, inputs: RecommendationInputs): Recommendation {
-  const empKey = normOrg(posting.employer_text);
-  const employer = inputs.employers.find((e) => orgMatches(e.key, empKey)) ?? null;
-  const contact = inputs.contacts.find((c) => orgMatches(c.key, empKey)) ?? null;
-  const followUp = inputs.followUps.find((f) => orgMatches(f.key, empKey)) ?? null;
+  const postingNorm = normOrg(posting.employer_text);
+  const { canonical } = resolvePostingEmployer(posting, inputs);
+  const employer = canonical ? inputs.employers.find((e) => e.canonical === canonical) ?? null : null;
+  const contact = inputs.contacts.find((c) => sameEmployer(canonical, postingNorm, c.canonical, c.norm)) ?? null;
+  const followUp = inputs.followUps.find((f) => sameEmployer(canonical, postingNorm, f.canonical, f.norm)) ?? null;
 
   const context: RecommendationContext = {
     floorUsd: inputs.floorUsd,
@@ -78,18 +98,18 @@ export function recommendationForPosting(posting: ObservationRow, inputs: Recomm
 }
 
 // Pull network contacts (name + company) out of the stored network_analysis JSON, defensively.
-function parseNetworkContacts(extractedText: string | null): RecommendationInputs["contacts"] {
+function parseNetworkContacts(extractedText: string | null): Array<{ name: string; company: string; firstAsk: string | null }> {
   if (!extractedText) return [];
   try {
     const parsed = JSON.parse(extractedText) as { analysis?: { contactMatches?: unknown[] } };
     const matches = parsed.analysis?.contactMatches ?? [];
-    const contacts: RecommendationInputs["contacts"] = [];
+    const contacts: Array<{ name: string; company: string; firstAsk: string | null }> = [];
     for (const raw of matches) {
       const match = raw as { contact?: { name?: unknown; company?: unknown }; recommendedFirstAsk?: unknown };
       const company = String(match.contact?.company ?? "").trim();
       const name = String(match.contact?.name ?? "").trim();
       if (!company || !name) continue;
-      contacts.push({ key: normOrg(company), name, firstAsk: typeof match.recommendedFirstAsk === "string" ? match.recommendedFirstAsk : null });
+      contacts.push({ name, company, firstAsk: typeof match.recommendedFirstAsk === "string" ? match.recommendedFirstAsk : null });
     }
     return contacts;
   } catch {
@@ -103,7 +123,7 @@ export async function loadRecommendationInputs(
   userId: string,
   floorUsd: number | null,
 ): Promise<RecommendationInputs> {
-  const [state, { data: employerRows }, { data: networkRow }] = await Promise.all([
+  const [state, { data: employerRows }, { data: networkRow }, aliases] = await Promise.all([
     loadStrategicState(supabase, userId),
     supabase.from("watched_employers").select("name,category,priority,fit_score").eq("user_id", userId).limit(500),
     supabase
@@ -114,14 +134,17 @@ export async function loadRecommendationInputs(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    loadEmployerAliases(supabase, userId),
   ]);
 
-  const nextMoveByName = new Map(state.employers.map((e) => [normOrg(e.name), e.nextMove ?? null]));
-  const employers = ((employerRows ?? []) as Array<{ name: string; category: string | null; priority: string | null; fit_score: number | null }>).map((row) => {
-    const key = normOrg(row.name);
-    const nextMove = nextMoveByName.get(key) ?? null;
+  const watchedNames = ((employerRows ?? []) as Array<{ name: string }>).map((row) => row.name);
+  const canon = buildCanonicalEmployers(watchedNames);
+  const nextMoveByNorm = new Map(state.employers.map((e) => [normOrg(e.name), e.nextMove ?? null]));
+
+  const employers: ResolvedEmployerRow[] = ((employerRows ?? []) as Array<{ name: string; category: string | null; priority: string | null; fit_score: number | null }>).map((row) => {
+    const nextMove = nextMoveByNorm.get(normOrg(row.name)) ?? null;
     return {
-      key,
+      canonical: row.name,
       category: row.category ?? null,
       priority: row.priority ?? null,
       fitScore: typeof row.fit_score === "number" ? row.fit_score : null,
@@ -130,28 +153,39 @@ export async function loadRecommendationInputs(
     };
   });
 
+  const contacts = parseNetworkContacts(networkRow?.extracted_text ?? null).map((contact) => ({
+    norm: normOrg(contact.company),
+    canonical: resolveEmployerName(contact.company, canon, aliases).canonical,
+    name: contact.name,
+    firstAsk: contact.firstAsk,
+  }));
+
   const followUps = state.followUpObligations
     .filter((o) => o.relatedEmployer)
-    .map((o) => ({ key: normOrg(o.relatedEmployer), contactName: o.contactName, nextAction: o.nextAction || null }));
+    .map((o) => ({
+      norm: normOrg(o.relatedEmployer),
+      canonical: resolveEmployerName(o.relatedEmployer, canon, aliases).canonical,
+      contactName: o.contactName,
+      nextAction: o.nextAction || null,
+    }));
 
-  return {
-    floorUsd,
-    employers,
-    contacts: parseNetworkContacts(networkRow?.extracted_text ?? null),
-    followUps,
-    lanes: state.lanes.map((lane) => ({ lane: lane.lane, label: lane.label })),
-  };
+  return { floorUsd, canon, aliases, employers, contacts, followUps, lanes: state.lanes.map((lane) => ({ lane: lane.lane, label: lane.label })) };
 }
 
 export interface PostingAnnotations {
   recommendations: Map<string, Recommendation>;
   dispositions: DispositionIndex;
+  resolution: {
+    /** The user's watched employer names, offered as fix-control targets. */
+    watchedNames: string[];
+    /** Per posting (by source_url): what its employer resolved to and whether a saved alias applied. */
+    byUrl: Map<string, EmployerResolution>;
+  };
 }
 
 /**
- * The single call the page and endpoints make: a recommendation per posting (keyed by source_url)
- * plus the user's saved statuses. Recommendations are computed for actionable postings only;
- * closed/excluded rows have their own groups and get none.
+ * The single call the page and endpoints make: a recommendation per posting (keyed by source_url),
+ * the user's saved statuses, and the employer resolution behind each chip (for the on-card fix).
  */
 export async function buildPostingAnnotations(
   supabase: SupabaseClient,
@@ -167,8 +201,14 @@ export async function buildPostingAnnotations(
   ]);
 
   const recommendations = new Map<string, Recommendation>();
+  const byUrl = new Map<string, EmployerResolution>();
   for (const row of view.observations) {
     recommendations.set(row.source_url, recommendationForPosting(row, inputs));
+    byUrl.set(row.source_url, resolvePostingEmployer(row, inputs));
   }
-  return { recommendations, dispositions: indexDispositions(dispositionRows) };
+  return {
+    recommendations,
+    dispositions: indexDispositions(dispositionRows),
+    resolution: { watchedNames: inputs.canon.map((c) => c.name), byUrl },
+  };
 }

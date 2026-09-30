@@ -23,8 +23,14 @@ const drow = (over: Partial<ObservationRow> = {}): ObservationRow => ({
   location_note: null, exclusion_hit: null, first_seen_at: NOW, carried_forward: false, ...over,
 });
 
+const HAVEN = "Upper Valley Haven";
+const canonFor = (...names: string[]) => names.map((name) => ({ name, norm: normOrg(name) }));
+const employerRow = (over: Record<string, unknown> = {}) => ({
+  canonical: HAVEN, category: "human services nonprofit", priority: "high", fitScore: 80, nextMove: null, nextMoveIsRelational: false, ...over,
+});
+
 const inputs = (over: Partial<RecommendationInputs> = {}): RecommendationInputs => ({
-  floorUsd: 85_000, employers: [], contacts: [], followUps: [], lanes: [], ...over,
+  floorUsd: 85_000, canon: canonFor(HAVEN), aliases: new Map(), employers: [employerRow()], contacts: [], followUps: [], lanes: [], ...over,
 });
 
 describe("normOrg", () => {
@@ -36,20 +42,27 @@ describe("normOrg", () => {
 });
 
 describe("recommendationForPosting (resolution + matching)", () => {
-  it("resolves the employer by fuzzy name and raises a funding caution for a mission org", () => {
-    const rec = recommendationForPosting(
-      drow(),
-      inputs({ employers: [{ key: normOrg("Upper Valley Haven"), category: "human services nonprofit", priority: "high", fitScore: 80, nextMove: null, nextMoveIsRelational: false }] }),
-    );
+  it("resolves the employer and raises a funding caution for a mission org", () => {
+    const rec = recommendationForPosting(drow(), inputs());
     expect(rec.category).toBe("check_funding");
   });
 
   it("turns a network contact at the employer into a named talk-first, over the funding caution", () => {
     const rec = recommendationForPosting(
       drow(),
+      inputs({ contacts: [{ norm: normOrg(HAVEN), canonical: HAVEN, name: "Sarah Lin", firstAsk: "Ask about the ED search." }] }),
+    );
+    expect(rec).toMatchObject({ category: "talk_first", namedContact: "Sarah Lin" });
+  });
+
+  it("matches a network contact by canonical even when the posting uses a different name string", () => {
+    // The posting says "UV Haven"; the contact's company resolved to the canonical "Upper Valley Haven".
+    const rec = recommendationForPosting(
+      drow({ employer_text: "UV Haven" }),
       inputs({
-        employers: [{ key: normOrg("Upper Valley Haven"), category: "human services nonprofit", priority: "high", fitScore: 80, nextMove: null, nextMoveIsRelational: false }],
-        contacts: [{ key: normOrg("Upper Valley Haven"), name: "Sarah Lin", firstAsk: "Ask about the ED search." }],
+        canon: canonFor(HAVEN),
+        aliases: new Map([[normOrg("UV Haven"), HAVEN]]),
+        contacts: [{ norm: normOrg("Upper Valley Haven Inc"), canonical: HAVEN, name: "Sarah Lin", firstAsk: null }],
       }),
     );
     expect(rec).toMatchObject({ category: "talk_first", namedContact: "Sarah Lin" });
@@ -58,7 +71,7 @@ describe("recommendationForPosting (resolution + matching)", () => {
   it("labels the matched lane when a lane's text overlaps the matched role term", () => {
     const rec = recommendationForPosting(
       drow({ title: "Operations Manager", matched_role_term: "operations", salary_text: "$95,000" }),
-      inputs({ lanes: [{ lane: "program operations", label: "Primary" }], employers: [{ key: normOrg("Upper Valley Haven"), category: "advanced manufacturing", priority: "medium", fitScore: 70, nextMove: null, nextMoveIsRelational: false }] }),
+      inputs({ lanes: [{ lane: "program operations", label: "Primary" }], employers: [employerRow({ category: "advanced manufacturing", priority: "medium", fitScore: 70 })] }),
     );
     // Operations Manager is senior, but the employer is not a mission org, so it applies.
     expect(rec.category).toBe("apply");
@@ -99,19 +112,22 @@ describe("chip rendering in the panel", () => {
   const rec: Recommendation = { category: "talk_first", confidence: "high", rationale: "Reach out to Sarah Lin, who's connected to Upper Valley Haven.", signals: ["Verified open on its own page", "Sarah Lin in your network is connected to Upper Valley Haven"], namedContact: "Sarah Lin" };
   const ctx = { runKey: "abc12345", due: computeDueState(null, 7, NOW), configured: true };
 
+  const resolution = { watchedNames: ["Upper Valley Haven"], byUrl: new Map([["https://jobs.example.org/ed", { observed: "Upper Valley Haven", canonical: "Upper Valley Haven", hasAlias: false }]]) };
+
   it("renders the chip, rationale, evidence, and the keep-an-eye-on action", () => {
-    const annotations = { recommendations: new Map([["https://jobs.example.org/ed", rec]]), dispositions: indexDispositions([]) };
+    const annotations = { recommendations: new Map([["https://jobs.example.org/ed", rec]]), dispositions: indexDispositions([]), resolution };
     const html = renderJobSearchPanel(view, ctx, annotations);
     expect(html).toContain("Talk to someone first");
     expect(html).toContain("Reach out to Sarah Lin");
     expect(html).toContain("Why / change");
     expect(html).toContain("Keep an eye on for now");
     expect(html).toContain("Suggested this week:");
+    expect(html).toContain("Save employer"); // the on-card employer fix control
   });
 
   it("shows the user's own status taking precedence, while still naming the app's suggestion", () => {
     const disposition: PostingDisposition = { normalized_url: "", source_url: "https://jobs.example.org/ed", employer_key: "upper valley haven", requisition_id: "R-1", status: "watching", note: "", updated_at: NOW };
-    const annotations = { recommendations: new Map([["https://jobs.example.org/ed", rec]]), dispositions: indexDispositions([disposition]) };
+    const annotations = { recommendations: new Map([["https://jobs.example.org/ed", rec]]), dispositions: indexDispositions([disposition]), resolution };
     const html = renderJobSearchPanel(view, ctx, annotations);
     expect(html).toContain("Your call: Keeping an eye on it");
     expect(html).toContain("app suggested: Talk to someone first");

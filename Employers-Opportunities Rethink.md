@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-09-30 — steps 0-4, the weekly diff, the recommendation chips + user status / action tracking (items 1-3), and step 9 are built and unit-tested (216 tests). Remaining on Opportunities: only item 4 (employer resolution). Then the lane-scoring ↔ evidence-analysis propagation fix, then the Employers redesign incl. local-business discovery. See §16 for the status board and build log.**
+Status: **Updated 2026-09-30 — the Opportunities-page redesign is complete: steps 0-4, the weekly diff, recommendation chips + user status / action tracking, and employer resolution (items 1-4), plus step 9, all built and unit-tested (229 tests). Next: the lane-scoring ↔ evidence-analysis propagation fix, then the Employers redesign incl. local-business discovery. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -933,6 +933,40 @@ Fixtures: `fake-supabase` gained `delete`, `lt`, and `lte`. Next on the Opportun
 items 1-3 are done; item 4 (employer resolution) will sharpen the chips' grounding. Then the
 lane-scoring ↔ evidence-analysis propagation fix, then the Employers-page reassessment.
 
+### 2026-09-30 (later still) — Employer resolution (item 4): BUILT and tested
+
+Founder decisions (2026-09-30): **auto-resolve + a one-click fix on the card that persists** (learned
+aliases); the fix control lives in the posting card's "Why / change" expander. Auto-resolution is
+deterministic and deliberately conservative — it under-merges rather than risk a wrong merge — and the
+user's saved corrections always win.
+
+- **Resolver** — `employer-resolution.ts`, pure. `employerMatch(aNorm, bNorm)` matches on an exact
+  normalized name, an acronym (`DHMC` ↔ `Dartmouth-Hitchcock Medical Center`), or a full multi-token
+  subset with ≥2 shared significant tokens — and **never on a single shared generic token**, so
+  "Dartmouth College" and "Dartmouth Health" stay distinct (the named requirement). Only true
+  stopwords are generic; distinguishing words like "health"/"college"/"medical" are kept.
+  `resolveEmployerName(observed, canon, aliases)` lets a saved alias win (empty target = force
+  unresolved), else the best conservative auto-match, and returns **unresolved when two different
+  canonical employers match equally well** rather than guessing.
+- **Store** — migration `20260930140000_employer_aliases.sql`: one row per normalized observed name,
+  `canonical_name` ('' = force unresolved), RLS. `loadEmployerAliases` / `setEmployerAlias` (update-or-
+  insert) / `clearEmployerAlias`. Apply to hosted Supabase before the fix endpoint can write.
+- **Wired into the chips** — `opportunity-recommendations.ts` now resolves a posting's employer to a
+  canonical watched employer, and resolves network-contact companies and follow-up related-employers
+  the same way. Contacts/follow-ups match a posting when both resolve to the same canonical employer,
+  or — for employers not on the watched list — by a direct conservative name match. So a contact at
+  "DHMC" now links to a posting from "Dartmouth Health". `normOrg` moved here (re-exported for callers).
+- **UI + endpoint** — the expander shows `Employer "<observed>" is treated as <canonical> (your
+  correction)` with a `<select>` of the user's watched employers ("— not one of my saved employers —"
+  forces unresolved) plus "Save employer", and "Reset to automatic" when an alias exists. Writes go to
+  `POST /api/jobs/employer-alias` (same-origin, auth, rate-limited), which re-renders the panel.
+- Tests: conservative-match guarantees incl. the Dartmouth guard, acronym + subset, alias precedence
+  and force-unresolved, alias persistence round-trip, and a contact-by-canonical match across
+  different name strings. Full suite green: **229 tests**; SSR build compiles.
+
+The Opportunities-page redesign (items 1-4) is now complete. Next: the lane-scoring ↔
+evidence-analysis propagation fix, then the Employers-page reassessment incl. local-business discovery.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -948,9 +982,10 @@ lane-scoring ↔ evidence-analysis propagation fix, then the Employers-page reas
 `20260923120000_search_preference_items.sql`, `20260923130000_job_search_runs.sql`, `20260923140000_archive_board_era_opportunities.sql`,
 `20260923150000_direct_read_tier.sql`, `20260930120000_posting_persistence.sql`, `20260930130000_posting_dispositions.sql`. The archive
 marker and direct-read migrations are needed for those features; `posting_persistence` adds `carried_forward` + the `(user_id, source_url)`
-index for cross-run persistence; `posting_dispositions` adds the user-status / action-tracking table. Both 2026-09-30 migrations **must be
-applied to hosted Supabase** (dashboard SQL editor) — `posting_persistence` before carry-forward can write, `posting_dispositions` before the
-chip status endpoint can write.
+index for cross-run persistence; `posting_dispositions` adds the user-status / action-tracking table; `20260930140000_employer_aliases.sql` adds the employer-resolution
+correction table. All three 2026-09-30 migrations **must be applied to hosted Supabase** (dashboard SQL editor) — `posting_persistence`
+before carry-forward can write, `posting_dispositions` before the chip status endpoint can write, and `employer_aliases` before the employer-fix
+endpoint can write.
 
 ### Next, in order
 
