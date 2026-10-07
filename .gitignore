@@ -50,3 +50,7 @@ yarn-error.log*
 # editor/agent local state
 .claude/settings.local.json
 .zcode/
+
+# personal reference docs dropped in the repo root (not source)
+/*.docx
+/*.pdf
