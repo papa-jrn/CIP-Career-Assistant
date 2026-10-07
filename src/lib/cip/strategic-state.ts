@@ -673,20 +673,65 @@ function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: st
   return false;
 }
 
-// Assign each verified posting to the single lane whose role its TITLE fits best (≥2 shared
-// significant tokens). Title-based on purpose: a posting's `matched_role_term` is the search's loose
-// tag (a CIO can be tagged "executive director"), so using it leaks tech-exec roles into the ED lane.
-// Requiring two shared title tokens also stops a lone generic word ("director") from binding a lane.
+// Role-family synonyms: a posting title rarely shares a literal word with a lane's human name
+// ("VP and Chief Information Officer" vs "Director of Media Innovation / CTO"). A lane is granted a
+// family's equivalent titles ONLY when the lane's OWN text is in that family (so tech synonyms never
+// attach to the nonprofit ED lane), and a posting validates a lane when its title contains one of
+// those titles. This is what lets a real CIO/CTO/VP-Technology posting validate the tech-exec lane.
+const ROLE_FAMILIES: Array<{ triggers: RegExp; titles: string[] }> = [
+  {
+    // Technology / digital executive.
+    triggers: /\b(cto|cio|chief (technology|information|digital) officer|technology officer|information officer|director of (technology|it|information|digital)|head of (technology|digital|it)|it director|media innovation|digital innovation)\b/,
+    titles: [
+      "chief technology officer", "chief information officer", "chief digital officer", "chief innovation officer",
+      "cto", "cio", "vp technology", "vp of technology", "vice president of technology", "vice president and chief",
+      "director of technology", "director of information technology", "it director", "head of technology",
+      "head of digital", "head of engineering", "vp of engineering", "technology officer", "information officer",
+    ],
+  },
+  {
+    // Nonprofit / organizational executive leadership.
+    triggers: /\b(executive director|chief executive|\bceo\b|nonprofit leader|managing director)\b/,
+    titles: ["executive director", "chief executive officer", "ceo", "president and ceo", "managing director"],
+  },
+  {
+    // Education / workforce / teaching.
+    triggers: /\b(teacher|educator|workforce|instructor|faculty|curriculum|teaching)\b/,
+    titles: [
+      "teacher", "instructor", "lecturer", "faculty", "director of education", "education director",
+      "workforce development director", "training director", "program director",
+    ],
+  },
+];
+
+function laneSynonymTitles(laneRole: string): string[] {
+  const text = normalize(laneRole);
+  const titles: string[] = [];
+  for (const family of ROLE_FAMILIES) if (family.triggers.test(text)) titles.push(...family.titles);
+  return titles;
+}
+
+// How well a posting title fits a lane: a role-family synonym hit is strong (and decisive over token
+// overlap); otherwise two or more shared significant title tokens. Below 2, no match.
+function postingLaneScore(laneRole: string, synonymTitles: string[], normalizedTitle: string): number {
+  if (synonymTitles.some((title) => normalizedTitle.includes(title))) return 100;
+  return sharedTokenCount(normalizedTitle, normalize(laneRole));
+}
+
+// Assign each verified posting to the single lane its TITLE fits best (by synonym, else ≥2 shared
+// tokens). Title-based on purpose: `matched_role_term` is the search's loose tag (a CIO can be tagged
+// "executive director"), so using it leaks tech-exec roles into the ED lane.
 function assignPostingsToLanes(lanes: Array<{ role: string }>, postings: VerifiedPostingLike[]) {
+  const synonymsByLane = new Map(lanes.map((lane) => [lane.role, laneSynonymTitles(lane.role)]));
   const assignment = new Map<VerifiedPostingLike, string>();
   for (const posting of postings) {
     const title = normalize(posting.title);
     let bestLane: string | null = null;
-    let bestScore = 1; // require at least 2 shared tokens to count as a match
+    let bestScore = 1; // require a synonym hit or at least 2 shared tokens
     for (const lane of lanes) {
-      const shared = sharedTokenCount(title, normalize(lane.role));
-      if (shared >= 2 && shared > bestScore) {
-        bestScore = shared;
+      const score = postingLaneScore(lane.role, synonymsByLane.get(lane.role) ?? [], title);
+      if (score > bestScore) {
+        bestScore = score;
         bestLane = lane.role; // ties keep the earlier (higher-priority) lane
       }
     }

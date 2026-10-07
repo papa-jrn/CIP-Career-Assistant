@@ -1038,11 +1038,17 @@ the lane's role/rationale share a meaningful word (not "roles"/"leadership"/"hea
 not the nonprofit lanes. Mirrors the posting title-attribution fix — stop matching on incidental/generic
 tokens. Test added; full suite **241**.
 
-Known-limitation still open (Issue B): a verified tech-exec posting ("VP and CIO") does not validate the
-founder's "Director of Media Innovation / CTO" lane because the title shares no token with the lane name
-(CIO ≠ "CTO"/"Director of Media Innovation"). Lifting that lane to Strong alternate on real postings
-needs either lane synonym vocabulary (CIO/CTO/technology officer → tech-exec lane) or trusting the
-search's own lane tagging (store which lane scope matched, not the loose term). Deferred as a decision.
+Issue B RESOLVED (2026-10-07, founder chose "lane synonym vocabulary"). Added `ROLE_FAMILIES` to
+`strategic-state.ts`: a small deterministic map of role families (tech/digital executive, nonprofit
+executive leadership, education/workforce) each with trigger keywords and equivalent titles. A lane is
+granted a family's titles ONLY when the lane's own text matches that family's triggers (so tech
+synonyms never attach to the nonprofit ED lane — "Nonprofit Media Leader" is not "media innovation").
+Posting→lane assignment now scores a synonym-title hit as decisive over token overlap, so a real "VP and
+Chief Information Officer" validates the "Director of Media Innovation / CTO" lane (via the
+"chief information officer" synonym) and lifts it to Strong alternate, while the ED lane does not claim
+it. Test B4 uses the founder's real lane names. Education triggers were kept narrow (teacher/workforce/
+faculty/curriculum, NOT bare "educational") so a tech lane serving "educational organizations" is not
+mis-filed. Full suite **242**.
 
 With this, the Opportunities + lane-scoring work is done. Next: the Employers-page reassessment incl.
 local-business discovery.

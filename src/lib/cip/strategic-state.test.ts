@@ -400,6 +400,24 @@ describe("lane scoring talks to the evidence re-analysis and the search (propaga
     expect(laneBy(lanes, /Chief Technology/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
   });
 
+  it("B4: a CIO posting validates the tech-exec lane via role-family synonyms, not the nonprofit ED lane", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        roleBriefs: [
+          { role: "Executive Director / Nonprofit Media Leader", whyItFits: "Proven nonprofit media leadership.", evidenceNeeded: "Refresh metrics.", searchTargets: [] },
+          { role: "Director of Media Innovation / CTO for Nonprofit or Educational Organizations", whyItFits: "A potential direction worth exploring.", evidenceNeeded: "Needs validation.", searchTargets: [] },
+        ],
+      },
+      // The real-world case: a Dartmouth "VP and CIO" shares no literal word with the lane name, but the
+      // tech-exec lane's role-family synonyms include "chief information officer".
+      verifiedPostings: [{ title: "Vice President and Chief Information Officer", employer: "Dartmouth College", matchedRoleTerm: "executive director", tier: "target_page" }],
+    });
+    const tech = laneBy(lanes, /Media Innovation/);
+    expect(tech?.reasons.join(" ")).toMatch(/verified-open posting/);
+    expect(tech?.label).toBe("Strong alternate");
+    expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
+  });
+
   it("A2: a weakened delta only hits lanes it shares a distinctive word with, not unrelated ones", () => {
     const lanes = scoreLanes({
       latestAdvisor: {
