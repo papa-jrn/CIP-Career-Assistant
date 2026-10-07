@@ -292,6 +292,15 @@ function normalizeEmployerName(name: string) {
             ) : null}
           </label>
         </div>
+        <label class="mt-4 flex flex-wrap items-start gap-3 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <input class="mt-1 h-4 w-4 accent-[var(--accent)]" type="checkbox" name="include_990" />
+          <span>
+            <span class="text-sm font-semibold">Also include small nonprofits from IRS 990 filings (ProPublica)</span>
+            <span class="mt-1 block text-xs leading-5 text-[var(--muted)]">
+              Open-web search misses smaller nonprofits that do not rank online — but every one of them files an IRS Form 990. This layer searches public filings for the nonprofit categories your lanes imply, filtered to your radius. Organizations are sized by annual revenue (floor $250k), never by employee count, and it runs even when the web search is unavailable.
+            </span>
+          </span>
+        </label>
         <div id="employer-discovery-loading" class="htmx-indicator mt-4">
           <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
             <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
@@ -300,6 +309,7 @@ function normalizeEmployerName(name: string) {
               <span>Expanding the radius into nearby towns...</span>
               <span>Searching chambers and regional directories...</span>
               <span>Checking anchor employers and career pages...</span>
+              <span>Reading IRS 990 filings for local nonprofits...</span>
               <span>Preparing source-backed candidates...</span>
             </span>
           </div>

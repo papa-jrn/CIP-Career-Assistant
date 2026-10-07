@@ -35,14 +35,18 @@ export interface BusinessSearchCandidate extends EmployerCandidate {
   discovery_channel: string;
   discovery_source_names: string[];
   /** The larger health system / company / parent this employer rolls up to (e.g. "Dartmouth Health"),
-   * from web search. Empty when it is itself the top-level organization. Used to group and dedupe. */
+   * from web search or the 990 parent-linker. Empty when it is itself the top-level organization.
+   * Used to group and dedupe. */
   parent_organization?: string;
+  /** IRS EIN, present on irs_990-discovered rows; keys the 990 parent-linker. Not persisted. */
+  ein?: number;
   /** The user's lanes this employer serves (tagged deterministically after discovery; correctable). */
   relevantLanes?: Array<{ lane: string; label: string; reason: string }>;
 }
 
 export interface BusinessSearchResult {
-  mode: "live_web_search" | "not_configured" | "error";
+  /** "irs_990" = a deterministic IRS Form 990 run (no OpenAI key needed) — see propublica-990.ts. */
+  mode: "live_web_search" | "irs_990" | "not_configured" | "error";
   geography: string;
   radiusMiles: number;
   searchArea?: GeocodedSearchArea;
@@ -383,7 +387,8 @@ const businessSearchSchema = {
   },
 };
 
-function extractResponseText(payload: unknown) {
+/** Pull the text out of a Responses-API payload (shared with the 990 parent-linker). */
+export function extractResponseText(payload: unknown) {
   if (!payload || typeof payload !== "object") return null;
   const direct = (payload as { output_text?: unknown }).output_text;
   if (typeof direct === "string") return direct;

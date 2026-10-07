@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Employers-page redesign underway — first slice (lane-aware employer discovery: lane-derived targeting, lane tagging, dedupe) BUILT 2026-10-07 (247 tests); deferred: 990 layer, broader coverage, target-workspace UX. See §16.**
+Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Employers-page redesign underway — first slice (lane-aware employer discovery: lane-derived targeting, lane tagging, dedupe) BUILT 2026-10-07 (247 tests); second slice (ProPublica 990 nonprofit discovery, deterministic + standalone) BUILT 2026-10-07 (+26 tests); deferred: broader coverage, target-workspace UX, 990 enrichment of saved targets. See §16.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -1157,7 +1157,7 @@ suggests watching the parent so future runs treat the members as already tracked
 apply to hosted). AI provides the parent, deterministic logic groups/dedupes (house pattern). Full suite
 **248**.
 
-### 2026-10-07 — NEXT SESSION: ProPublica 990 nonprofit discovery (plan sketch, not built)
+### 2026-10-07 — ProPublica 990 nonprofit discovery (plan sketch → BUILT same day, below)
 
 Founder's next priority (approaching session limit): add the IRS Form 990 layer so **small/mid local
 nonprofits that web search misses** are picked up. Rationale: open-web discovery finds the prominent orgs
@@ -1195,6 +1195,108 @@ for nonprofit lanes); (c) city-match vs geocode-every-org for the geo filter (st
 financials (feeds the search brief + fit reasoning — §9/§13), year-over-year financial trend signals, and
 scheduled refresh. Build discovery first; enrichment is the natural follow-on.
 
+#### BUILT 2026-10-07 — the four decisions, settled at build start (founder)
+
+- **(a) Budget floor $250k; buckets small <$1M / medium $1M–$10M / large >$10M.** Size is budget-based,
+  never headcount; the web search's `minimum_size` does not apply to 990 rows.
+- **(b) Broad five NTEE categories** for nonprofit-family lanes: 1 Arts (A), 2 Education (B), 4 Health
+  (E–F), 5 Human services (I–P), 7 Public/societal benefit (S/T/W) — ids verified live against the API.
+  Education-family lanes narrow to Education; no usable nonprofit/education signal → the broad five,
+  disclosed in the coverage line.
+- **(c) Geo filter = city-match first** against the search-area center + state-verified nearby places;
+  unmatched cities geocoded (bounded at 12/run) and Haversine-checked against the anchor; unlocatable
+  cities dropped and counted, never guessed in.
+- **(d) 12 candidates per run** (matches the web-search cap), ranked lane fit → distance → budget.
+- **Standalone mode:** with the toggle on, the layer runs even when OpenAI is absent or failed — new
+  result mode `irs_990`. The deterministic path is never gated behind the paid one (house rule).
+
+What shipped:
+
+- **`propublica-990.ts`** — ProPublica Nonprofit Explorer client (search by `state[id]` + `ntee[id]` +
+  `c_code[id]=3`, per-EIN detail endpoint), 0-based `page` (25/page, ≤2 pages/category), 600 ms pause
+  between requests, one polite retry on 429/5xx, 10 s timeout, bounded TTL cache (search pages 12 h,
+  org details 30 d, 500 entries prune-oldest; an injected fetch bypasses the cache so tests stay
+  isolated). 501(c)(3) only and "Group Return" rows skipped. Latest-filing financials with the BMF
+  summary as fallback; provenance = EIN + filing year + ProPublica URL; `careers_url` stays empty (a
+  filing says nothing about a careers page). Detail budget 24/run spent closest-first after the geo
+  filter; revenue-unknown orgs are dropped and counted ("no usable financials"), never shown as poor
+  fit. All I/O injectable (fetchImpl / sleep / geocoder) — the repo's no-network test idiom.
+- **Merge into discovery** — `POST /api/employers/discover` gains `include_990`; the layer runs after
+  the web search and its candidates flow the same pipeline (lane tagging, partition-vs-tracked, save,
+  review queue) with `discovery_channel: "irs_990"`, budget-based `estimated_size` ("medium nonprofit -
+  $1.4M annual revenue (FY 2024)"), and `source_notes` = EIN / revenue / NTEE / ProPublica link. A 990
+  org that resolves (conservative resolver) to a web candidate is counted as "also found by web
+  search" — the web row keeps its source/careers URLs — instead of duplicating. A coverage `<details>`
+  renders categories, counts, floor, cap, skips, and attribution; when only the 990 layer ran the run
+  mode is `irs_990` and the header says so; a failed web half is disclosed without hiding the 990
+  results; NTEE category phrases are pinned by test to the lane-tagging vocabulary.
+- **UI** — "Also include small nonprofits from IRS 990 filings (ProPublica)" toggle on the discovery
+  form; the queue's channel pill / lane chips / parent grouping needed no change.
+- **No schema change** (every needed column already exists), **no new env var** (keyless API), security
+  posture unchanged (same-origin, auth, anonymous rate limit).
+- **Tests** — `propublica-990.test.ts`, 26 fixture tests with injected fetch (no network): NTEE↔lane
+  derivation, category-phrase↔lane-tag contract, polite paging + retry, c3/group-return eligibility,
+  budget buckets + formatting (never rounds up past the figure), city-match vs geocode paths (wrong
+  state, unverified state, geocode cap), latest-filing parsing + BMF fallback, candidate provenance,
+  end-to-end run with honest coverage counts, category-failure honesty, floor/no-financials drops,
+  the 12 cap, non-US null, and web↔990 dedupe (incl. the DHMC acronym case).
+- **Verification** — tsc clean, 26/26 new tests pass, SSR build compiles. Full suite on this machine
+  was 270/274 at first: the 4 `loop-repair.test.ts` failures were **pre-existing on the pulled
+  commit** (verified by stashing this change) and environment-dependent. **FIXED later the same
+  session (280/280, suite test time 21 s → 1.2 s):** vitest loads `.env` into `import.meta.env`, and
+  that file stubbed `OPENAI_API_KEY` at MODULE scope while `afterEach` called `vi.unstubAllEnvs()` —
+  so the stub was cancelled after the first test, the advisor tests re-saw the real key, and they
+  attempted LIVE OpenAI calls that hit vitest's 5 s timeout (and billed). Two-layer fix: (1) new
+  `vitest.setup.ts` (registered in `vitest.config.ts`) strips provider credential keys from both
+  `import.meta.env` and `process.env` suite-wide, making "never call the real API from the suite"
+  (AGENTS.md) a guarantee instead of per-file discipline — safe because every other test already
+  injects fake keys explicitly (`loadJobSearchConfig` readers with "sk-test", explicit `apiKey`
+  options); (2) `loop-repair.test.ts` re-stubs in `beforeEach` so its own intent survives the
+  unstub. Prod env handling (import.meta.env read by name) is untouched.
+
+Live end-to-end pass on the founder's account still to do, as with the lane-aware slice.
+
+#### Follow-up 2026-10-07 (from the first live run) — 990 rows now join the parent-organization dedupe
+
+The first live run worked (the layer ran, filing-backed candidates appeared) but re-surfaced the
+morning's duplication: Mary Hitchcock Memorial Hospital and Dartmouth-Hitchcock Medical Center were
+listed as separate fresh candidates although the user watches Dartmouth Health. Root cause: the
+morning's parent mechanism needs `parent_organization` on the candidate, and the 990 layer set it to
+"" on every row — filings carry no parent name, and a member's name shares no tokens with its
+system's (world knowledge, not string overlap), so the parent leg of `partitionAgainstExisting`
+could never fire for 990 rows.
+
+**Founder decision: model-assisted + stored parents** — the same house pattern as the morning's web
+fix (the model provides the parent; deterministic code dedupes and groups), with the deterministic
+layer intact:
+
+- **Stored adoption (deterministic, works in standalone mode):** `adoptKnownParents` fills only
+  EMPTY parents from member→parent pairs earlier runs saved on `employer_candidates.parent_organization`
+  (loaded per run). Never overwrites a model-provided or already-adopted parent.
+- **Model pass (when OpenAI is configured):** `enrichNineNinetyParents` — ONE small Responses call
+  (strict `json_schema`, `max_output_tokens` 2000, results keyed by EIN so a response cannot
+  retarget another row) links each 990 org to its parent, preferring the user's tracked employer
+  names; empty string when top-level/unknown, never invented. On no key / provider failure / bad
+  payload it returns "not_configured"/"unavailable" with **nothing changed** — the 990 layer itself
+  never depends on it. `BusinessSearchCandidate` gained an in-memory `ein?` used as the key (not
+  persisted).
+- **Ordering:** adoption + enrichment run BEFORE the dedupe partition, for web and 990 rows alike;
+  enriched parents then flow the morning's mechanism unchanged — dedupe vs tracked parents
+  ("already tracked as Dartmouth Health"), "Part of <parent>" card labels, the watch-the-parent
+  grouping note. Saved candidates persist their parents, so future runs (including standalone 990
+  runs) adopt them deterministically.
+- **Disclosure (§6):** the 990 coverage block reports how many orgs were linked to a parent, and
+  says plainly when the model pass was unavailable ("members may be listed individually this run").
+- **Tests (32 in the file):** adoption (exact + acronym, never overwrites, no-op with no stored
+  members), enrichment (EIN-keyed apply, a rogue row for an unknown EIN is ignored,
+  not_configured without fetching, failure changes nothing), and the founder's live case end-to-end:
+  Mary Hitchcock + DHMC enriched → `partitionAgainstExisting` vs watched Dartmouth Health → both
+  already-tracked, the independent org fresh. The enrichment option treats an explicit `apiKey`
+  (even "") as authoritative precisely so tests stay hermetic against a real key in `.env` — the
+  same `import.meta.env` trap that breaks loop-repair locally.
+
+Confirming live re-run still to do, as with the lane-aware slice.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -1213,7 +1315,8 @@ marker and direct-read migrations are needed for those features; `posting_persis
 index for cross-run persistence; `posting_dispositions` adds the user-status / action-tracking table; `20260930140000_employer_aliases.sql` adds the employer-resolution
 correction table. All three 2026-09-30 migrations **must be applied to hosted Supabase** (dashboard SQL editor) — `posting_persistence`
 before carry-forward can write, `posting_dispositions` before the chip status endpoint can write, and `employer_aliases` before the employer-fix
-endpoint can write.
+endpoint can write. The 2026-10-07 lane-aware discovery and ProPublica 990 slices need `20261007120000` / `20261007130000` (relevant_lanes,
+parent_organization) and **no migration of their own** — the 990 layer reuses `employer_candidates`' existing columns.
 
 ### Next, in order
 

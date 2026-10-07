@@ -3,6 +3,7 @@ import {
   type BusinessSearchCandidate,
   type BusinessSearchResult,
   type BusinessSearchSource,
+  canRunLiveBusinessSearch,
   runBusinessSearch,
   saveBusinessSearchResult,
 } from "@/lib/cip/business-search-engine";
@@ -14,6 +15,16 @@ import {
   type LaneLike,
 } from "@/lib/cip/discovery-targeting";
 import { loadStrategicState } from "@/lib/cip/strategic-state";
+import { resolveSearchArea } from "@/lib/cip/geography-engine";
+import {
+  adoptKnownParents,
+  dropNineNinetyDuplicates,
+  enrichNineNinetyParents,
+  runNineNinetyDiscovery,
+  type KnownParentMember,
+  type NineNinetyCoverage,
+  type NineNinetyDiscoveryResult,
+} from "@/lib/cip/propublica-990";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
@@ -87,19 +98,89 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const sectors = usingLaneTargeting ? (targeting as DiscoveryTargeting).sectors : manualSectors;
 
   const searchInput = { geography, radiusMiles, sectors, minimumSize, lanes: usingLaneTargeting ? targeting?.lanes : undefined };
-  const result = await runBusinessSearch(searchInput);
+  let result = await runBusinessSearch(searchInput);
+
+  // IRS Form 990 layer (deterministic, free — ProPublica Nonprofit Explorer): small/mid local
+  // nonprofits that open-web search misses, but that all file 990s. Runs on its own even when the
+  // web search is not configured or failed, so the deterministic path is never gated behind the
+  // paid one (house rule). Sizing is by budget (floor $250k), never headcount.
+  const includeNineNinety = form.get("include_990") !== null;
+  const webMode = result.mode;
+  let nineNinety: NineNinetyDiscoveryResult | null = null;
+  let nineNinetyKept: BusinessSearchCandidate[] = [];
+  let nineNinetyNote = "";
+  if (includeNineNinety) {
+    let area = result.searchArea ?? null;
+    if (!area) {
+      try {
+        area = await resolveSearchArea(geography, result.radiusMiles);
+      } catch {
+        area = null;
+      }
+    }
+    if (!area) {
+      nineNinetyNote = "The IRS 990 nonprofit layer could not geocode this area, so no filings were searched.";
+    } else {
+      nineNinety = await runNineNinetyDiscovery({ searchArea: area, lanes });
+      if (!nineNinety) {
+        nineNinetyNote = "The IRS 990 nonprofit layer covers US states only; no state could be determined for this area.";
+      } else {
+        // When both sources find the same employer, keep the web candidate (it carries the
+        // source/careers URLs) and record the 990 row as confirmation, not a duplicate.
+        const webCandidates = result.candidates;
+        const deduped = dropNineNinetyDuplicates(nineNinety.candidates, webCandidates);
+        nineNinetyKept = deduped.kept;
+        nineNinety.coverage.duplicateOfWebSearch = deduped.duplicates.length;
+        result = {
+          ...result,
+          mode: webMode === "live_web_search" ? "live_web_search" : "irs_990",
+          searchArea: area,
+          sourcePages: [...result.sourcePages, nineNinety.sourcePage],
+          candidates: [...webCandidates, ...deduped.kept],
+          summary: webMode === "live_web_search" ? result.summary : nineNinety.summary,
+          error: webMode === "error" ? result.error : undefined,
+        };
+      }
+    }
+  }
+
   let savedSources = 0;
   let savedCandidates = 0;
   let currentSearchCandidates: SavedCandidateRow[] = [];
   let alreadyTracked: AlreadyTracked[] = [];
 
-  if (user && result.mode === "live_web_search") {
-    // Tag every candidate with the lane(s) it serves, then set aside ones already tracked so the queue
-    // is not shown duplicates; only genuinely new employers are saved.
+  if (user && (result.mode === "live_web_search" || result.mode === "irs_990")) {
+    // Parent organizations BEFORE the dedupe partition (the parent-organization mechanism): first
+    // adopt what earlier runs already learned (deterministic), then one bounded model pass links
+    // the remaining 990 rows to their parent — the same house pattern as the web search's parent
+    // capture. Any failure leaves the parents empty and the run otherwise unchanged.
+    const existingNames = await loadExistingEmployerNames(supabase, user.id);
+    const knownMembers = await loadKnownParentMembers(supabase, user.id);
+    const adoptedParents = adoptKnownParents(result.candidates, knownMembers);
+    let parentsLinked = adoptedParents;
+    let parentBasis: NineNinetyCoverage["parentBasis"] = adoptedParents ? "saved_only" : "not_run";
+    if (nineNinetyKept.length && canRunLiveBusinessSearch()) {
+      const enrichment = await enrichNineNinetyParents(nineNinetyKept, existingNames);
+      parentsLinked += enrichment.applied;
+      parentBasis =
+        enrichment.status === "applied"
+          ? adoptedParents
+            ? "model_and_saved"
+            : "model"
+          : enrichment.status === "unavailable"
+            ? "model_unavailable"
+            : parentBasis;
+    }
+    if (nineNinety) {
+      nineNinety.coverage.parentsLinked = parentsLinked;
+      nineNinety.coverage.parentBasis = parentBasis;
+    }
+
+    // Tag every candidate with the lane(s) it serves, then set aside ones already tracked (by name
+    // OR parent) so the queue is not shown duplicates; only genuinely new employers are saved.
     for (const candidate of result.candidates) {
       candidate.relevantLanes = tagCandidateLanes({ name: candidate.name, category: candidate.category }, lanes);
     }
-    const existingNames = await loadExistingEmployerNames(supabase, user.id);
     const partition = partitionAgainstExisting(result.candidates, existingNames);
     alreadyTracked = partition.alreadyTracked;
     result.candidates = partition.fresh;
@@ -122,7 +203,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
   }
 
-  return html(renderDiscoveryResult({ result, savedSources, savedCandidates, signedIn: Boolean(user), currentSearchCandidates, targeting: usingLaneTargeting ? targeting : null, alreadyTracked }));
+  return html(
+    renderDiscoveryResult({
+      result,
+      savedSources,
+      savedCandidates,
+      signedIn: Boolean(user),
+      currentSearchCandidates,
+      targeting: usingLaneTargeting ? targeting : null,
+      alreadyTracked,
+      nineNinety,
+      nineNinetyNote,
+    }),
+  );
 };
 
 // Existing tracked employer names (watched + candidates) for dedupe against new discovery results.
@@ -136,6 +229,19 @@ async function loadExistingEmployerNames(supabase: ReturnType<typeof createServe
     ...((candidates ?? []) as Array<{ name: string }>).map((row) => row.name),
   ];
   return [...new Set(names.filter(Boolean))];
+}
+
+// Member → parent pairs earlier runs learned (web-search parents persist on candidate rows), so
+// later runs — including standalone 990 runs — can adopt them deterministically.
+async function loadKnownParentMembers(supabase: ReturnType<typeof createServer>, userId: string): Promise<KnownParentMember[]> {
+  const { data } = await supabase
+    .from("employer_candidates")
+    .select("name,parent_organization")
+    .eq("user_id", userId)
+    .limit(1000);
+  return ((data ?? []) as Array<{ name: string | null; parent_organization: string | null }>)
+    .filter((row) => row.name?.trim() && row.parent_organization?.trim())
+    .map((row) => ({ name: row.name!.trim(), parent: row.parent_organization!.trim() }));
 }
 
 function renderLaneChips(tags: Array<{ label: string }> | undefined) {
@@ -184,6 +290,32 @@ function renderAlreadyTracked(alreadyTracked: AlreadyTracked[]) {
     </details>`;
 }
 
+function renderNineNinetyCoverage(nineNinety: NineNinetyDiscoveryResult | null, note: string) {
+  if (!nineNinety) {
+    if (!note) return "";
+    return `
+      <div class="mt-3 rounded-md border border-[var(--warning)] bg-[var(--background)] p-3">
+        <p class="text-sm font-semibold text-[var(--warning)]">IRS 990 nonprofit layer not run.</p>
+        <p class="mt-1 text-sm leading-6 text-[var(--muted)]">${escapeHtml(note)}</p>
+      </div>`;
+  }
+  const coverage = nineNinety.coverage;
+  const duplicateLine = coverage.duplicateOfWebSearch
+    ? `, ${coverage.duplicateOfWebSearch} also found by the web search`
+    : "";
+  return `
+    <details class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+      <summary class="cursor-pointer text-sm font-semibold">IRS Form 990 nonprofit layer — ${coverage.kept} kept${escapeHtml(duplicateLine)}</summary>
+      <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(nineNinety.summary)}</p>
+      ${coverage.parentsLinked
+        ? `<p class="mt-2 text-xs text-[var(--muted)]">${coverage.parentsLinked} organization${coverage.parentsLinked === 1 ? " was" : "s were"} linked to a parent organization, so members of an employer you already track are grouped and deduped instead of listed separately${coverage.parentBasis === "model_unavailable" ? " (parent lookup via the search model was unavailable; only your saved data was used)" : ""}.</p>`
+        : coverage.parentBasis === "model_unavailable"
+          ? `<p class="mt-2 text-xs text-[var(--muted)]">Parent lookup via the search model was unavailable, so members of employers you already track may be listed individually this run.</p>`
+          : ""}
+      <p class="mt-2 text-xs text-[var(--muted)]">Filing data: <a class="font-semibold text-[var(--accent-strong)] hover:underline" href="https://projects.propublica.org/nonprofits/" target="_blank" rel="noreferrer">ProPublica Nonprofit Explorer</a> — free public IRS Form 990 data. Nonprofits are sized by annual revenue (floor $${coverage.minRevenueUsd.toLocaleString("en-US")}), never by employee count.</p>
+    </details>`;
+}
+
 function renderDiscoveryResult({
   result,
   savedSources,
@@ -192,6 +324,8 @@ function renderDiscoveryResult({
   currentSearchCandidates,
   targeting,
   alreadyTracked,
+  nineNinety,
+  nineNinetyNote,
 }: {
   result: BusinessSearchResult;
   savedSources: number;
@@ -200,12 +334,15 @@ function renderDiscoveryResult({
   currentSearchCandidates: SavedCandidateRow[];
   targeting: DiscoveryTargeting | null;
   alreadyTracked: AlreadyTracked[];
+  nineNinety: NineNinetyDiscoveryResult | null;
+  nineNinetyNote: string;
 }) {
   if (result.mode === "not_configured") {
     return `
       <div class="rounded-md border border-[var(--warning)] bg-[var(--background)] p-4">
         <p class="text-sm font-semibold text-[var(--warning)]">Business search engine not configured yet.</p>
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(result.summary)}</p>
+        ${nineNinetyNote ? `<p class="mt-2 text-sm leading-6 text-[var(--warning)]">${escapeHtml(nineNinetyNote)}</p>` : ""}
       </div>
     `;
   }
@@ -216,18 +353,29 @@ function renderDiscoveryResult({
         <p class="font-semibold">Business search failed.</p>
         <p class="mt-2">${escapeHtml(result.summary)}</p>
         ${result.error ? `<p class="mt-2 text-xs">${escapeHtml(result.error)}</p>` : ""}
+        ${nineNinetyNote ? `<p class="mt-2 text-xs">${escapeHtml(nineNinetyNote)}</p>` : ""}
       </div>
     `;
   }
 
+  const heading = result.mode === "irs_990"
+    ? (signedIn ? "IRS 990 nonprofit search complete." : "IRS 990 nonprofit search preview.")
+    : (signedIn ? "Live business search complete." : "Live business search preview.");
+
   return `
     <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-      <p class="text-sm font-semibold text-[var(--accent-strong)]">${signedIn ? "Live business search complete." : "Live business search preview."}</p>
+      <p class="text-sm font-semibold text-[var(--accent-strong)]">${heading}</p>
       <p class="mt-2 text-sm text-[var(--muted)]">
         ${signedIn ? `${savedSources} source pages saved. ${savedCandidates} employer candidates saved.` : `${result.sourcePages.length} source pages found. ${result.candidates.length} candidates found. Sign in to save employer candidates.`}
       </p>
       <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(result.summary)}</p>
       ${renderTargetingBanner(targeting) ? `<div class="mt-3">${renderTargetingBanner(targeting)}</div>` : ""}
+      ${result.error ? `
+        <div class="mt-3 rounded-md border border-[var(--warning)] bg-[var(--background)] p-3">
+          <p class="text-sm font-semibold text-[var(--warning)]">The web-search part of this run failed.</p>
+          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">${escapeHtml(result.error)} The IRS 990 results below are unaffected.</p>
+        </div>` : ""}
+      ${renderNineNinetyCoverage(nineNinety, nineNinetyNote)}
       ${renderSearchArea(result)}
       ${signedIn ? `<p class="mt-3 text-sm text-[var(--muted)]">Refresh this page to review saved candidates and source pages.</p>` : ""}
     </div>
