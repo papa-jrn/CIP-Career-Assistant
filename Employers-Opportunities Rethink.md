@@ -1407,6 +1407,74 @@ Fujifilm and Hypertherm are for-profit, City of Lebanon is a municipality, and W
 - **Known limit:** with no category text and no company suffix (e.g. a bare "Fujifilm") the app cannot know it is for-profit, so it falls in the unclear
   bucket (a quiet "No IRS 990 filing found" line); set it to Never once. Tests: 54 core + 21 view; full suite **369**, SSR build clean.
 
+### 2026-10-07 — Part 6 target workspace (§14): SPEC, for build
+
+Founder decisions (2026-10-07): (1) status = **seven states, app-suggested with the user's override** (the posting-chip pattern);
+(2) **rebuild `/employers` with targets first**, the discovery search and review queue collapsed below it; (3) "not interested" is
+**permanent and restorable from an Excluded list**; (4) **slice 1 is read-only dossier cards** (no migration), status and exclusions are slice 2.
+
+**Current state.** `/employers` is a discovery tool (search form, totals, map, review queue) over a flat list of saved businesses. Everything
+§14 asks a target to show already exists elsewhere in the data, but is not on the page: warm paths (`network_analysis` contacts matched to an
+employer), conversation history (`conversation_outcomes.related_employer`), follow-up obligations, linked verified postings (the latest run,
+resolved to watched employers by `employer-resolution`), funding (`employer_990_profiles`), score/movement/next move (propagation), lanes, and
+the weekly diff. **Genuinely missing:** a target status; a lane-fit tag on a *saved* employer (candidates have `relevant_lanes`, promotion does not
+copy it); persistence for a declined organization (today "Clear" deletes the candidate, so discovery can re-suggest it, which §14 forbids); and a
+per-target next action that combines the signals.
+
+**The target dossier (one pure assembler, `target-dossier.ts`).** For each watched employer, from a bundle the loader gathers once per render:
+- **Why it matters:** lane tags (deterministic: `tagCandidateLanes({name, category}, lanes)` at render time, so no schema change in slice 1), priority,
+  fit %, and its movement/explanation from strategic state. Labeled as the app's read, correctable later.
+- **People:** warm paths (a saved contact whose company resolves to this employer, with the stored first ask), conversation history (date,
+  person, direction, signal), and open follow-ups with urgency. **A warm path needs a real saved person and basis, never a guessed affiliation.**
+- **Openings:** this employer's verified postings from the latest run (each with its existing chip), counts, and how its careers page is read
+  (known board / read by search / robots-blocked / unreadable / none on file). **A careers URL or high fit is never shown as evidence of an opening.**
+  No vacancy is a first-class state ("no verified openings right now"), not an empty card.
+- **Funding:** the 990 signal line, or "not looked up" / "no filing" as **unknown, not poor** (the existing rule).
+- **Unknowns:** an explicit list (hiring unknown, pay unknown, no filing, no contact), so uncertainty is visible.
+- **What changed:** movement since the last snapshot, a new verified posting, a new filing year or trend move.
+
+**Suggested next action (deterministic ladder; first match wins, every rung cites its signals).**
+1. A due or overdue follow-up with this employer → "Follow up with <person>: <their next action>" (talk first).
+2. A warm path → "Reach out to <person> about <employer>" with the stored first ask (talk first).
+3. A verified posting that fits a lane → "Review <title>" carrying that posting's chip (apply / talk / check funding).
+4. Revenue shrinking → "Check funding before investing time."
+5. Relevant to a lane but no vacancy and no saved person → "Find someone to ask": an honest research action, **not** a talk-first naming a person we do not have.
+6. Careers page unreadable or robots-blocked → "Check their careers page by hand."
+7. Otherwise → "Keep watching."
+
+**Status (seven states).** `new / researching / talk first / monitoring / applying / paused / not interested`. The app suggests one (a warm path or
+follow-up → talk first; a verified lane-fit posting → researching; a posting the user marked applied or talking in `posting_dispositions` → applying;
+nothing yet → new, else monitoring). `paused` and `not interested` are user-only. A user-set status always wins and is shown as set, not suggested.
+
+**Page.** `/employers` becomes: a header and "needs attention" strip, target cards grouped by status (talk first / researching / applying /
+monitoring / new / paused), each a compact card (name, status, lane chips, fit and movement, the suggested action) that opens to the dossier; below
+that, collapsed, the existing discovery search, 990 toggle, and review queue. The financials block, the per-employer 990 setting, and the loading
+animation are reused unchanged.
+
+**Slice 1 (no migration).** `target-dossier.ts` (pure), a loader that reuses `loadRecommendationInputs`-style grounding, `target-workspace-view.ts`
+(escaped HTML), the rebuilt page. Reads only.
+
+**Slice 2 (one additive migration).** An **append-only `employer_target_events`** table (user_id, employer_key = `normOrg(name)`, name,
+parent_key, status, note, source user|app, created_at); the current status is the latest event per key, history stays for "what changed". Same
+pattern as `employer_aliases` / profiles, so it works for **candidates as well as watched employers**. "Not interested" is the `not_interested`
+event: discovery loads active exclusions and `partitionAgainstExisting` suppresses a candidate whose **name or parent** resolves to an excluded
+key (shown as a "hidden because you excluded it" count, never silent); an **Excluded** list restores one (a new event). Status controls on the card;
+the candidate queue gains "Not interested". **Open (decide at slice 2):** whether "not interested" should also offer to add the employer to the job
+search's employer exclusions (a scoped, explicit preference change, per §13), default off.
+
+**Slice 3.** Per-target "what changed" from the weekly snapshot, member-to-parent grouping (the `parent_organization` discovery already stores, which
+also fixes the Dartmouth Health 990 parent-vs-hospitals mismatch), and lane-fit stored on promotion.
+
+**Not in scope:** any outbound message (CIP never sends), relationship graph visuals, scheduled refresh.
+
+**Acceptance (from §14, restated).** A relevant target with no vacancy shows a supported action (a named talk-first only if a saved person exists,
+otherwise "find someone to ask"); a new candidate is never auto-promoted; a declined organization does not return (slice 2); every warm path names a real
+saved person and basis; funding and hiring unknowns are shown as unknown; talk-first is as prominent as apply.
+
+**Tests (fixtures, no network, invented organizations).** The assembler per signal; the ladder's precedence and each rung's wording; the "no guessed
+person" rule; the unknown rules; the loader against the fake Supabase; view escaping and every status/empty state; the page builds. Then a live pass on the
+founder's tracked employers.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -1441,7 +1509,7 @@ save (the EIN write retries without it) but a 990-discovered candidate's EIN is 
 3. **Remember each target's real career-page URL** (user-supplied or discovered) and give it back to the search and the direct reader.
 4. **Steps 5-8:** ~~the weekly diff~~ **DONE 2026-09-30**; then per-posting recommendation chips (apply / talk-first / research-funding /
    monitor / skip), minimal action tracking, and employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College); then the
-   Employers (target workspace) redesign (§14), including **how we find businesses in a local area**.
+   Employers (target workspace) redesign (§14), including **how we find businesses in a local area**. **Planned 2026-10-07: see the "Part 6 target workspace (§14): SPEC" entry above.**
 5. **De-founder and state-layer tests** (Autumn Phases 5-6) and lane configuration, per the Autumn plan. (The 990 enrichment is built — 2026-10-07 — pending the hosted migrations and a live pass.)
 
 ### Parked (not decided or not started)
