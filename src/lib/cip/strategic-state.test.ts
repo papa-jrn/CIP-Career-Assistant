@@ -323,3 +323,74 @@ describe("strategic state propagation", () => {
     expect(recommendation?.nextMove).toMatch(/resume variant/);
   });
 });
+
+describe("lane scoring talks to the evidence re-analysis and the search (propagation fix)", () => {
+  const changeLog = (over: Partial<{ strengthened: string[]; weakened: string[] }> = {}) => ({
+    hasChanges: true,
+    summary: "",
+    strengthened: over.strengthened ?? [],
+    weakened: over.weakened ?? [],
+    newlyAnswered: [],
+  });
+
+  // A lane that is exploratory-capped unless a real external signal validates it.
+  const cappedAdvisor = {
+    roleBriefs: [
+      { role: "Executive Director", whyItFits: "Supported by current leadership evidence.", evidenceNeeded: "Refresh metrics.", searchTargets: [] },
+      { role: "Chief Technology and Media Innovation Officer", whyItFits: "A potential direction worth exploring.", evidenceNeeded: "Needs validation.", searchTargets: [] },
+    ],
+  };
+  const laneBy = (lanes: ReturnType<typeof scoreLanes>, pattern: RegExp) => lanes.find((lane) => pattern.test(lane.lane));
+
+  it("A: a strengthened re-analysis delta raises a lane; a weakened one lowers another", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        ...advisor,
+        changeLog: changeLog({
+          strengthened: ["Nonprofit operations leadership is strongly supported by recent evidence"],
+          weakened: ["Big tech software engineering is a weaker direction now"],
+        }),
+      },
+    });
+    const nonprofit = laneBy(lanes, /Nonprofit/);
+    const software = laneBy(lanes, /software engineering/);
+    expect(nonprofit?.score).toBeGreaterThan(74);
+    expect(nonprofit?.reasons.join(" ")).toMatch(/strengthened this direction/);
+    expect(software?.score).toBeLessThan(66);
+    expect(software?.reasons.join(" ")).toMatch(/weakened this direction/);
+  });
+
+  it("B: a verified-open matching posting lifts a capped lane out of research to Strong alternate", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: cappedAdvisor,
+      verifiedPostings: [{ title: "Chief Technology Officer", employer: "Dartmouth College", matchedRoleTerm: "chief technology officer", tier: "target_page" }],
+    });
+    const cto = laneBy(lanes, /Chief Technology/);
+    expect(cto?.label).toBe("Strong alternate");
+    expect(cto?.score).toBeGreaterThanOrEqual(70);
+    expect(cto?.reasons.join(" ")).toMatch(/verified-open posting/);
+    expect(cto?.reasons.join(" ")).not.toMatch(/Capped as research/);
+  });
+
+  it("C: a speculative lane with neither a posting nor a strong conversation stays capped", () => {
+    const lanes = scoreLanes({ latestAdvisor: cappedAdvisor });
+    const cto = laneBy(lanes, /Chief Technology/);
+    expect(cto?.score).toBeLessThanOrEqual(58);
+    expect(cto?.label).toBe("Research lane");
+    expect(cto?.reasons.join(" ")).toMatch(/Capped as research/);
+  });
+
+  it("D: re-analysis strength ALONE does not promote past research without an external signal", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        ...cappedAdvisor,
+        changeLog: changeLog({ strengthened: ["Media innovation and technology leadership is strongly supported"] }),
+      },
+    });
+    const cto = laneBy(lanes, /Chief Technology/);
+    // The delta is recorded and raises the raw score, but the cap still applies — no verified posting.
+    expect(cto?.reasons.join(" ")).toMatch(/strengthened this direction/);
+    expect(cto?.score).toBeLessThanOrEqual(58);
+    expect(cto?.reasons.join(" ")).toMatch(/Capped as research/);
+  });
+});

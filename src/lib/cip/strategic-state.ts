@@ -83,6 +83,13 @@ export interface NetworkAnalysisLike {
   }>;
 }
 
+export interface VerifiedPostingLike {
+  title: string;
+  employer: string;
+  matchedRoleTerm?: string | null;
+  tier?: string | null;
+}
+
 export interface StrategicStateInputs {
   latestSource?: IntakeSource | null;
   latestAdvisor?: Partial<AdvisorAnalysis> | null;
@@ -90,6 +97,8 @@ export interface StrategicStateInputs {
   watchedEmployers?: WatchedEmployerLike[];
   employerCandidates?: EmployerCandidateLike[];
   latestNetworkAnalysis?: NetworkAnalysisLike | null;
+  /** Verified-open, non-excluded, in-area postings from the latest searched run (lane validation). */
+  verifiedPostings?: VerifiedPostingLike[];
 }
 
 export async function loadStrategicState(
@@ -182,7 +191,36 @@ export async function loadStrategicInputs(
     watchedEmployers: (employerRows ?? []) as WatchedEmployerLike[],
     employerCandidates: (candidateRows ?? []) as EmployerCandidateLike[],
     latestNetworkAnalysis: parseNetworkAnalysis(networkRow?.extracted_text ?? null),
+    verifiedPostings: await loadVerifiedPostingsForLanes(supabase, userId),
   };
+}
+
+// The latest searched run's verified-open postings that count as lane validation: not excluded and
+// not outside the user's places (remote counts). Self-contained here to avoid importing the job-search
+// module (which depends on the search brief, which depends on this file).
+async function loadVerifiedPostingsForLanes(supabase: SupabaseClient, userId: string): Promise<VerifiedPostingLike[]> {
+  const { data: run } = await supabase
+    .from("job_search_runs")
+    .select("id")
+    .eq("user_id", userId)
+    .in("status", ["succeeded", "partial"])
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!run) return [];
+  const { data } = await supabase
+    .from("job_search_observations")
+    .select("title,employer_text,matched_role_term,source_tier,verification_state,exclusion_hit,location_status,remote_status")
+    .eq("run_id", (run as { id: string }).id)
+    .eq("user_id", userId);
+  return ((data ?? []) as Array<Record<string, string | null>>)
+    .filter(
+      (row) =>
+        row.verification_state === "verified_open" &&
+        !row.exclusion_hit &&
+        !(row.location_status === "outside" && row.remote_status !== "remote"),
+    )
+    .map((row) => ({ title: row.title ?? "", employer: row.employer_text ?? "", matchedRoleTerm: row.matched_role_term, tier: row.source_tier }));
 }
 
 export function buildStrategicState(inputs: StrategicStateInputs): StrategicState {
@@ -261,8 +299,47 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       reasons.push(`${outcome.contactName}: ${outcome.signalDirection} ${outcome.signalType} (${adjustment >= 0 ? "+" : ""}${adjustment}).`);
     }
 
+    // Gap A: the evidence re-analysis talks to the lanes. Strengthened/weakened changeLog deltas and
+    // positioning phrases that match this lane adjust its score (bounded, reason-tagged). On their own
+    // these can raise or lower the score but never exempt the research cap — résumé/analysis strength
+    // alone does not promote a lane; that still needs a real external signal (below or a strong convo).
+    const advisor = inputs.latestAdvisor ?? null;
+    let strengthenedTotal = 0;
+    for (const phrase of advisor?.changeLog?.strengthened ?? []) {
+      if (strengthenedTotal >= 12 || !matchDeltaToLane(lane, phrase)) continue;
+      const add = Math.min(8, 12 - strengthenedTotal);
+      score += add;
+      strengthenedTotal += add;
+      reasons.push(`Evidence re-analysis strengthened this direction: ${trimPhrase(phrase)}`);
+    }
+    let weakenedTotal = 0;
+    for (const phrase of advisor?.changeLog?.weakened ?? []) {
+      if (weakenedTotal >= 12 || !matchDeltaToLane(lane, phrase)) continue;
+      const sub = Math.min(8, 12 - weakenedTotal);
+      score -= sub;
+      weakenedTotal += sub;
+      reasons.push(`Evidence re-analysis weakened this direction: ${trimPhrase(phrase)}`);
+    }
+    if ((advisor?.positioning ?? []).some((phrase) => matchDeltaToLane(lane, phrase))) {
+      score += 4;
+      reasons.push(`Current positioning names this direction.`);
+    }
+
+    // Gap B: verified-open postings from the latest search validate the lane. Each matching posting
+    // adds a bounded boost AND exempts the lane from the research cap — the cap asks for "a real role,
+    // employer, or current-work evidence," and a verified-open posting is exactly that.
+    const matchingPostings = (inputs.verifiedPostings ?? []).filter((posting) => matchPostingToLane(lane, posting));
+    if (matchingPostings.length) {
+      score += Math.min(12, matchingPostings.length * 6);
+      const sample = matchingPostings[0];
+      reasons.push(
+        `${matchingPostings.length} verified-open posting${matchingPostings.length === 1 ? "" : "s"} matched this lane (e.g. ${sample.title} at ${sample.employer}).`,
+      );
+    }
+    const validatedByPosting = matchingPostings.length > 0;
+
     const cap = exploratoryLaneCap(lane, inputs.conversationOutcomes ?? []);
-    if (cap && score > cap) {
+    if (cap && !validatedByPosting && score > cap) {
       score = cap;
       reasons.push(`Capped as research because current support is only a light new-target signal; needs a real role, employer, or current-work evidence before ranking higher.`);
     }
@@ -273,7 +350,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       label: lane.label,
       score: finalScore,
       direction: finalScore > base + 3 ? "up" : finalScore < base - 3 ? "down" : "steady",
-      reasons: reasons.slice(0, 5),
+      reasons: reasons.slice(0, 6),
       explanation: scoreExplanation(finalScore, reasons),
     };
   })
@@ -560,6 +637,26 @@ function matchesText(left: string, right: string) {
   const b = normalize(right);
   if (!a || !b) return false;
   return a.includes(b) || b.includes(a) || sharedTokenCount(a, b) >= 2;
+}
+
+// A re-analysis delta / positioning phrase is about this lane when it shares enough language with the
+// lane's role or its "why it fits" rationale.
+function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: string) {
+  if (!phrase?.trim()) return false;
+  return matchesText(lane.role, phrase) || (Boolean(lane.rationale) && matchesText(lane.rationale as string, phrase));
+}
+
+// A verified posting validates a lane when its title matches the lane's role, or the search already
+// tagged it to that role family via matched_role_term (the skill marker never counts as a lane match).
+function matchPostingToLane(lane: { role: string }, posting: VerifiedPostingLike) {
+  if (matchesText(lane.role, posting.title)) return true;
+  const term = posting.matchedRoleTerm;
+  return Boolean(term && term !== "skill" && matchesText(lane.role, term));
+}
+
+function trimPhrase(phrase: string) {
+  const text = phrase.trim();
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
 
 function sharedTokenCount(a: string, b: string) {

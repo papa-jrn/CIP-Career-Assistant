@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-09-30 — the Opportunities-page redesign is complete: steps 0-4, the weekly diff, recommendation chips + user status / action tracking, and employer resolution (items 1-4), plus step 9, all built and unit-tested (229 tests). Next: the lane-scoring ↔ evidence-analysis propagation fix, then the Employers redesign incl. local-business discovery. See §16 for the status board and build log.**
+Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Next: the Employers-page reassessment incl. local-business discovery. See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -649,7 +649,7 @@ private evidence never leaves.
 Guardrail: a skill-match outside all lanes is always labeled as such and never presented as a top
 lane recommendation. Lanes remain the intentional focus; skills widen the net honestly.
 
-### 2026-09-29 (later) — lane scoring is siloed from re-analysis and from verified postings (FIX QUEUED)
+### 2026-09-29 (later) — lane scoring is siloed from re-analysis and from verified postings (FIX QUEUED → BUILT 2026-10-07, see entry above)
 
 Founder observation after the magic re-analysis (Round 4) + a search that found real matching roles:
 the **Career Lanes page barely moved.** Primary lane = Executive Director; "No validated secondary
@@ -984,6 +984,35 @@ a persisted user override round-tripping. Four fixes from reading that output:
   list, extending the endowed-ED insight to exactly those postings. Full suite: **234 tests**.
 
 Still noted, not changed: "Conversation research lane" reads as jargon when surfaced as a lane label.
+
+### 2026-10-07 — lane scoring now talks to the evidence re-analysis and the search: BUILT
+
+The FIX QUEUED above (2026-09-29, "lane scoring is siloed…") is built, per its spec. `scoreLanes`
+(`strategic-state.ts`) now consumes the two signals it ignored:
+- **A — re-analysis deltas.** `advisor.changeLog.strengthened[]` / `.weakened[]` phrases that match a
+  lane (by `matchDeltaToLane`, reusing `matchesText` over the lane's role + rationale) adjust its score:
+  strengthened +8 each (capped +12 total), weakened −8 each (capped −12), and a matching `positioning`
+  phrase +4 once. Each is reason-tagged ("Evidence re-analysis strengthened this direction: …").
+- **B — verified postings as validation.** `loadStrategicInputs` now loads the latest searched run's
+  verified-open, non-excluded, in-area observations into `StrategicStateInputs.verifiedPostings`
+  (self-contained query — no import of the job-search module, to avoid a brief↔state cycle). A posting
+  matches a lane by title or by its `matched_role_term` (`matchPostingToLane`; the `skill` marker never
+  counts). A lane with ≥1 match gets +6/posting (capped +12) **and is exempt from `exploratoryLaneCap`**
+  — the cap asks for "a real role, employer, or current-work evidence," and a verified-open posting is
+  exactly that.
+- **Guardrail kept.** Only a verified posting (or, as before, a high-confidence conversation) exempts
+  the cap. A strengthened delta raises the raw score but, on its own, does NOT leave research — résumé/
+  analysis strength alone never promotes a lane. Weakened deltas can pull a lane down into research.
+- Touched only `strategic-state.ts` (`StrategicStateInputs` +`verifiedPostings`, `loadStrategicInputs`
+  +loader, `scoreLanes` +A/B +cap exemption, helpers `matchDeltaToLane`/`matchPostingToLane`/
+  `trimPhrase`). No schema change, no new outbound facets; nothing leaves the app. Briefing + Assets
+  reflect the new scores automatically.
+- Tests (fixture, deterministic): (A) strengthened rises / weakened falls; (B) a verified-open posting
+  lifts a capped lane to Strong alternate with a cited reason; (C) a speculative lane with neither stays
+  capped; (D) re-analysis strength alone stays capped. Full suite: **238 tests**; SSR build compiles.
+
+With this, the Opportunities + lane-scoring work is done. Next: the Employers-page reassessment incl.
+local-business discovery.
 
 ### Decisions made by the founder (2026-09-23)
 
