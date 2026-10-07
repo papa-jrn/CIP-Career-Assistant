@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ObservationRow, RunView } from "@/lib/cip/job-search-run";
-import { loadStrategicState } from "@/lib/cip/strategic-state";
+import { loadStrategicState, type StrategicState } from "@/lib/cip/strategic-state";
 import {
   buildCanonicalEmployers,
   employerMatch,
@@ -137,9 +137,11 @@ export async function loadRecommendationInputs(
   supabase: SupabaseClient,
   userId: string,
   floorUsd: number | null,
+  /** Pass an already-built strategic state to avoid loading it twice (the Employers workspace does). */
+  preloadedState?: StrategicState,
 ): Promise<RecommendationInputs> {
   const [state, { data: employerRows }, { data: networkRow }, aliases, financials] = await Promise.all([
-    loadStrategicState(supabase, userId),
+    preloadedState ? Promise.resolve(preloadedState) : loadStrategicState(supabase, userId),
     supabase.from("watched_employers").select("name,category,priority,fit_score").eq("user_id", userId).limit(500),
     supabase
       .from("career_sources")

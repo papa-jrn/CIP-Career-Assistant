@@ -1475,6 +1475,38 @@ saved person and basis; funding and hiring unknowns are shown as unknown; talk-f
 person" rule; the unknown rules; the loader against the fake Supabase; view escaping and every status/empty state; the page builds. Then a live pass on the
 founder's tracked employers.
 
+#### BUILT 2026-10-07 — slice 1 (read-only dossier cards, no migration)
+
+- **`target-dossier.ts`** (pure) assembles one dossier per watched employer: lane fit (`tagCandidateLanes` at render time), warm paths, conversations,
+  follow-ups, this run's verified postings each with its existing chip, how the careers page was read, the 990 funding state, an explicit unknowns
+  list, what changed, the **seven-rung next-action ladder**, and the **suggested status** (applying > talk first > researching > new/monitoring;
+  `paused` / `not interested` are never suggested). Matching uses the saved aliases and the conservative resolver, honors a user's "keep separate"
+  correction, and keeps Dartmouth College and Dartmouth Health distinct.
+- **`target-workspace-loader.ts`** gathers everything once per render (one strategic-state load, shared with the chip grounding through a new
+  optional `preloadedState` argument on `loadRecommendationInputs`) from the latest run that actually searched (a newer failed or running run is
+  ignored). A missing piece degrades to "unknown", never an error.
+- **`target-workspace-view.ts`** renders a summary strip (targets, talk first, follow-ups due, with verified openings, funding concerns) and cards grouped
+  by status. Talk-first is styled exactly as prominently as apply; a funding check is the caution style; the research action is neutral. The status
+  pill says "suggested". The 990 financials block, its per-employer setting, and the loading animation are reused unchanged; the old saved-business detail
+  (fit summary, target roles, source notes, links) moved into each card's dossier so nothing was lost.
+- **`/employers` rebuilt**: the workspace is first; the discovery search, 990 discovery toggle, and review queue are in a collapsible "Find and review
+  employers" section (open by default only when nothing is tracked yet); the flat saved-businesses list is replaced by the cards.
+
+**House rules, enforced and tested:** a warm path is a real saved person with a stated basis (a note with no named contact stays in the history but is never
+shown as a person, and is never a path); a careers URL or high fit is never shown as evidence of an opening, and "no verified openings right now" is a stated
+state; with no search yet openings read "unknown"; a lane-relevant target with no opening and nobody saved gets "Find someone to ask", never a named
+talk-first; unknown funding, pay, and contact are listed as unknown, never turned into a verdict; a far-away verified posting is kept visible as "outside
+your places" without counting as an opening.
+
+**Found while testing:** a conversation with no named contact printed the placeholder "Unknown contact" as if it were a person. Fixed: the history keeps the
+conversation with a blank name and the card says "A conversation".
+
+**Tests:** 24 (assembler, ladder, status, matching, funding states, unknowns, ordering) + 4 (loader against the in-memory database, incl. user scoping and
+"latest searched run") + 11 (view: grouping, prominence, honest empty states, escaping). Full suite **408**, typecheck and SSR build clean. Looked at in the
+browser with invented sample targets (summary strip, a talk-first card with an overdue follow-up, a funding-caution card, a "find someone" card with a
+blocked careers page); the throwaway preview page and build were deleted. **Still to do:** a live pass on the founder's tracked employers, then slice 2
+(status you set, persistent exclusions, one additive migration).
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
