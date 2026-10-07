@@ -611,6 +611,186 @@ export function diffFundingEntries(
   return { changes: changes.slice(0, 3), concerns: concerns.slice(0, 3) };
 }
 
+// ---------------------------------------------------------------- does a 990 lookup apply? (pure)
+
+/**
+ * Form 990 filings exist only for tax-exempt nonprofits (and this layer searches 501(c)(3)s). A tracked
+ * employer is often a for-profit company, a municipality, or a federal agency, for which a lookup is
+ * noise. Each employer has a mode: "auto" (guess from name and category, below), or the user's
+ * "on" / "off", which always wins.
+ */
+export type FinancialsMode = "auto" | "on" | "off";
+
+export function parseFinancialsMode(value: unknown): FinancialsMode {
+  return value === "on" || value === "off" ? value : "auto";
+}
+
+export type EmployerTypeKind = "government" | "for_profit" | "nonprofit" | "unclear";
+
+export interface EmployerTypeGuess {
+  kind: EmployerTypeKind;
+  reason: string;
+}
+
+// Government / public bodies never file a 990. Matched on name + category (lowercased).
+const GOVERNMENT_TEXT = new RegExp(
+  [
+    "\\b(city|town|village|county|state|commonwealth|province) of\\b",
+    "\\b(department|dept\\.?|bureau|agency) of\\b",
+    "\\bveterans (affairs|administration|health)\\b",
+    "\\bva (medical|health|hospital|clinic|regional|office)\\b",
+    "\\bu\\.?s\\.? (army|navy|air force|marine|coast guard|forest service|postal|department|census|bureau)\\b",
+    "\\bunited states\\b",
+    "\\bfederal\\b",
+    "\\bnational guard\\b",
+    "\\bmunicipal",
+    "\\bselect ?board\\b",
+    "\\bhousing authority\\b",
+    "\\bpolice\\b",
+    "\\bfire (department|district|dept)\\b",
+    "\\bschool district\\b",
+    "\\bsupervisory (union|district)\\b",
+    "\\bpublic (school|works|utility|utilities)\\b",
+    "\\bgovernment\\b",
+  ].join("|"),
+  "i",
+);
+// A bare "VA" in an employer's NAME is the Department of Veterans Affairs in this market (e.g. "White River Junction VA").
+const VA_IN_NAME = /(^|[\s,(-])va($|[\s,).-])/i;
+
+// Plainly nonprofit wording. Checked after government so "Foundation" never rescues a city department.
+const NONPROFIT_TEXT = new RegExp(
+  [
+    "non-?profit",
+    "not-for-profit",
+    "\\bfoundation\\b",
+    "\\bcharit",
+    "\\bhuman services\\b",
+    "\\bsocial services\\b",
+    "\\bcommunity (action|services|media|television|land trust|health|center|foundation)\\b",
+    "\\bfood (bank|shelf)\\b",
+    "\\bshelter\\b",
+    "\\bmuseum\\b",
+    "\\bhospice\\b",
+    "\\bhistorical society\\b",
+    "\\bland trust\\b",
+    "\\bcouncil on aging\\b",
+    "\\badvocacy\\b",
+  ].join("|"),
+  "i",
+);
+
+// Clearly for-profit: company-form suffixes in the NAME (not "Inc", which nonprofits use too) and
+// for-profit industry words in the CATEGORY. Deliberately NOT agriculture, education, health, or
+// information, where nonprofits are common.
+const FOR_PROFIT_NAME = /\b(llc|l\.l\.c\.?|corp|corporation|incorporated|ltd|plc|llp|company)\b/i;
+const FOR_PROFIT_CATEGORY = new RegExp(
+  [
+    "manufactur",
+    "\\bretail\\b",
+    "wholesale",
+    "\\bsoftware\\b",
+    "\\bconstruction\\b",
+    "\\bbank(s|ing)?\\b",
+    "\\binsurance\\b",
+    "real estate",
+    "restaurant",
+    "\\bhotel",
+    "hospitality",
+    "accommodation",
+    "food service",
+    "\\btransportation\\b",
+    "warehous",
+    "\\butilities\\b",
+    "\\bmining\\b",
+    "oil and gas",
+    "biotech",
+    "pharmaceutical",
+    "semiconductor",
+    "aerospace",
+    "staffing",
+    "credit union",
+    "professional and business services",
+  ].join("|"),
+  "i",
+);
+
+/** Best guess at what kind of organization an employer is, from its name and category text. Never claims certainty. */
+export function guessEmployerType(name: string, category?: string | null): EmployerTypeGuess {
+  const cleanName = name ?? "";
+  const cleanCategory = category ?? "";
+  const text = `${cleanName} | ${cleanCategory}`;
+  if (GOVERNMENT_TEXT.test(text) || VA_IN_NAME.test(cleanName)) {
+    return { kind: "government", reason: "looks like a government body (a city, town, state, federal agency, or public school), which does not file a Form 990" };
+  }
+  if (NONPROFIT_TEXT.test(text)) return { kind: "nonprofit", reason: "looks like a nonprofit" };
+  if (FOR_PROFIT_NAME.test(cleanName) || FOR_PROFIT_CATEGORY.test(cleanCategory)) {
+    return { kind: "for_profit", reason: "looks like a for-profit company, which does not file a Form 990" };
+  }
+  return { kind: "unclear", reason: "its type is unclear, so it is checked and a miss is just shown as unknown" };
+}
+
+export type FinancialsBasis = "user_on" | "user_off" | "filing" | "known_ein" | "auto_nonprofit" | "auto_unclear" | "auto_skip";
+
+export interface FinancialsPlan {
+  /** Should the app look this employer up (bulk button, promotion)? An explicit per-card click always can. */
+  lookup: boolean;
+  basis: FinancialsBasis;
+  reason: string;
+}
+
+/**
+ * Decide whether to look an employer up. The user's "on"/"off" always wins; otherwise a filing already
+ * found, or a known EIN, means yes; otherwise the type guess decides: government and clearly for-profit
+ * employers are skipped, and everything else (nonprofit-looking or unclear) is looked up.
+ */
+export function planFinancialsLookup(input: {
+  mode?: unknown;
+  name: string;
+  category?: string | null;
+  profile?: Pick<FundingProfile, "status"> | null;
+  knownEin?: boolean;
+}): FinancialsPlan {
+  const mode = parseFinancialsMode(input.mode);
+  if (mode === "on") return { lookup: true, basis: "user_on", reason: "turned on by you" };
+  if (mode === "off") return { lookup: false, basis: "user_off", reason: "turned off by you" };
+  if (input.profile?.status === "ok") return { lookup: true, basis: "filing", reason: "a Form 990 filing is on file for it" };
+  if (input.knownEin) return { lookup: true, basis: "known_ein", reason: "it was found through IRS 990 discovery" };
+  const guess = guessEmployerType(input.name, input.category);
+  if (guess.kind === "government" || guess.kind === "for_profit") return { lookup: false, basis: "auto_skip", reason: guess.reason };
+  return { lookup: true, basis: guess.kind === "nonprofit" ? "auto_nonprofit" : "auto_unclear", reason: guess.reason };
+}
+
+/** Split tracked employers into the ones to look up and the ones to skip (with why). Pure. */
+export function partitionByFinancialsPlan<T extends { name: string; category?: string | null; financials_mode?: unknown }>(
+  employers: T[],
+  profiles: Map<string, FundingProfile>,
+): { eligible: T[]; skipped: Array<{ employer: T; plan: FinancialsPlan }> } {
+  const eligible: T[] = [];
+  const skipped: Array<{ employer: T; plan: FinancialsPlan }> = [];
+  for (const employer of employers) {
+    const plan = planFinancialsLookup({
+      mode: employer.financials_mode,
+      name: employer.name,
+      category: employer.category,
+      profile: profiles.get(normOrg(employer.name)) ?? null,
+    });
+    if (plan.lookup) eligible.push(employer);
+    else skipped.push({ employer, plan });
+  }
+  return { eligible, skipped };
+}
+
+/** Save the user's per-employer setting. Returns an error message, or null. Needs the financials_mode migration. */
+export async function saveFinancialsMode(supabase: SupabaseClient, userId: string, employerId: string, mode: FinancialsMode): Promise<string | null> {
+  try {
+    const { error } = await supabase.from("watched_employers").update({ financials_mode: mode }).eq("user_id", userId).eq("id", employerId);
+    return error ? error.message : null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Could not save the setting.";
+  }
+}
+
 // ---------------------------------------------------------------- bulk selection (pure)
 
 export const FRESH_PROFILE_DAYS = 30;

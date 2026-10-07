@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { BULK_REFRESH_CAP, loadFundingProfiles, refreshFundingProfile, type RefreshTarget } from "@/lib/cip/employer-financials";
+import { BULK_REFRESH_CAP, loadFundingProfiles, planFinancialsLookup, refreshFundingProfile, type RefreshTarget } from "@/lib/cip/employer-financials";
 import { normOrg } from "@/lib/cip/employer-resolution";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { scoreEmployer } from "@/lib/cip/watched-employers";
@@ -44,6 +44,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   let promoted = 0;
   const promotedTargets: RefreshTarget[] = [];
+  let skippedFilingLookups = 0;
   for (const candidate of candidates) {
     const scored = scoreEmployer(candidate, intake);
     const { error: watchError } = await supabase.from("watched_employers").upsert(
@@ -71,13 +72,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (!watchError) {
       promoted += 1;
-      promotedTargets.push({
-        name: candidate.name,
-        location: candidate.location,
-        region: candidate.region,
-        ein: typeof candidate.ein === "number" ? candidate.ein : candidate.ein ? Number(candidate.ein) || null : null,
-        einSource: "candidate",
-      });
+      const knownEin = typeof candidate.ein === "number" ? candidate.ein : candidate.ein ? Number(candidate.ein) || null : null;
+      // A filing only exists for a nonprofit: skip government bodies and clearly for-profit companies.
+      const plan = planFinancialsLookup({ mode: "auto", name: candidate.name, category: candidate.category, knownEin: knownEin !== null });
+      if (plan.lookup) {
+        promotedTargets.push({ name: candidate.name, location: candidate.location, region: candidate.region, ein: knownEin, einSource: "candidate" });
+      } else {
+        skippedFilingLookups += 1;
+      }
       await supabase
         .from("employer_candidates")
         .update({ review_state: "promoted", updated_at: new Date().toISOString() })
@@ -115,7 +117,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         Refresh this page to see the updated watched list.
         ${propagation?.ok ? "The strategic snapshot was refreshed too." : propagation ? `Automatic propagation needs a manual briefing refresh: ${escapeHtml(propagation.errorMessage)}` : ""}
       </p>
-      ${financials.looked ? `<p class="mt-2 text-sm text-[var(--muted)]">IRS 990 filings: ${financials.found} found, ${financials.notFound} not found or unconfirmed (that means unknown, not poor funding).${financials.deferred ? ` ${financials.deferred} more can be looked up with the financials buttons below.` : ""}${financials.problem ? ` ${escapeHtml(financials.problem)}` : ""}</p>` : ""}
+      ${financials.looked || skippedFilingLookups ? `<p class="mt-2 text-sm text-[var(--muted)]">IRS 990 filings: ${financials.found} found, ${financials.notFound} not found or unconfirmed (that means unknown, not poor funding).${skippedFilingLookups ? ` ${skippedFilingLookups} look like government bodies or for-profit companies and were not looked up.` : ""}${financials.deferred ? ` ${financials.deferred} more can be looked up with the financials buttons below.` : ""}${financials.problem ? ` ${escapeHtml(financials.problem)}` : ""}</p>` : ""}
     </div>
   `);
 };

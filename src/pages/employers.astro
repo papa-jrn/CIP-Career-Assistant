@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import { canRunLiveBusinessSearch } from "../lib/cip/business-search-engine";
 import { geocodeCoordinates } from "../lib/cip/geography-engine";
-import { loadFundingProfiles, type FundingProfile } from "../lib/cip/employer-financials";
+import { loadFundingProfiles, planFinancialsLookup, type FundingProfile } from "../lib/cip/employer-financials";
 import { renderBulkFinancialsControl, renderFinancialsBlock } from "../lib/cip/employer-financials-view";
 import { normOrg } from "../lib/cip/employer-resolution";
 import { loadStrategicState, type StrategicEmployerScore } from "../lib/cip/strategic-state";
@@ -25,6 +25,8 @@ type EmployerRow = {
   confidence: string;
   source_notes: Array<{ label: string; value: string; url: string }>;
   last_reviewed_at: string | null;
+  /** The user's IRS 990 setting: auto (guess), on, or off. Absent until its migration is applied (reads as auto). */
+  financials_mode?: string | null;
 };
 
 type CandidateRow = EmployerRow & {
@@ -164,6 +166,16 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load watched employers.";
   }
+}
+
+// Whether an IRS 990 lookup applies to a tracked employer (the user's setting, else a guess from its name and category).
+function financialsPlan(employer: EmployerRow) {
+  return planFinancialsLookup({
+    mode: employer.financials_mode,
+    name: employer.name,
+    category: employer.category,
+    profile: fundingProfiles.get(normOrg(employer.name)) ?? null,
+  });
 }
 
 const savedRegionKeys = [...new Set([...sources.map((source) => source.region), ...candidates.map((candidate) => candidate.region)])];
@@ -567,6 +579,7 @@ function normalizeEmployerName(name: string) {
             set:html={renderBulkFinancialsControl({
               total: employers.length,
               withFilings: employers.filter((employer) => fundingProfiles.get(normOrg(employer.name))?.status === "ok").length,
+              skipped: employers.filter((employer) => !financialsPlan(employer).lookup).length,
               setupError: fundingError,
             })}
           />
@@ -598,6 +611,7 @@ function normalizeEmployerName(name: string) {
                   employerId: employer.id,
                   employerName: employer.name,
                   profile: fundingProfiles.get(normOrg(employer.name)) ?? null,
+                  plan: financialsPlan(employer),
                   setupError: fundingError,
                 })}
               />

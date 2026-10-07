@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { BULK_REFRESH_CAP, loadFundingProfiles, refreshFundingProfile, selectEmployersForRefresh } from "@/lib/cip/employer-financials";
+import { BULK_REFRESH_CAP, loadFundingProfiles, partitionByFinancialsPlan, planFinancialsLookup, refreshFundingProfile, selectEmployersForRefresh } from "@/lib/cip/employer-financials";
 import { friendlyFinancialsError, renderFinancialsBlock } from "@/lib/cip/employer-financials-view";
 import { normOrg } from "@/lib/cip/employer-resolution";
 import { escapeHtml } from "@/lib/cip/job-search-view";
@@ -27,19 +27,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const { data: employerRows, error: employerError } = await supabase
     .from("watched_employers")
-    .select("id,name,location,region")
+    .select("*") // all columns, so a database without the financials_mode column still loads (the setting then reads as Auto)
     .eq("user_id", user.id)
     .order("fit_score", { ascending: false })
     .limit(200);
   if (employerError) return html(`<p class="text-sm text-red-700">${escapeHtml(employerError.message)}</p>`, 500);
-  const employers = (employerRows ?? []) as Array<{ id: string; name: string; location: string | null; region: string | null }>;
+  const employers = (employerRows ?? []) as Array<{ id: string; name: string; location: string | null; region: string | null; category: string | null; financials_mode?: string | null }>;
 
   const { profiles, error: loadError } = await loadFundingProfiles(supabase, user.id);
   if (loadError) return html(`<p class="text-sm text-yellow-900">${escapeHtml(friendlyFinancialsError(loadError))}</p>`);
 
-  const { selected, remaining, skippedFresh } = selectEmployersForRefresh(employers, profiles, new Date().toISOString(), BULK_REFRESH_CAP);
+  // Government bodies and for-profit companies (and anything the user turned off) are not looked up.
+  const { eligible, skipped: skippedByType } = partitionByFinancialsPlan(employers, profiles);
+  const { selected, remaining, skippedFresh } = selectEmployersForRefresh(eligible, profiles, new Date().toISOString(), BULK_REFRESH_CAP);
   if (!selected.length) {
-    return html(`<p class="text-sm text-[var(--muted)]">Nothing to look up: every tracked employer already has a recent lookup (${skippedFresh} checked in the last 30 days).</p>`);
+    const skipNote = skippedByType.length ? ` ${skippedByType.length} look like government bodies or for-profit companies and are skipped.` : "";
+    return html(`<p class="text-sm text-[var(--muted)]">Nothing to look up: every employer that could have a filing already has a recent lookup (${skippedFresh} checked in the last 30 days).${escapeHtml(skipNote)}</p>`);
   }
 
   const swaps: string[] = [];
@@ -60,6 +63,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         employerId: employer.id,
         employerName: employer.name,
         profile: outcome.profile,
+        plan: planFinancialsLookup({ mode: employer.financials_mode, name: employer.name, category: employer.category, profile: outcome.profile }),
         message: outcome.saved ? null : outcome.error ? friendlyFinancialsError(outcome.error) : null,
         oob: true,
       }),
@@ -69,6 +73,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const parts = [
     `Looked up ${selected.length} employer${selected.length === 1 ? "" : "s"}: ${found} with filings, ${notFound} not found or unconfirmed (that means unknown, not poor funding)${failed ? `, ${failed} could not be reached (they will be retried)` : ""}.`,
     remaining ? `${remaining} more are waiting. Click again to continue.` : "",
+    skippedByType.length ? `Skipped ${skippedByType.length} that look like government bodies or for-profit companies (change any on its card).` : "",
     saveProblem ? `Some results could not be saved: ${friendlyFinancialsError(saveProblem)}` : "",
   ].filter(Boolean);
   return html(`<p class="text-sm leading-6">${escapeHtml(parts.join(" "))}</p>${swaps.join("")}`);

@@ -1379,6 +1379,34 @@ candidates. Hosted-database migrations still need applying (below). A live pass 
 compensation / salary plausibility (a historical officer-pay figure does not establish a current opening's
 pay); feeding 990 fields into the outbound search brief (they are public data, but nothing needs them there yet).
 
+#### Live pass 2026-10-07 (founder) and the first fix: the 990 lookup is per-employer, not for everyone
+
+Founder's live read of the finished enrichment: **(B) chips** show useful analysis ("costs exceed revenue", "income down over the
+past year", "down 31% over 3 years"); **(C) briefing** carries good funding information, and it sparked follow-up questions from the
+founder's conversations and employers to be wary of; **(D) lane-aware discovery** worked ("working great"); **(E) the job search** is "coming
+together pretty nicely". (A) found a real design flaw: the lookup ran for **every** tracked employer, but filings exist only for nonprofits.
+Fujifilm and Hypertherm are for-profit, City of Lebanon is a municipality, and White River Junction VA is federal.
+
+**Fix (founder chose: auto-guess + per-employer override; unclear employers are looked up and a miss is shown quietly):**
+- Each watched employer has an IRS 990 **setting: Auto / Always / Never** (`watched_employers.financials_mode`, migration
+  `20261008120000_watched_employer_financials_mode.sql`; absent = Auto, so nothing breaks before it is applied except saving the setting).
+- **Auto** (`guessEmployerType` / `planFinancialsLookup`, deterministic, name + category text): government bodies are skipped (City/Town/
+  County/State of, Department/Bureau/Agency of, Veterans Affairs and a standalone "VA" in the name, federal/U.S. agencies, school districts,
+  supervisory unions, police/fire, municipal, housing authorities, and the "Government" sector category); clearly for-profit companies are
+  skipped (company-form name suffixes such as LLC/Corp/Ltd, but NOT "Inc", which nonprofits use too; for-profit industry categories such as
+  manufacturing, retail, software, banking, insurance, construction, utilities). Order: government first, then plain nonprofit wording
+  (nonprofit, foundation, human services, community television/media, food bank, museum, hospice...), then for-profit. Everything else, including
+  hospitals, colleges and anything unfamiliar, is **unclear**: it is looked up, because a miss is cheap and harmless. Agriculture, education,
+  health and information are deliberately not treated as for-profit categories (nonprofits are common there).
+- **The user's setting always wins**; a filing already on file or a known EIN (990-discovered candidate) counts as "yes"; linking an EIN turns the
+  employer to Always.
+- **Where it applies:** the bulk button and the promotion lookup skip government and for-profit employers (and say how many); the per-card button
+  and "Look up anyway" always work. Skipped cards show **one quiet line** with the reason ("Skipped: this employer looks like a government body...")
+  and hide any stale no-match noise; an unclear employer's miss is **one quiet line** (details tucked in a fold); a nonprofit-looking employer's miss
+  still shows the full block (so a suggested EIN is never hidden); real filings are never hidden even if turned off.
+- **Known limit:** with no category text and no company suffix (e.g. a bare "Fujifilm") the app cannot know it is for-profit, so it falls in the unclear
+  bucket (a quiet "No IRS 990 filing found" line); set it to Never once. Tests: 54 core + 21 view; full suite **369**, SSR build clean.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -1399,8 +1427,9 @@ correction table. All three 2026-09-30 migrations **must be applied to hosted Su
 before carry-forward can write, `posting_dispositions` before the chip status endpoint can write, and `employer_aliases` before the employer-fix
 endpoint can write. The 2026-10-07 lane-aware discovery and 990 *discovery* slices need `20261007120000` / `20261007130000` (relevant_lanes,
 parent_organization) and no migration of their own. The 990 **enrichment** needs two more: `20261007140000_employer_990_profiles.sql`
-(the per-employer filing profiles table) and `20261007150000_employer_candidate_ein.sql` (`employer_candidates.ein`). Apply all four
-in order; each is safe to run twice. Without the first two, saving ANY discovered candidate fails (discovery writes those columns);
+(the per-employer filing profiles table) and `20261007150000_employer_candidate_ein.sql` (`employer_candidates.ein`), and the live-pass fix adds
+`20261008120000_watched_employer_financials_mode.sql` (the per-employer Auto/Always/Never setting; without it the setting cannot be saved but Auto
+still works). Apply all five in order; each is safe to run twice. Without the first two, saving ANY discovered candidate fails (discovery writes those columns);
 without 140000 the financials blocks show a setup message and chips/briefing simply have no 990 data; without 150000 candidates still
 save (the EIN write retries without it) but a 990-discovered candidate's EIN is not kept for promotion.
 

@@ -9,8 +9,13 @@ import {
   loadFundingProfiles,
   lookupEmployerFinancials,
   matchEmployerToFiler,
+  guessEmployerType,
   parseEinInput,
+  parseFinancialsMode,
   parseFundingEntries,
+  partitionByFinancialsPlan,
+  planFinancialsLookup,
+  saveFinancialsMode,
   profileToSignal,
   refreshFundingProfile,
   saveFundingProfile,
@@ -496,6 +501,98 @@ describe("upsertCandidateRow (EIN persistence that cannot lose a candidate)", ()
   it("does not hide an unrelated error", async () => {
     const client = { from: () => ({ upsert: async () => ({ error: { message: "permission denied for table employer_candidates" } }) }) } as never;
     expect((await upsertCandidateRow(client, row, 123456789)).error?.message).toMatch(/permission denied/);
+  });
+});
+
+describe("does a 990 lookup apply? (guess + per-employer mode)", () => {
+  const kind = (name: string, category?: string) => guessEmployerType(name, category).kind;
+
+  it("skips the founder's real examples: a municipality, the VA, and for-profit manufacturers", () => {
+    expect(kind("City of Lebanon")).toBe("government");
+    expect(kind("City of Lebanon", "municipal government")).toBe("government");
+    expect(kind("White River Junction VA")).toBe("government");
+    expect(kind("White River Junction VA Medical Center", "healthcare")).toBe("government");
+    expect(kind("Hypertherm", "advanced manufacturing")).toBe("for_profit");
+    expect(kind("Fujifilm", "manufacturing")).toBe("for_profit");
+  });
+
+  it("recognizes other government bodies, and the government category from the sector list", () => {
+    for (const name of ["Town of Hartford", "State of New Hampshire", "Vermont Department of Labor", "Lebanon Police Department", "Windsor Southeast Supervisory Union", "Hartford School District", "U.S. Forest Service", "Veterans Affairs Medical Center", "Lebanon Housing Authority"]) {
+      expect(kind(name), name).toBe("government");
+    }
+    expect(kind("Some Agency", "Government (federal, state, local)")).toBe("government");
+  });
+
+  it("recognizes for-profits by company suffix or industry category, but not by 'Inc' alone", () => {
+    expect(kind("Acme Widgets LLC")).toBe("for_profit");
+    expect(kind("Granite Software Corp")).toBe("for_profit");
+    expect(kind("Valley Bank", "finance and insurance")).toBe("for_profit");
+    expect(kind("Upper Valley Haven Inc")).toBe("unclear"); // nonprofits use Inc too
+  });
+
+  it("recognizes plain nonprofit wording, including the 990 layer's own category phrases", () => {
+    expect(kind("Upper Valley Haven", "Human services nonprofits")).toBe("nonprofit");
+    expect(kind("Claremont Community Television", "community media")).toBe("nonprofit");
+    expect(kind("Lebanon Community Foundation")).toBe("nonprofit");
+    expect(kind("Hospice of the Upper Valley")).toBe("nonprofit");
+    expect(kind("Valley Arts Council", "Arts and culture nonprofits")).toBe("nonprofit");
+  });
+
+  it("government wins over a nonprofit word, and nonprofit wording wins over a for-profit category", () => {
+    expect(kind("City of Lebanon Foundation")).toBe("government");
+    expect(kind("Valley Manufacturing Training Center", "manufacturing education nonprofit")).toBe("nonprofit");
+  });
+
+  it("leaves hospitals, colleges, and anything unfamiliar as unclear rather than guessing", () => {
+    expect(kind("Dartmouth Health", "healthcare network")).toBe("unclear");
+    expect(kind("Dartmouth College", "higher education")).toBe("unclear");
+    expect(kind("Hypertherm")).toBe("unclear"); // no category and no company suffix: it cannot know
+    expect(kind("Vaughn Associates")).toBe("unclear"); // 'va' must stand alone to mean Veterans Affairs
+  });
+
+  it("the user's setting always wins; otherwise a filing or known EIN means yes; otherwise the guess decides", () => {
+    expect(planFinancialsLookup({ mode: "on", name: "City of Lebanon" })).toMatchObject({ lookup: true, basis: "user_on" });
+    expect(planFinancialsLookup({ mode: "off", name: "Upper Valley Haven", category: "human services nonprofits" })).toMatchObject({ lookup: false, basis: "user_off" });
+    expect(planFinancialsLookup({ mode: "auto", name: "Hypertherm", category: "manufacturing", profile: { status: "ok" } })).toMatchObject({ lookup: true, basis: "filing" });
+    expect(planFinancialsLookup({ name: "Hypertherm", category: "manufacturing", knownEin: true })).toMatchObject({ lookup: true, basis: "known_ein" });
+    expect(planFinancialsLookup({ name: "City of Lebanon" })).toMatchObject({ lookup: false, basis: "auto_skip" });
+    expect(planFinancialsLookup({ name: "Upper Valley Haven", category: "human services nonprofits" })).toMatchObject({ lookup: true, basis: "auto_nonprofit" });
+    expect(planFinancialsLookup({ name: "Dartmouth Health" })).toMatchObject({ lookup: true, basis: "auto_unclear" });
+  });
+
+  it("a stale no-match profile does not keep a skipped employer in play", () => {
+    expect(planFinancialsLookup({ name: "City of Lebanon", profile: { status: "no_match" } }).lookup).toBe(false);
+  });
+
+  it("treats a missing or unknown stored mode as auto", () => {
+    for (const value of [undefined, null, "", "weird", "auto"]) expect(parseFinancialsMode(value)).toBe("auto");
+    expect(parseFinancialsMode("on")).toBe("on");
+    expect(parseFinancialsMode("off")).toBe("off");
+  });
+
+  it("partitions tracked employers into the ones to look up and the ones skipped with a reason", () => {
+    const employers = [
+      { name: "City of Lebanon", category: "municipal government" },
+      { name: "Upper Valley Haven", category: "human services nonprofits" },
+      { name: "Hypertherm", category: "manufacturing" },
+      { name: "Hypertherm Forced On", category: "manufacturing", financials_mode: "on" },
+      { name: "Dartmouth Health", category: "healthcare network" },
+    ];
+    const { eligible, skipped } = partitionByFinancialsPlan(employers, new Map());
+    expect(eligible.map((e) => e.name)).toEqual(["Upper Valley Haven", "Hypertherm Forced On", "Dartmouth Health"]);
+    expect(skipped.map((item) => item.employer.name)).toEqual(["City of Lebanon", "Hypertherm"]);
+    expect(skipped[0].plan.reason).toMatch(/government body/);
+    expect(skipped[1].plan.reason).toMatch(/for-profit/);
+  });
+
+  it("saves the setting on the employer, scoped to the user, and reports a missing column plainly", async () => {
+    const { client, db } = createFakeSupabase({ watched_employers: [{ id: "e1", user_id: USER, name: "City of Lebanon", financials_mode: "auto" }] });
+    expect(await saveFinancialsMode(client, USER, "e1", "on")).toBeNull();
+    expect(db.watched_employers[0].financials_mode).toBe("on");
+    expect(await saveFinancialsMode(client, "someone-else", "e1", "off")).toBeNull();
+    expect(db.watched_employers[0].financials_mode).toBe("on"); // another user's write changes nothing
+    const broken = { from: () => ({ update: () => ({ eq: () => ({ eq: async () => ({ error: { message: "Could not find the 'financials_mode' column of 'watched_employers' in the schema cache" } }) }) }) }) } as never;
+    expect(await saveFinancialsMode(broken, USER, "e1", "on")).toMatch(/financials_mode/);
   });
 });
 
