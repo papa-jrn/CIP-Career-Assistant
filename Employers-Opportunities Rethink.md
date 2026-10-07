@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Now in progress: the Employers-page redesign — first slice = lane-aware employer discovery (spec'd 2026-10-07, see §16). See §16 for the status board and build log.**
+Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Employers-page redesign underway — first slice (lane-aware employer discovery: lane-derived targeting, lane tagging, dedupe) BUILT 2026-10-07 (247 tests); deferred: 990 layer, broader coverage, target-workspace UX. See §16.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -1117,6 +1117,30 @@ lanes, lane tagging of a candidate, dedup of a known employer, and the empty/not
 each saved candidate shows the lane it serves (or "no current lane fit"), a candidate matching an existing
 watched employer is shown as already-tracked rather than duplicated, and the not-configured path returns
 honestly with no fabricated employers.
+
+#### BUILT 2026-10-07
+
+- **Shared vocabulary:** `strategic-state.ts` exports `laneRoleFamilies(laneRole)` (which `ROLE_FAMILIES`
+  a lane is in — `tech | nonprofit_exec | education`) and `distinctiveTokens`, reused by discovery.
+- **Deterministic core:** `discovery-targeting.ts` — `deriveDiscoveryTargeting(lanes)` maps each lane's
+  families to org-type sectors (conversation-only lanes excluded; `derivedFromLanes` false ⇒ caller falls
+  back to manual sectors); `tagCandidateLanes(candidate, lanes)` tags by distinctive-token overlap with
+  the lane role or its org types ("no current lane fit" when none); `partitionAgainstExisting` splits
+  fresh vs already-tracked via `employer-resolution`. 5 fixture tests.
+- **Engine:** `business-search-engine.ts` — `BusinessSearchInput.lanes` feeds the web-search prompt
+  (`target_lanes`, prioritize lane fit); `BusinessSearchCandidate.relevantLanes`; `saveBusinessSearchResult`
+  persists `relevant_lanes`.
+- **Endpoint:** `api/employers/discover.ts` loads strategic state, derives targeting, uses lane-derived
+  sectors when the user typed none (manual overrides), tags every candidate, dedupes against watched +
+  candidate employers (only fresh ones saved), and renders a "Targeting your lanes" banner, per-card lane
+  chips, and an "Already tracked — not added again" section.
+- **UI:** `employers.astro` — sectors marked optional ("leave blank → targets your lanes"); the review
+  queue cards show the lane-fit chips.
+- **Migration:** `20261007120000_employer_candidate_relevant_lanes.sql` (additive `relevant_lanes text[]`);
+  **apply to hosted Supabase** before the field persists. Full suite **247**; SSR build compiles.
+
+Deferred, unchanged: the ProPublica 990 layer, broader local-business coverage, and the full §14 target-
+workspace UX.
 
 ### Decisions made by the founder (2026-09-23)
 

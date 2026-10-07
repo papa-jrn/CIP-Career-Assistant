@@ -8,6 +8,8 @@ export interface BusinessSearchInput {
   radiusMiles: number;
   sectors: string[];
   minimumSize: string;
+  /** The user's lanes, when discovery is lane-aware, so the search targets where they are heading. */
+  lanes?: Array<{ lane: string; label: string }>;
 }
 
 export interface BusinessSearchSource {
@@ -32,6 +34,8 @@ export interface BusinessSearchSource {
 export interface BusinessSearchCandidate extends EmployerCandidate {
   discovery_channel: string;
   discovery_source_names: string[];
+  /** The user's lanes this employer serves (tagged deterministically after discovery; correctable). */
+  relevantLanes?: Array<{ lane: string; label: string; reason: string }>;
 }
 
 export interface BusinessSearchResult {
@@ -148,6 +152,7 @@ export async function saveBusinessSearchResult(
         confidence: candidate.confidence,
         discovery_channel: candidate.discovery_channel,
         discovery_source_names: candidate.discovery_source_names,
+        relevant_lanes: candidate.relevantLanes?.map((tag) => tag.lane) ?? [],
         source_notes: candidate.source_notes,
         review_state: "pending",
         last_reviewed_at: now,
@@ -165,8 +170,9 @@ function normalizeBusinessSearchInput(input: BusinessSearchInput): BusinessSearc
   return {
     geography: input.geography.trim(),
     radiusMiles: Number.isFinite(input.radiusMiles) ? Math.max(10, Math.min(150, input.radiusMiles)) : 50,
-    sectors: input.sectors.map((sector) => sector.trim()).filter(Boolean).slice(0, 10),
+    sectors: input.sectors.map((sector) => sector.trim()).filter(Boolean).slice(0, 14),
     minimumSize: input.minimumSize || "100",
+    lanes: input.lanes?.slice(0, 6),
   };
 }
 
@@ -218,8 +224,12 @@ async function runOpenAiBusinessSearch(
             },
             radius_miles: input.radiusMiles,
             sectors: input.sectors,
+            target_lanes: (input.lanes ?? []).map((lane) => ({ lane: lane.lane, priority: lane.label })),
             minimum_employer_size: input.minimumSize,
             requirements: [
+              ...(input.lanes && input.lanes.length
+                ? ["Prioritize employers whose mission or function fits the target_lanes above; the sectors are derived from those lanes. Higher-priority lanes (Primary, Strong alternate) matter more than research lanes."]
+                : []),
               "Return only employers that are connected to source pages found through web search.",
               "Actively search the generated_search_queries and nearby_places, not only the original geography string.",
               "For exact-name collisions, prefer employers inside the radius and explain uncertainty. Do not include a same-name employer just because it ranks highly if it is outside the geocoded radius.",

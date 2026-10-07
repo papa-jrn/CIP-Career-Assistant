@@ -671,7 +671,7 @@ const GENERIC_DELTA_TOKEN = new Set([
   "suitable", "appropriate", "combines", "combined", "continue", "skills", "based", "positions", "position",
 ]);
 
-function distinctiveTokens(text: string): Set<string> {
+export function distinctiveTokens(text: string): Set<string> {
   return new Set(normalize(text).split(" ").filter((token) => token.length > 3 && !GENERIC_DELTA_TOKEN.has(token)));
 }
 
@@ -690,8 +690,11 @@ function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: st
 // family's equivalent titles ONLY when the lane's OWN text is in that family (so tech synonyms never
 // attach to the nonprofit ED lane), and a posting validates a lane when its title contains one of
 // those titles. This is what lets a real CIO/CTO/VP-Technology posting validate the tech-exec lane.
-const ROLE_FAMILIES: Array<{ triggers: RegExp; titles: string[] }> = [
+export type RoleFamilyKey = "tech" | "nonprofit_exec" | "education";
+
+const ROLE_FAMILIES: Array<{ key: RoleFamilyKey; triggers: RegExp; titles: string[] }> = [
   {
+    key: "tech",
     // Technology / digital executive.
     triggers: /\b(cto|cio|chief (technology|information|digital) officer|technology officer|information officer|director of (technology|it|information|digital)|head of (technology|digital|it)|it director|media innovation|digital innovation)\b/,
     titles: [
@@ -702,11 +705,13 @@ const ROLE_FAMILIES: Array<{ triggers: RegExp; titles: string[] }> = [
     ],
   },
   {
+    key: "nonprofit_exec",
     // Nonprofit / organizational executive leadership.
     triggers: /\b(executive director|chief executive|\bceo\b|nonprofit leader|managing director)\b/,
     titles: ["executive director", "chief executive officer", "ceo", "president and ceo", "managing director"],
   },
   {
+    key: "education",
     // Education / workforce / teaching.
     triggers: /\b(teacher|educator|workforce|instructor|faculty|curriculum|teaching)\b/,
     titles: [
@@ -721,6 +726,12 @@ function laneSynonymTitles(laneRole: string): string[] {
   const titles: string[] = [];
   for (const family of ROLE_FAMILIES) if (family.triggers.test(text)) titles.push(...family.titles);
   return titles;
+}
+
+/** The role-family keys a lane belongs to (by its role text). Shared with employer discovery. */
+export function laneRoleFamilies(laneRole: string): RoleFamilyKey[] {
+  const text = normalize(laneRole);
+  return ROLE_FAMILIES.filter((family) => family.triggers.test(text)).map((family) => family.key);
 }
 
 // How well a posting title fits a lane: a role-family synonym hit is strong (and decisive over token

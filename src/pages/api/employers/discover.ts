@@ -1,10 +1,19 @@
 import type { APIRoute } from "astro";
 import {
+  type BusinessSearchCandidate,
   type BusinessSearchResult,
   type BusinessSearchSource,
   runBusinessSearch,
   saveBusinessSearchResult,
 } from "@/lib/cip/business-search-engine";
+import {
+  deriveDiscoveryTargeting,
+  partitionAgainstExisting,
+  tagCandidateLanes,
+  type DiscoveryTargeting,
+  type LaneLike,
+} from "@/lib/cip/discovery-targeting";
+import { loadStrategicState } from "@/lib/cip/strategic-state";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { checkRateLimit, clientRateLimitKey, rateLimitedHtml } from "@/lib/rate-limit";
 import { isSameOriginRequest } from "@/lib/security";
@@ -21,8 +30,11 @@ type SavedCandidateRow = {
   fit_summary: string;
   discovery_channel: string;
   discovery_source_names: string[];
+  relevant_lanes: string[];
   review_state: string;
 };
+
+type AlreadyTracked = { candidate: BusinessSearchCandidate; trackedAs: string };
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   if (!isSameOriginRequest(request)) {
@@ -38,7 +50,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const customGeography = String(form.get("custom_geography") ?? "").trim();
   const regions = form.getAll("regions").map(String).filter(Boolean);
   const geography = customGeography || regions.join(", ");
-  const sectors = form.getAll("sectors").map(String);
+  const manualSectors = form.getAll("sectors").map(String).filter(Boolean);
   const minimumSize = String(form.get("minimum_size") ?? "100");
   const radiusMiles = Number(form.get("radius_miles") ?? 50);
 
@@ -57,13 +69,40 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
   }
 
-  const searchInput = { geography, radiusMiles, sectors, minimumSize };
+  // Lane-aware targeting: derive what org types to look for from the user's lanes (strategic state
+  // needs auth). Manual sectors, when the user picks any, override the lane-derived ones.
+  let lanes: LaneLike[] = [];
+  let targeting: DiscoveryTargeting | null = null;
+  if (user) {
+    try {
+      const state = await loadStrategicState(supabase, user.id);
+      lanes = state.lanes.map((lane) => ({ lane: lane.lane, label: lane.label }));
+      targeting = deriveDiscoveryTargeting(lanes);
+    } catch {
+      // Fall back to manual sectors if the strategic state can't be built.
+    }
+  }
+  const usingLaneTargeting = manualSectors.length === 0 && Boolean(targeting?.derivedFromLanes);
+  const sectors = usingLaneTargeting ? (targeting as DiscoveryTargeting).sectors : manualSectors;
+
+  const searchInput = { geography, radiusMiles, sectors, minimumSize, lanes: usingLaneTargeting ? targeting?.lanes : undefined };
   const result = await runBusinessSearch(searchInput);
   let savedSources = 0;
   let savedCandidates = 0;
   let currentSearchCandidates: SavedCandidateRow[] = [];
+  let alreadyTracked: AlreadyTracked[] = [];
 
   if (user && result.mode === "live_web_search") {
+    // Tag every candidate with the lane(s) it serves, then set aside ones already tracked so the queue
+    // is not shown duplicates; only genuinely new employers are saved.
+    for (const candidate of result.candidates) {
+      candidate.relevantLanes = tagCandidateLanes({ name: candidate.name, category: candidate.category }, lanes);
+    }
+    const existingNames = await loadExistingEmployerNames(supabase, user.id);
+    const partition = partitionAgainstExisting(result.candidates, existingNames);
+    alreadyTracked = partition.alreadyTracked;
+    result.candidates = partition.fresh;
+
     const intake = (await loadLatestIntake(supabase, user.id)) ?? {};
     const saved = await saveBusinessSearchResult(supabase, user.id, intake, searchInput, result);
     savedSources = saved.savedSources;
@@ -73,7 +112,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (names.length) {
       const { data } = await supabase
         .from("employer_candidates")
-        .select("id,name,category,location,estimated_size,priority,fit_score,fit_summary,discovery_channel,discovery_source_names,review_state")
+        .select("id,name,category,location,estimated_size,priority,fit_score,fit_summary,discovery_channel,discovery_source_names,relevant_lanes,review_state")
         .eq("user_id", user.id)
         .eq("region", result.geography)
         .in("name", names)
@@ -82,8 +121,56 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
   }
 
-  return html(renderDiscoveryResult({ result, savedSources, savedCandidates, signedIn: Boolean(user), currentSearchCandidates }));
+  return html(renderDiscoveryResult({ result, savedSources, savedCandidates, signedIn: Boolean(user), currentSearchCandidates, targeting: usingLaneTargeting ? targeting : null, alreadyTracked }));
 };
+
+// Existing tracked employer names (watched + candidates) for dedupe against new discovery results.
+async function loadExistingEmployerNames(supabase: ReturnType<typeof createServer>, userId: string): Promise<string[]> {
+  const [{ data: watched }, { data: candidates }] = await Promise.all([
+    supabase.from("watched_employers").select("name").eq("user_id", userId).limit(1000),
+    supabase.from("employer_candidates").select("name").eq("user_id", userId).limit(1000),
+  ]);
+  const names = [
+    ...((watched ?? []) as Array<{ name: string }>).map((row) => row.name),
+    ...((candidates ?? []) as Array<{ name: string }>).map((row) => row.name),
+  ];
+  return [...new Set(names.filter(Boolean))];
+}
+
+function renderLaneChips(tags: Array<{ label: string }> | undefined) {
+  if (!tags || !tags.length) {
+    return `<p class="mt-2 text-xs text-[var(--muted)]">No current lane fit — kept for your review.</p>`;
+  }
+  const seen = new Set<string>();
+  const chips = tags
+    .filter((tag) => tag.label && !seen.has(tag.label) && seen.add(tag.label))
+    .map((tag) => `<span class="inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">Fits your ${escapeHtml(tag.label)}</span>`)
+    .join(" ");
+  return `<p class="mt-2 flex flex-wrap gap-1">${chips}</p>`;
+}
+
+function renderTargetingBanner(targeting: DiscoveryTargeting | null) {
+  if (!targeting || !targeting.derivedFromLanes) return "";
+  const laneNames = targeting.lanes.map((lane) => `${escapeHtml(lane.lane)} (${escapeHtml(lane.label)})`).join("; ");
+  return `
+    <div class="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-3">
+      <p class="text-sm font-semibold text-[var(--accent-strong)]">Targeting your lanes</p>
+      <p class="mt-1 text-sm text-[var(--muted)]">This search looked for employers that fit: ${laneNames}. Pick sectors manually above to override.</p>
+    </div>`;
+}
+
+function renderAlreadyTracked(alreadyTracked: AlreadyTracked[]) {
+  if (!alreadyTracked.length) return "";
+  return `
+    <details class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+      <summary class="cursor-pointer text-sm font-semibold">Already tracked (${alreadyTracked.length}) — not added again</summary>
+      <ul class="mt-2 grid gap-1 text-sm text-[var(--muted)]">
+        ${alreadyTracked
+          .map((entry) => `<li><span class="font-semibold">${escapeHtml(entry.candidate.name)}</span> — already on your list as ${escapeHtml(entry.trackedAs)}</li>`)
+          .join("")}
+      </ul>
+    </details>`;
+}
 
 function renderDiscoveryResult({
   result,
@@ -91,12 +178,16 @@ function renderDiscoveryResult({
   savedCandidates,
   signedIn,
   currentSearchCandidates,
+  targeting,
+  alreadyTracked,
 }: {
   result: BusinessSearchResult;
   savedSources: number;
   savedCandidates: number;
   signedIn: boolean;
   currentSearchCandidates: SavedCandidateRow[];
+  targeting: DiscoveryTargeting | null;
+  alreadyTracked: AlreadyTracked[];
 }) {
   if (result.mode === "not_configured") {
     return `
@@ -124,10 +215,12 @@ function renderDiscoveryResult({
         ${signedIn ? `${savedSources} source pages saved. ${savedCandidates} employer candidates saved.` : `${result.sourcePages.length} source pages found. ${result.candidates.length} candidates found. Sign in to save employer candidates.`}
       </p>
       <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(result.summary)}</p>
+      ${renderTargetingBanner(targeting) ? `<div class="mt-3">${renderTargetingBanner(targeting)}</div>` : ""}
       ${renderSearchArea(result)}
       ${signedIn ? `<p class="mt-3 text-sm text-[var(--muted)]">Refresh this page to review saved candidates and source pages.</p>` : ""}
     </div>
     ${renderSourcePages(result.sourcePages)}
+    ${renderAlreadyTracked(alreadyTracked)}
     ${renderCurrentSearchSaveForm(currentSearchCandidates)}
     <div class="mt-4 grid gap-3">
       ${result.candidates.length ? result.candidates.map((candidate) => `
@@ -140,6 +233,7 @@ function renderDiscoveryResult({
             <span class="rounded-md bg-[var(--accent-tint)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(candidate.priority)} priority</span>
           </div>
           <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(candidate.category)}</p>
+          ${renderLaneChips(candidate.relevantLanes)}
           <p class="mt-2 text-xs text-[var(--muted)]">Sources: ${candidate.discovery_source_names.map(escapeHtml).join(", ")}</p>
         </article>
       `).join("") : `
@@ -168,6 +262,7 @@ function renderCurrentSearchSaveForm(candidates: SavedCandidateRow[]) {
               <span class="font-semibold">${escapeHtml(candidate.name)}</span>
               <span class="mt-1 block text-sm text-[var(--muted)]">${escapeHtml(candidate.location ?? "")} - ${escapeHtml(candidate.estimated_size ?? "")}</span>
               <span class="mt-1 block text-xs text-[var(--muted)]">${escapeHtml(candidate.category)} - ${escapeHtml(candidate.discovery_channel)}</span>
+              ${candidate.relevant_lanes?.length ? `<span class="mt-1 block text-xs font-semibold text-[var(--accent-strong)]">Fits: ${candidate.relevant_lanes.map(escapeHtml).join(", ")}</span>` : ""}
             </span>
             <span class="text-sm font-semibold text-[var(--accent-strong)]">${candidate.fit_score}%</span>
           </label>
