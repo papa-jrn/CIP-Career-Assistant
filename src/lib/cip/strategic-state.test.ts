@@ -415,6 +415,8 @@ describe("lane scoring talks to the evidence re-analysis and the search (propaga
     const tech = laneBy(lanes, /Media Innovation/);
     expect(tech?.reasons.join(" ")).toMatch(/verified-open posting/);
     expect(tech?.label).toBe("Strong alternate");
+    // The one-line explanation leads with the posting that lifted it, not the network/positioning notes.
+    expect(tech?.explanation).toMatch(/verified-open posting/);
     expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
   });
 

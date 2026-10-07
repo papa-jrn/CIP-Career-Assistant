@@ -595,6 +595,19 @@ function dedupeConversationOutcomes(outcomes: ConversationOutcome[]) {
   });
 }
 
+// The one-line "why" leads with the strongest signal, not whatever came first: a verified posting
+// (external validation) and real conversation/re-analysis signals outrank positioning and the
+// baseline, so a Strong-alternate lane cites the posting that actually lifted it.
+function reasonPriority(reason: string): number {
+  if (/verified-open posting/.test(reason)) return 0;
+  if (/re-analysis (strengthened|weakened)/.test(reason)) return 1;
+  if (/\([+\-−]\d/.test(reason)) return 1; // a conversation outcome adjustment, e.g. "(+8)"
+  if (/Capped as research/.test(reason)) return 2;
+  if (/positioning names/.test(reason)) return 3;
+  if (/network analysis adjusted/.test(reason)) return 4;
+  return 5;
+}
+
 function scoreExplanation(score: number, reasons: string[]) {
   const band = score >= 80
     ? "high-confidence"
@@ -603,9 +616,8 @@ function scoreExplanation(score: number, reasons: string[]) {
       : score >= 50
         ? "watch"
         : "low-priority";
-  const movement = reasons.length > 1
-    ? reasons.slice(1, 3).join(" ")
-    : reasons[0] ?? "";
+  const ranked = reasons.slice(1).sort((a, b) => reasonPriority(a) - reasonPriority(b));
+  const movement = ranked.slice(0, 2).join(" ") || reasons[0] || "";
   return `${band} score based on ${movement}`.trim();
 }
 
