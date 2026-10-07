@@ -1,6 +1,6 @@
 # Employers & Opportunities Rethink (Plan)
 
-Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Next: the Employers-page reassessment incl. local-business discovery. See §16 for the status board and build log.**
+Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Now in progress: the Employers-page redesign — first slice = lane-aware employer discovery (spec'd 2026-10-07, see §16). See §16 for the status board and build log.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
 were built on is obsolete.
@@ -1052,6 +1052,71 @@ mis-filed. Full suite **242**.
 
 With this, the Opportunities + lane-scoring work is done. Next: the Employers-page reassessment incl.
 local-business discovery.
+
+### 2026-10-07 — Part 6 lane-aware employer discovery (SPEC, for build)
+
+Founder decisions (2026-10-07): (1) first slice = **make discovery lane-aware** (not better coverage or
+a UX rework — those come after); (2) **document the spec, then build**.
+
+**Current state (works, keep).** `employers.astro` → `POST /api/employers/discover` →
+`business-search-engine.runBusinessSearch({ geography, radiusMiles, sectors, minimumSize })`. It geocodes
+the center, expands to the real labor shed (`geography-engine.resolveSearchArea`: Geocodio → Overpass
+nearby towns, radius rings), runs an OpenAI web search, and returns real employers **with provenance**
+(chambers, economic-development, municipalities, school systems, directories, company career pages) into
+the `employer_candidates` review queue (promote / park / exclude → `watched_employers`). The geographic
+grounding and provenance/review discipline are the un-promptable edge; they stay.
+
+**The gap.** Discovery is siloed from the strategy: inputs are a geography plus **manually-typed
+sectors**, so it finds "largish employers in a sector near a place" — generic, promptable. It ignores
+the lanes, evidence, comp floor, conversation signals, the employer resolver (so "DHMC" can duplicate
+watched "Dartmouth Health"), and never says **which lane** a found employer serves. Same connective-tissue
+problem we just fixed for Opportunities and lane-scoring.
+
+**First slice — lane-aware discovery. Three parts, all deterministic except the existing web-search call,
+with a deterministic fallback (house rule):**
+
+1. **Target from the strategic brief, not hand-typed sectors.** Reuse the job search's brief machinery
+   (`search-brief.assembleSearchBrief` / strategic state) so discovery targeting is derived from the
+   user's **lanes + their role-family vocabulary** (the `ROLE_FAMILIES` map added in `strategic-state.ts`
+   — export a small `laneRoleFamilies(laneRole)`/targeting helper), the **geocoded area** (already),
+   and **exclusions**. Manual sector selection stays as an *optional override* (hand-coding optional,
+   never required — the founder's standing rule); when the user picks nothing, lanes drive it. The
+   web-search prompt is extended to target the lane-implied org types/role families and to keep returning
+   real, source-backed orgs only (no fabricated employers — §19).
+
+2. **Tag each candidate with the lane(s) it serves + a short why.** Deterministic post-pass: match a
+   candidate's category/name/role-families against each lane (reuse the lane-match helpers:
+   `ROLE_FAMILIES` synonyms + distinctive-token overlap). `BusinessSearchCandidate` gains
+   `relevantLanes: string[]` (+ a one-line reason). Labeled as AI-derived, correctable in the review
+   queue. Candidates that match no active lane are kept but flagged "no current lane fit."
+
+3. **Dedupe against what's already tracked.** Before saving, resolve each candidate's name with
+   `employer-resolution` (`buildCanonicalEmployers` over existing `watched_employers` +
+   `employer_candidates`, then `resolveEmployerName`). A candidate that resolves to an existing target is
+   **not** re-created as a new row; it is surfaced as "already tracked (watched / in review)" so the user
+   isn't shown duplicates (no more Dartmouth Health vs DHMC split).
+
+**Loop closure (mostly already there, confirm):** promote → `watched_employers`; capture/attempt a
+`careers_url` on promotion so the weekly job search + known-target direct reader pick it up; its verified
+postings then validate the lane (the Gap-B wiring just built). No schema change required for the first
+slice beyond adding `relevant_lanes` to the candidate record (additive; or stored in existing
+`discovery_*` fields — decide at build).
+
+**Deferred to later slices (not this one):** the ProPublica **990 nonprofit layer**, richer
+**local-business coverage** (more source types, tighter labor-shed expansion), and the full §14 **target
+workspace UX** (orgs with no vacancy, relationship paths, linked jobs, next-action cards).
+
+**Touched (planned):** `business-search-engine.ts` (brief-derived targeting input, `relevantLanes`
+tagging, dedup hook), a small targeting/tagging helper reusing `strategic-state`'s `ROLE_FAMILIES` +
+`employer-resolution`, `api/employers/discover.ts` (load strategic state + brief, default targeting from
+lanes, dedup, tag), `employers.astro` (show "targeting your lanes: …", lane tags + "already tracked"
+markers on candidate cards). Fixture tests (`vi.stubEnv("OPENAI_API_KEY","")`): targeting derived from
+lanes, lane tagging of a candidate, dedup of a known employer, and the empty/not-configured states.
+
+**Acceptance:** with lanes set and no sectors typed, a discovery run targets the lane-implied org types,
+each saved candidate shows the lane it serves (or "no current lane fit"), a candidate matching an existing
+watched employer is shown as already-tracked rather than duplicated, and the not-configured path returns
+honestly with no fabricated employers.
 
 ### Decisions made by the founder (2026-09-23)
 
