@@ -92,6 +92,15 @@ export interface NineNinetyOrgRow {
   subseccd: number | null;
 }
 
+/** One year's data filing (what the enrichment trend is computed from). */
+export interface NineNinetyFiling {
+  year: number;
+  revenue?: number;
+  expenses?: number;
+  assets?: number;
+  pdfUrl: string;
+}
+
 export interface NineNinetyFinancials {
   ein: number;
   name: string;
@@ -100,6 +109,8 @@ export interface NineNinetyFinancials {
   assets?: number;
   filingYear?: number;
   pdfUrl: string;
+  /** All data filings, newest year first (used by the enrichment trend; latest = series[0]). */
+  series: NineNinetyFiling[];
 }
 
 function finiteNumber(value: unknown): number | undefined {
@@ -138,7 +149,14 @@ function parseSearchPage(payload: unknown): NineNinetyOrgRow[] {
   return organizations.map(parseOrgRow).filter((org): org is NineNinetyOrgRow => org !== null);
 }
 
-/** Latest filing financials, falling back to the BMF summary on the organization object. */
+/** Data filings kept for the enrichment trend (newest first). Five is plenty for a trend and keeps rows small. */
+const MAX_SERIES_FILINGS = 5;
+
+/**
+ * Latest filing financials (falling back to the BMF summary on the organization object) plus the
+ * per-year series the enrichment trend is computed from. One entry per tax year, newest first; a
+ * year that appears twice (an amended return) keeps the first entry that carries revenue.
+ */
 function parseOrgDetail(payload: unknown): NineNinetyFinancials | null {
   if (!payload || typeof payload !== "object") return null;
   const organization = (payload as { organization?: unknown }).organization;
@@ -149,22 +167,25 @@ function parseOrgDetail(payload: unknown): NineNinetyFinancials | null {
   if (ein === undefined || !name) return null;
 
   const filings = (payload as { filings_with_data?: unknown }).filings_with_data;
-  let latest: { year: number; revenue?: number; expenses?: number; assets?: number; pdfUrl: string } | null = null;
+  const byYear = new Map<number, NineNinetyFiling>();
   for (const filing of Array.isArray(filings) ? (filings as Record<string, unknown>[]) : []) {
+    if (!filing || typeof filing !== "object") continue;
     const year =
       finiteNumber(filing.tax_prd_yr) ??
       (typeof filing.tax_prd === "number" ? Math.trunc(filing.tax_prd / 10000) : undefined);
     if (year === undefined) continue;
-    if (!latest || year > latest.year) {
-      latest = {
-        year,
-        revenue: finiteNumber(filing.totrevenue),
-        expenses: finiteNumber(filing.totfuncexpns),
-        assets: finiteNumber(filing.totassetsend),
-        pdfUrl: typeof filing.pdf_url === "string" ? filing.pdf_url : "",
-      };
-    }
+    const entry: NineNinetyFiling = {
+      year,
+      revenue: finiteNumber(filing.totrevenue),
+      expenses: finiteNumber(filing.totfuncexpns),
+      assets: finiteNumber(filing.totassetsend),
+      pdfUrl: typeof filing.pdf_url === "string" ? filing.pdf_url : "",
+    };
+    const existing = byYear.get(year);
+    if (!existing || (existing.revenue === undefined && entry.revenue !== undefined)) byYear.set(year, entry);
   }
+  const series = [...byYear.values()].sort((a, b) => b.year - a.year).slice(0, MAX_SERIES_FILINGS);
+  const latest = series[0] ?? null;
 
   return {
     ein,
@@ -174,6 +195,7 @@ function parseOrgDetail(payload: unknown): NineNinetyFinancials | null {
     assets: latest?.assets ?? finiteNumber(org.asset_amount),
     filingYear: latest?.year,
     pdfUrl: latest?.pdfUrl ?? "",
+    series,
   };
 }
 
@@ -239,6 +261,19 @@ function createJsonFetcher(deps: NineNinetyDeps): JsonFetcher {
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         if (response.ok) return (await response.json()) as unknown;
+        // Found live (2026-10-07): ProPublica answers a search with ZERO results as HTTP 404 plus a
+        // normal JSON body ({"organizations": [], "total_results": 0, ...}). That is an empty result,
+        // not a failure. Only a search-shaped body is accepted, so a 404 on any other endpoint (an
+        // unknown EIN, say) is still a miss.
+        if (response.status === 404) {
+          try {
+            const body = (await response.json()) as unknown;
+            if (body && typeof body === "object" && Array.isArray((body as { organizations?: unknown }).organizations)) return body;
+          } catch {
+            // not JSON: fall through to a plain miss
+          }
+          return null;
+        }
         // 429/5xx get one polite retry; other client errors do not.
         if (response.status !== 429 && response.status < 500) return null;
       } catch {
@@ -296,6 +331,30 @@ export async function searchNineNinetyOrgs(
   }
   return { orgs: [...byEin.values()], failed };
 }
+
+/**
+ * Search ProPublica by organization NAME within one state (501(c)(3) only), first page. Used to
+ * attach filings to an employer the user already tracks when no EIN is known. The caller decides
+ * whether any row is a trustworthy match; this only returns what the service found.
+ */
+export async function searchNineNinetyByName(
+  name: string,
+  stateCode: string,
+  deps: NineNinetyDeps = {},
+): Promise<NineNinetySearchOutcome> {
+  const trimmed = name.trim();
+  if (!trimmed) return { orgs: [], failed: false };
+  const fetcher = createJsonFetcher(deps);
+  const useCache = !deps.fetchImpl;
+  const url =
+    `${PROPUBLICA_API_BASE}/search.json?q=${encodeURIComponent(trimmed)}` +
+    `&state[id]=${encodeURIComponent(stateCode)}&c_code[id]=3&page=0`;
+  const payload = await fetchJsonCached(url, SEARCH_CACHE_TTL_MS, fetcher, useCache);
+  if (payload === null) return { orgs: [], failed: true };
+  return { orgs: parseSearchPage(payload), failed: false };
+}
+
+export const NINE_NINETY_ORGANIZATION_URL = PROPUBLICA_ORG_URL;
 
 export async function fetchNineNinetyOrgDetail(ein: number, deps: NineNinetyDeps = {}): Promise<NineNinetyFinancials | null> {
   const fetcher = createJsonFetcher(deps);
@@ -396,6 +455,8 @@ export function sizeFromRevenue(revenue: number): "small" | "medium" | "large" {
 }
 
 export function formatRevenueUsd(revenue: number): string {
+  // Large health systems and universities report billions; "$1980.4M" reads badly, "$2B" does not.
+  if (revenue >= 1_000_000_000) return `$${Math.round((revenue / 1_000_000_000) * 10) / 10}B`;
   if (revenue >= 1_000_000) {
     // One decimal only when it matters — never round UP past the actual figure.
     return `$${Math.round((revenue / 1_000_000) * 10) / 10}M`;

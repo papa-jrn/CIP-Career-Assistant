@@ -1,3 +1,4 @@
+import type { FundingSignal } from "@/lib/cip/employer-financials";
 import { compareToFloor, estimateAnnualPay } from "@/lib/cip/pay";
 import { isClosedOrGone, type ObservationRow } from "@/lib/cip/job-search-run";
 
@@ -24,6 +25,11 @@ export interface ResolvedEmployer {
   fitScore: number | null;
   nextMove: string | null;
   nextMoveIsRelational: boolean;
+  /**
+   * What the employer's latest IRS Form 990 filings say (revenue and its trend), when a profile is on
+   * file. Absent means UNKNOWN (no filing found or looked up), never "poor funding".
+   */
+  funding?: FundingSignal | null;
 }
 
 /** A contact whose company matches this posting's employer. */
@@ -103,7 +109,11 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   const payMeets = floor.status === "meets";
   const payUnknown = floor.status === "unknown";
 
-  const mission = isMissionEmployer(context.employer) || Boolean(context.missionBySource);
+  // A 990 filer is a nonprofit by definition, so filing data also marks a mission employer whose
+  // category text did not say so.
+  const funding = context.employer?.funding ?? null;
+  const fundingShrinking = funding?.trend === "shrinking";
+  const mission = isMissionEmployer(context.employer) || Boolean(context.missionBySource) || Boolean(funding);
 
   // The transparent evidence list shown in the expander — everything that applies, in reading order.
   const signals: string[] = [];
@@ -114,6 +124,7 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   else if (laneMatch) signals.push(context.laneLabel ? `Matches your ${context.laneLabel}` : "Matches one of your target roles");
   else signals.push("No clear lane match");
   if (context.employer?.category) signals.push(`Employer type: ${context.employer.category}`);
+  if (funding) signals.push(funding.line);
   signals.push(floor.note);
   if (outsideArea) signals.push("Worksite is outside your places");
   else if (within) signals.push("Within your places");
@@ -157,13 +168,24 @@ export function recommendPosting(posting: ObservationRow, context: Recommendatio
   }
 
   // 3. Check the funding first — a mission role whose viability may hinge on grants/endowment. Core
-  // operating-budget leadership (CIO, CFO, HR) is exempt: "grant vs endowed" does not apply to them.
-  if (mission && !operationalLeader && (senior || payUnknown)) {
+  // operating-budget leadership (CIO, CFO, HR) is exempt from the generic "grant vs endowed" caution.
+  // A SHRINKING 990 revenue trend is the exception: it fires for any mission role, operational or not,
+  // because the organization's own finances are the concern. A growing/stable filing is shown as
+  // evidence but never relaxes the caution: a filing cannot show that THIS role is funded.
+  if (mission && ((!operationalLeader && (senior || payUnknown)) || fundingShrinking)) {
     const bits = [senior ? "senior role" : "", payUnknown ? "no stated pay" : ""].filter(Boolean).join(", ");
+    let rationale: string;
+    if (funding && fundingShrinking) {
+      rationale = `${employerName}'s ${funding.line} — its revenue is falling${bits ? ` and this is a ${bits}` : ""}. Confirm this role is funded before investing time.`;
+    } else if (funding) {
+      rationale = `${context.employer?.category ?? "Nonprofit"} employer${bits ? `, ${bits}` : ""}. Its ${funding.line}. A filing can't show whether this particular role is funded, so confirm (grant vs endowed) before investing time.`;
+    } else {
+      rationale = `${context.employer?.category ?? "Nonprofit"} employer${bits ? `, ${bits}` : ""} — confirm it's funded (grant vs endowed) before investing time.`;
+    }
     return {
       category: "check_funding",
-      confidence: "medium",
-      rationale: `${context.employer?.category ?? "Nonprofit"} employer${bits ? `, ${bits}` : ""} — confirm it's funded (grant vs endowed) before investing time.`,
+      confidence: fundingShrinking ? "high" : "medium",
+      rationale,
       signals,
       namedContact: null,
     };

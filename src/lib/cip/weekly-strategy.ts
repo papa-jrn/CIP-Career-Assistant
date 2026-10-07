@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { diffFundingEntries, fundingEntriesFor, loadFundingProfiles, parseFundingEntries, type FundingSnapshotEntry } from "@/lib/cip/employer-financials";
 import { loadLatestVerifiedPostings } from "@/lib/cip/job-search-run";
 import { loadStrategicState, type StrategicState } from "@/lib/cip/strategic-state";
 
@@ -41,6 +42,8 @@ export type BriefingDiff = {
   assetChangesNeeded: string[];
   evidenceGaps: string[];
   jobEmployerChecks: string[];
+  /** Tracked employers whose latest IRS 990 trend is shrinking (standing concern, named each week). */
+  fundingWatch: string[];
   recommendedActions: string[];
 };
 
@@ -67,6 +70,9 @@ export async function buildWeeklyStrategySnapshot(
   ]);
 
   const watched = employers ?? [];
+  // IRS 990 funding state of the watched employers (never throws; empty when the table is missing).
+  const funding = await loadFundingProfiles(supabase, userId);
+  const fundingEntries = fundingEntriesFor(watched.map((employer) => employer.name), funding.profiles);
   const previousSnapshot = ((previousSnapshots ?? []) as SnapshotRow[]).find((snapshot) => snapshot.week_start !== weekStart)
     ?? ((previousSnapshots ?? []) as SnapshotRow[])[0]
     ?? null;
@@ -86,6 +92,7 @@ export async function buildWeeklyStrategySnapshot(
     opportunityMatchCount: verifiedOpenings.count,
     regionFocus,
     adapterBacklogNames: adapterBacklog.map((employer) => employer.name),
+    funding: fundingEntries,
   });
 
   const nextActions = [
@@ -130,6 +137,7 @@ export async function buildWeeklyStrategySnapshot(
 
   const evidence = [
     briefingDiff,
+    { type: "funding_profiles", entries: fundingEntries },
     {
       type: "strategic_state",
       generated_at: strategicState.generatedAt,
@@ -184,6 +192,8 @@ export function buildBriefingDiff(
     opportunityMatchCount: number;
     regionFocus: string[];
     adapterBacklogNames: string[];
+    /** Current IRS 990 funding entries for watched employers; omitted when none are on file. */
+    funding?: FundingSnapshotEntry[];
   },
 ): BriefingDiff {
   const previous = previousSnapshot ? extractStrategicState(previousSnapshot.evidence) : null;
@@ -255,13 +265,15 @@ export function buildBriefingDiff(
   const evidenceGaps = strategicState.lanes
     .flatMap((lane) => lane.reasons.filter((reason) => /needs|capped|proof|evidence|posting/i.test(reason)).map((reason) => `${lane.lane}: ${humanizeSignalPhrases(reason)}`))
     .slice(0, 4);
+  const fundingDiff = diffFundingEntries(context.funding ?? [], previousSnapshot ? parseFundingEntries(previousSnapshot.evidence) : null);
   const jobEmployerChecks = [
     strategicState.employerCandidates[0] ? `Decide whether ${strategicState.employerCandidates[0].name} belongs on the watched-employer list or should be removed.` : "",
+    ...fundingDiff.concerns.slice(0, 2).map((concern) => `Funding check: ${concern}`),
     context.adapterBacklogNames.length ? `Look for specific current openings at ${context.adapterBacklogNames.slice(0, 3).join(", ")} and capture any credible roles in Opportunities.` : "",
     context.opportunityMatchCount ? "Compare the verified openings from your latest search against the top lane's proof gaps before applying." : "Run this week's job search on Opportunities so the next briefing has verified openings to compare.",
   ].filter(Boolean);
 
-  changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown, ...laneAppeared, ...employerAppeared);
+  changed.push(...laneStrengthened, ...laneWeakened, ...employerMovedUp, ...employerMovedDown, ...laneAppeared, ...employerAppeared, ...fundingDiff.changes);
   if (baseline && strategicState.deltas.length) changed.push(...strategicState.deltas.slice(0, 4));
   if (!changed.length && strategicState.conversationOutcomeCount > (previous?.conversation_outcome_count ?? 0)) {
     changed.push(`${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0)} new conversation outcome${strategicState.conversationOutcomeCount - (previous?.conversation_outcome_count ?? 0) === 1 ? "" : "s"} captured; no lane or employer crossed the movement threshold yet.`);
@@ -312,6 +324,7 @@ export function buildBriefingDiff(
     assetChangesNeeded,
     evidenceGaps,
     jobEmployerChecks,
+    fundingWatch: fundingDiff.concerns,
     recommendedActions: recommendedActions.length
       ? recommendedActions
       : ["Run one market-read, refresh employer checks, and generate the next briefing after new evidence lands."],

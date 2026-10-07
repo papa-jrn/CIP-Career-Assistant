@@ -1193,7 +1193,8 @@ for nonprofit lanes); (c) city-match vs geocode-every-org for the geo filter (st
 
 **Deferred beyond this slice:** enriching *existing* watched/candidate nonprofit targets with their 990
 financials (feeds the search brief + fit reasoning — §9/§13), year-over-year financial trend signals, and
-scheduled refresh. Build discovery first; enrichment is the natural follow-on.
+scheduled refresh. Build discovery first; enrichment is the natural follow-on. **(Enrichment and trend were
+BUILT later the same day — see "BUILT 2026-10-07 — 990 enrichment" below. Scheduled refresh is still not built.)**
 
 #### BUILT 2026-10-07 — the four decisions, settled at build start (founder)
 
@@ -1297,6 +1298,87 @@ layer intact:
 
 Confirming live re-run still to do, as with the lane-aware slice.
 
+#### BUILT 2026-10-07 — 990 enrichment of the employers you already track
+
+The deferred follow-on to discovery: attach IRS Form 990 filings (revenue by year, a trend) to **watched**
+employers, and use them where the founder asked to see them first. Founder decisions this session:
+finish the half-built enrichment; show it on **posting recommendation chips, the Employers cards, and the
+weekly briefing**; fetch **on promotion plus a refresh button** (not on every weekly search).
+
+**What it is, and the honesty rules.**
+- `employer-financials.ts` (core), `employer-financials-view.ts` (HTML), `api/employers/financials/` (single
+  refresh and bulk refresh), migrations `20261007140000_employer_990_profiles.sql` (one row per user +
+  `normOrg(watched name)` — the same key the chips already resolve employers to) and
+  `20261007150000_employer_candidate_ein.sql` (`employer_candidates.ein`, so a 990-discovered candidate
+  carries its EIN to promotion).
+- A profile states only what filings say: revenue / expenses / assets by tax year (newest first, up to 5),
+  and a **revenue trend**: across the latest three filings that report revenue, ≥ +10% = growing, ≤ −10% =
+  shrinking, otherwise steady; a single-year drop of ≥ 25% also counts as shrinking (a lost grant);
+  fewer than two usable filings = unknown. Revenue (not surplus) is used because nonprofit revenue is lumpy;
+  the thresholds are deliberately wide, so "steady" is the common result. Constants live in one place.
+- **Unknown is never "poor funding."** No profile, no match, no filings, or a failed lookup are all shown as
+  unknown, with the reason. A city, a college system, a for-profit, or a tiny organization may have no
+  filing the service can find.
+- **Name matching is conservative.** Only an EXACT (suffix-insensitive) or ACRONYM name match within the
+  right state attaches filings automatically, and only when exactly one filer sits in that tier. A looser
+  token-overlap match is never attached: it comes back as "Possible match, not confirmed: <name> (EIN …)"
+  and the user confirms by entering the EIN ("Know the EIN?" on the card). Two same-named filers = ambiguous,
+  shown, not guessed. An unknown state means no name search is attempted.
+- **A transient failure never overwrites good data.** A failed refresh over an existing real profile keeps
+  the profile and says so; a lookup-failed row is retried first by the bulk button.
+- Only the employer's public name and state go to ProPublica (free, keyless). No model call anywhere.
+
+**Where it shows up.**
+1. **Chips** (`recommendation.ts`): the employer's latest filing becomes a named signal. A 990 filer counts
+   as a mission employer (a filer is a nonprofit by definition). A **shrinking** trend raises the
+   `check_funding` caution for any mission role, junior or senior, and even for core operational leaders
+   (CIO/CFO/HR), who are otherwise exempt from the generic "grant vs endowed" caution, because the
+   organization's own finances are the concern; confidence "high". A **growing/steady** filing is shown as
+   evidence but **never relaxes** the caution: a filing cannot show that one particular role is funded.
+   Below-floor pay still dominates, and a named network contact still wins talk-first. No profile → chips
+   behave exactly as before.
+2. **Employers cards** (saved businesses): an "IRS 990 financials" block per card (trend pill, latest-year
+   revenue/expenses/assets, the revenue-by-year line, ProPublica and PDF links, age of the lookup, a
+   caveat that a filing cannot show a role is funded and that a parent system may file separately from its
+   hospitals), a per-card "Look up / Refresh financials" button, the EIN field, and a bulk "Look up financials
+   for tracked employers" button (up to 8 per click; never-looked-up first, then failed, then older than 30
+   days; fresh and recent no-matches skipped; each card updates in place by an out-of-band swap). Both use the
+   shared loading animation. With the table missing, the page shows a plain "apply the migration" message
+   instead of breaking.
+3. **Promotion**: after "Save selected businesses", up to 8 of the newly watched employers are looked up
+   (a 990-discovered candidate uses its EIN; others by name + state), and the result says how many were
+   found and that the rest can be done with the buttons. It never blocks the promotion.
+4. **Weekly briefing**: each snapshot stores a `funding_profiles` entry. Shrinking tracked employers are a
+   standing "Funding check" in the briefing's employer checks, every week until they stop shrinking; a
+   **new filing year** or a **trend that moved** since the previous snapshot appears under "What changed",
+   but only against a snapshot that already had funding data (the first enriched week is a baseline, not news).
+
+**Found by running it against the real API (free, read-only) and fixed:**
+- ProPublica answers a **zero-result search with HTTP 404 and a normal JSON body**. The client treated any
+  404 as a failure, so every employer with no 990 (a municipality, say) read "lookup failed" and would have
+  been retried forever, and the discovery layer reported empty categories as "incomplete". A 404 whose body is
+  a search-shaped payload is now an empty result; a 404 on any other endpoint is still a miss.
+- Large systems report billions: "$1980.4M" now reads "$2B".
+- Real behavior worth knowing: Upper Valley Haven matches exactly (5 filings, FY 2024 revenue $8.1M, up 19%);
+  Mary Hitchcock Memorial Hospital matches exactly (about $2B, up 23% since FY 2021); "Dartmouth Health" and
+  "Dartmouth College" return only unconfirmed suggestions (their legal names are "Dartmouth-Hitchcock Health"
+  and "Trustees Of Dartmouth College", several EINs) — the user confirms by EIN. **A parent system's own return
+  can be small:** Dartmouth-Hitchcock Health (EIN 26-4812335) shows about $23M, while the operating revenue
+  is on the member hospitals' returns. The card says so. Rolling members up to a watched parent (using the
+  `parent_organization` the discovery layer already stores) is a possible later refinement, not built.
+
+**Tests:** 42 (core: trend, state hint, EIN parsing, series parsing, matching tiers, lookup outcomes, persistence,
+refresh rules, bulk selection, weekly diff, safe EIN save) + 12 (view: states, escaping, setup path, out-of-band
+swap, loading animation) + chip, recommendation-integration, briefing, and 404 regression cases. Full suite
+**349**, typecheck clean, SSR build compiles. Candidate saving writes `ein` only when a candidate has one and
+retries without it if that column's migration is missing, so a not-yet-applied migration cannot silently drop
+candidates. Hosted-database migrations still need applying (below). A live pass on the founder's account
+(promote a candidate, bulk-refresh the 28 tracked employers, read a chip and the briefing) is still to do.
+
+**Not built:** scheduled refresh; roll-up of member hospitals to a watched parent's totals; executive
+compensation / salary plausibility (a historical officer-pay figure does not establish a current opening's
+pay); feeding 990 fields into the outbound search brief (they are public data, but nothing needs them there yet).
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
@@ -1315,8 +1397,12 @@ marker and direct-read migrations are needed for those features; `posting_persis
 index for cross-run persistence; `posting_dispositions` adds the user-status / action-tracking table; `20260930140000_employer_aliases.sql` adds the employer-resolution
 correction table. All three 2026-09-30 migrations **must be applied to hosted Supabase** (dashboard SQL editor) — `posting_persistence`
 before carry-forward can write, `posting_dispositions` before the chip status endpoint can write, and `employer_aliases` before the employer-fix
-endpoint can write. The 2026-10-07 lane-aware discovery and ProPublica 990 slices need `20261007120000` / `20261007130000` (relevant_lanes,
-parent_organization) and **no migration of their own** — the 990 layer reuses `employer_candidates`' existing columns.
+endpoint can write. The 2026-10-07 lane-aware discovery and 990 *discovery* slices need `20261007120000` / `20261007130000` (relevant_lanes,
+parent_organization) and no migration of their own. The 990 **enrichment** needs two more: `20261007140000_employer_990_profiles.sql`
+(the per-employer filing profiles table) and `20261007150000_employer_candidate_ein.sql` (`employer_candidates.ein`). Apply all four
+in order; each is safe to run twice. Without the first two, saving ANY discovered candidate fails (discovery writes those columns);
+without 140000 the financials blocks show a setup message and chips/briefing simply have no 990 data; without 150000 candidates still
+save (the EIN write retries without it) but a 990-discovered candidate's EIN is not kept for promotion.
 
 ### Next, in order
 
@@ -1327,7 +1413,7 @@ parent_organization) and **no migration of their own** — the 990 layer reuses 
 4. **Steps 5-8:** ~~the weekly diff~~ **DONE 2026-09-30**; then per-posting recommendation chips (apply / talk-first / research-funding /
    monitor / skip), minimal action tracking, and employer resolution (DH vs DHMC vs the member hospitals vs Dartmouth College); then the
    Employers (target workspace) redesign (§14), including **how we find businesses in a local area**.
-5. **De-founder and state-layer tests** (Autumn Phases 5-6), lane configuration, and the 990 enrichment, per the Autumn plan.
+5. **De-founder and state-layer tests** (Autumn Phases 5-6) and lane configuration, per the Autumn plan. (The 990 enrichment is built — 2026-10-07 — pending the hosted migrations and a live pass.)
 
 ### Parked (not decided or not started)
 

@@ -14,6 +14,7 @@ import {
   type Recommendation,
   type RecommendationContext,
 } from "@/lib/cip/recommendation";
+import { loadFundingProfiles, profileToSignal, type FundingSignal } from "@/lib/cip/employer-financials";
 import { indexDispositions, loadDispositions, type DispositionIndex } from "@/lib/cip/posting-dispositions";
 
 export { normOrg } from "@/lib/cip/employer-resolution";
@@ -48,6 +49,8 @@ export interface ResolvedEmployerRow {
   fitScore: number | null;
   nextMove: string | null;
   nextMoveIsRelational: boolean;
+  /** Latest IRS 990 revenue + trend for this employer, when a profile is on file (unknown otherwise). */
+  funding?: FundingSignal | null;
 }
 
 export interface RecommendationInputs {
@@ -101,7 +104,7 @@ export function recommendationForPosting(posting: ObservationRow, inputs: Recomm
   const context: RecommendationContext = {
     floorUsd: inputs.floorUsd,
     laneLabel: laneLabelForTerm(posting.matched_role_term, inputs.lanes),
-    employer: employer ? { category: employer.category, priority: employer.priority, fitScore: employer.fitScore, nextMove: employer.nextMove, nextMoveIsRelational: employer.nextMoveIsRelational } : null,
+    employer: employer ? { category: employer.category, priority: employer.priority, fitScore: employer.fitScore, nextMove: employer.nextMove, nextMoveIsRelational: employer.nextMoveIsRelational, funding: employer.funding ?? null } : null,
     networkLink: contact ? { contactName: contact.name, firstAsk: contact.firstAsk } : null,
     followUp: followUp ? { contactName: followUp.contactName, nextAction: followUp.nextAction } : null,
     missionBySource: isMissionBoard(posting.source_url),
@@ -135,7 +138,7 @@ export async function loadRecommendationInputs(
   userId: string,
   floorUsd: number | null,
 ): Promise<RecommendationInputs> {
-  const [state, { data: employerRows }, { data: networkRow }, aliases] = await Promise.all([
+  const [state, { data: employerRows }, { data: networkRow }, aliases, financials] = await Promise.all([
     loadStrategicState(supabase, userId),
     supabase.from("watched_employers").select("name,category,priority,fit_score").eq("user_id", userId).limit(500),
     supabase
@@ -147,6 +150,8 @@ export async function loadRecommendationInputs(
       .limit(1)
       .maybeSingle(),
     loadEmployerAliases(supabase, userId),
+    // Never throws: with the migration unapplied this is just an empty map (no 990 data).
+    loadFundingProfiles(supabase, userId),
   ]);
 
   const watchedNames = ((employerRows ?? []) as Array<{ name: string }>).map((row) => row.name);
@@ -162,6 +167,7 @@ export async function loadRecommendationInputs(
       fitScore: typeof row.fit_score === "number" ? row.fit_score : null,
       nextMove,
       nextMoveIsRelational: Boolean(nextMove && RELATIONAL_NEXT_MOVE.test(nextMove)),
+      funding: profileToSignal(financials.profiles.get(normOrg(row.name))),
     };
   });
 

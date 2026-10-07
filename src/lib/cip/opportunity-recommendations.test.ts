@@ -142,3 +142,28 @@ describe("chip rendering in the panel", () => {
     expect(html).toContain("app suggested: Talk to someone first");
   });
 });
+
+describe("recommendationForPosting with a resolved employer's 990 funding", () => {
+  const shrinking = { trend: "shrinking" as const, latestRevenueUsd: 820_000, filingYear: 2024, changePct: -0.29, fromYear: 2022, deficit: false, line: "IRS 990 (FY 2024): revenue $820k, down 29% since FY 2022" };
+
+  it("carries the resolved employer's funding signal into the chip, via an alias-resolved posting name too", () => {
+    const withFunding = inputs({ employers: [employerRow({ funding: shrinking })] });
+    const direct = recommendationForPosting(drow({ title: "Program Coordinator", salary_text: "$90,000" }), withFunding);
+    expect(direct.category).toBe("check_funding");
+    expect(direct.signals).toContain(shrinking.line);
+
+    const aliased = recommendationForPosting(
+      drow({ title: "Program Coordinator", salary_text: "$90,000", employer_text: "UV Haven" }),
+      inputs({ employers: [employerRow({ funding: shrinking })], aliases: new Map([[normOrg("UV Haven"), HAVEN]]) }),
+    );
+    expect(aliased.category).toBe("check_funding");
+  });
+
+  it("does not attach funding to a posting whose employer did not resolve to a tracked employer", () => {
+    const rec = recommendationForPosting(
+      drow({ title: "Program Coordinator", salary_text: "$90,000", employer_text: "Totally Different Org" }),
+      inputs({ employers: [employerRow({ funding: shrinking })] }),
+    );
+    expect(rec.signals.join(" ")).not.toMatch(/IRS 990/);
+  });
+});

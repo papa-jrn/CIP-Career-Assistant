@@ -149,3 +149,58 @@ describe("recommendPosting", () => {
     expect(rec.signals.some((s) => /Employer type: advanced manufacturing/.test(s))).toBe(true);
   });
 });
+
+describe("recommendPosting with IRS 990 funding data", () => {
+  const funding = (trend: "growing" | "stable" | "shrinking" | "unknown", line = "IRS 990 (FY 2024): revenue $820k, down 29% since FY 2022") => ({
+    trend, latestRevenueUsd: 820_000, filingYear: 2024, changePct: trend === "shrinking" ? -0.29 : 0.2, fromYear: 2022, deficit: false, line,
+  });
+  const withFunding = (f: ReturnType<typeof funding> | null, over: Partial<ResolvedEmployer> = {}) => employer({ category: "human services nonprofit", funding: f, ...over });
+
+  it("a SHRINKING revenue trend raises the funding caution even for a junior role with pay that meets the floor", () => {
+    const rec = recommendPosting(drow({ title: "Program Coordinator", salary_text: "$90,000" }), ctx({ employer: withFunding(funding("shrinking")) }));
+    expect(rec.category).toBe("check_funding");
+    expect(rec.confidence).toBe("high");
+    expect(rec.rationale).toMatch(/IRS 990 \(FY 2024\).*down 29%.*revenue is falling.*Confirm this role is funded/);
+    expect(rec.signals).toContain("IRS 990 (FY 2024): revenue $820k, down 29% since FY 2022");
+  });
+
+  it("applies even to a core operational leader (CIO) at a shrinking organization, because its finances are the concern", () => {
+    const rec = recommendPosting(drow({ title: "Chief Information Officer", salary_text: "$150,000" }), ctx({ employer: withFunding(funding("shrinking")) }));
+    expect(rec.category).toBe("check_funding");
+    expect(rec.rationale).not.toMatch(/grant vs endowed/);
+  });
+
+  it("a GROWING filing is shown as evidence but never relaxes the caution: a filing cannot show this role is funded", () => {
+    const rec = recommendPosting(
+      drow({ title: "Executive Director", salary_text: null }),
+      ctx({ employer: withFunding(funding("growing", "IRS 990 (FY 2024): revenue $1.4M, up 27% since FY 2022")) }),
+    );
+    expect(rec.category).toBe("check_funding");
+    expect(rec.confidence).toBe("medium");
+    expect(rec.rationale).toMatch(/up 27%.*can't show whether this particular role is funded/);
+  });
+
+  it("a growing or steady filing does not turn a junior, pay-meets-floor role into a caution", () => {
+    const rec = recommendPosting(drow({ title: "Program Coordinator", salary_text: "$90,000" }), ctx({ employer: withFunding(funding("stable")) }));
+    expect(rec.category).toBe("apply");
+    expect(rec.signals.join(" ")).toMatch(/IRS 990/);
+  });
+
+  it("filing data marks a 990 filer as a mission employer even when its category text does not say so", () => {
+    const quiet = employer({ category: "advanced manufacturing", funding: funding("growing") });
+    const rec = recommendPosting(drow({ title: "Executive Director", salary_text: null }), ctx({ employer: quiet }));
+    expect(rec.category).toBe("check_funding");
+  });
+
+  it("below-floor pay still dominates a shrinking funding trend, and a named contact still wins talk-first", () => {
+    expect(recommendPosting(drow({ title: "Program Director", salary_text: "$50,000" }), ctx({ employer: withFunding(funding("shrinking")) })).category).toBe("skip");
+    const warm = recommendPosting(drow(), ctx({ employer: withFunding(funding("shrinking")), networkLink: { contactName: "Sarah Lin", firstAsk: null } }));
+    expect(warm.category).toBe("talk_first");
+  });
+
+  it("missing filing data is unknown, never a caution of its own and never a poor-funding signal", () => {
+    const rec = recommendPosting(drow({ title: "Program Coordinator", salary_text: "$90,000" }), ctx({ employer: withFunding(null) }));
+    expect(rec.category).toBe("apply");
+    expect(rec.signals.join(" ")).not.toMatch(/IRS 990/);
+  });
+});

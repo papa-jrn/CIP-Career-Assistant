@@ -216,6 +216,8 @@ describe("budget sizing", () => {
     expect(formatRevenueUsd(980_000)).toBe("$980k");
     expect(formatRevenueUsd(1_400_000)).toBe("$1.4M");
     expect(formatRevenueUsd(10_500_000)).toBe("$10.5M");
+    expect(formatRevenueUsd(1_980_420_213)).toBe("$2B"); // a hospital system, not "$1980.4M"
+    expect(formatRevenueUsd(1_300_000_000)).toBe("$1.3B");
     expect(formatRevenueUsd(25_000_000)).toBe("$25M");
   });
 
@@ -329,7 +331,7 @@ describe("orgToCandidate", () => {
     subseccd: 3,
   };
   const humanServices = NTEE_CATEGORIES.find((category) => category.id === "5")!;
-  const financials = { ein: 30259051, name: "Upper Valley Haven", revenue: 1_400_000, expenses: 1_200_000, assets: 2_800_000, filingYear: 2024, pdfUrl: "https://example/f.pdf" };
+  const financials = { ein: 30259051, name: "Upper Valley Haven", revenue: 1_400_000, expenses: 1_200_000, assets: 2_800_000, filingYear: 2024, pdfUrl: "https://example/f.pdf", series: [] };
 
   it("maps a filing to a candidate with full provenance and no invented fields", () => {
     const candidate = orgToCandidate(row, financials, humanServices, area, [ED_LANE]);
@@ -575,5 +577,21 @@ describe("dropNineNinetyDuplicates", () => {
     expect(kept.map((candidate) => candidate.name)).toEqual(["Brand New Charity"]);
     expect(duplicates).toHaveLength(2);
     expect(duplicates.map((entry) => entry.duplicateOf).sort((a, b) => a.localeCompare(b))).toEqual(["Dartmouth Health", "DHMC"]);
+  });
+});
+
+describe("ProPublica's zero-result search is HTTP 404 with a JSON body (found live)", () => {
+  const emptyBody = { total_results: 0, organizations: [], num_pages: 0, cur_page: 0, per_page: 25 };
+
+  it("treats it as an empty result, not a failed search", async () => {
+    const fetchImpl = fetcherFor(() => jsonResponse(emptyBody, 404));
+    const outcome = await searchNineNinetyOrgs("NH", "5", { fetchImpl, sleep: noSleep });
+    expect(outcome).toEqual({ orgs: [], failed: false });
+  });
+
+  it("still treats a 404 without a search-shaped body, and a 404 on the detail endpoint, as a miss", async () => {
+    expect((await searchNineNinetyOrgs("NH", "5", { fetchImpl: fetcherFor(() => jsonResponse({}, 404)), sleep: noSleep })).failed).toBe(true);
+    expect((await searchNineNinetyOrgs("NH", "5", { fetchImpl: fetcherFor(() => new Response("<html>not found</html>", { status: 404 })), sleep: noSleep })).failed).toBe(true);
+    expect(await fetchNineNinetyOrgDetail(999999999, { fetchImpl: fetcherFor(() => jsonResponse({ error: "not found" }, 404)), sleep: noSleep })).toBeNull();
   });
 });

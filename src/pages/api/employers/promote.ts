@@ -1,4 +1,6 @@
 import type { APIRoute } from "astro";
+import { BULK_REFRESH_CAP, loadFundingProfiles, refreshFundingProfile, type RefreshTarget } from "@/lib/cip/employer-financials";
+import { normOrg } from "@/lib/cip/employer-resolution";
 import { loadLatestIntake } from "@/lib/cip/profile";
 import { scoreEmployer } from "@/lib/cip/watched-employers";
 import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
@@ -41,6 +43,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   let promoted = 0;
+  const promotedTargets: RefreshTarget[] = [];
   for (const candidate of candidates) {
     const scored = scoreEmployer(candidate, intake);
     const { error: watchError } = await supabase.from("watched_employers").upsert(
@@ -68,11 +71,36 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (!watchError) {
       promoted += 1;
+      promotedTargets.push({
+        name: candidate.name,
+        location: candidate.location,
+        region: candidate.region,
+        ein: typeof candidate.ein === "number" ? candidate.ein : candidate.ein ? Number(candidate.ein) || null : null,
+        einSource: "candidate",
+      });
       await supabase
         .from("employer_candidates")
         .update({ review_state: "promoted", updated_at: new Date().toISOString() })
         .eq("id", candidate.id)
         .eq("user_id", user.id);
+    }
+  }
+
+  // IRS 990 filings for what was just promoted: a deterministic lookup (free public API, name + state
+  // only), bounded per click. Anything over the cap, or not found, is picked up by the "look up
+  // financials" buttons on the Employers page. A failure here never blocks the promotion itself.
+  let financials = { looked: 0, found: 0, notFound: 0, deferred: 0, problem: "" };
+  if (promotedTargets.length) {
+    const { profiles } = await loadFundingProfiles(supabase, user.id);
+    const batch = promotedTargets.slice(0, BULK_REFRESH_CAP);
+    financials.deferred = promotedTargets.length - batch.length;
+    for (const [index, target] of batch.entries()) {
+      if (index > 0) await sleep(700);
+      const outcome = await refreshFundingProfile(supabase, user.id, target, profiles.get(normOrg(target.name)) ?? null, { sleep });
+      financials.looked += 1;
+      if (outcome.profile.status === "ok") financials.found += 1;
+      else financials.notFound += 1;
+      if (outcome.error && !financials.problem) financials.problem = outcome.error;
     }
   }
 
@@ -87,9 +115,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         Refresh this page to see the updated watched list.
         ${propagation?.ok ? "The strategic snapshot was refreshed too." : propagation ? `Automatic propagation needs a manual briefing refresh: ${escapeHtml(propagation.errorMessage)}` : ""}
       </p>
+      ${financials.looked ? `<p class="mt-2 text-sm text-[var(--muted)]">IRS 990 filings: ${financials.found} found, ${financials.notFound} not found or unconfirmed (that means unknown, not poor funding).${financials.deferred ? ` ${financials.deferred} more can be looked up with the financials buttons below.` : ""}${financials.problem ? ` ${escapeHtml(financials.problem)}` : ""}</p>` : ""}
     </div>
   `);
 };
+
+const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
 function html(body: string, status = 200) {
   return new Response(body, {

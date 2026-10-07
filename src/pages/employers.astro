@@ -2,6 +2,9 @@
 import Layout from "../layouts/Layout.astro";
 import { canRunLiveBusinessSearch } from "../lib/cip/business-search-engine";
 import { geocodeCoordinates } from "../lib/cip/geography-engine";
+import { loadFundingProfiles, type FundingProfile } from "../lib/cip/employer-financials";
+import { renderBulkFinancialsControl, renderFinancialsBlock } from "../lib/cip/employer-financials-view";
+import { normOrg } from "../lib/cip/employer-resolution";
 import { loadStrategicState, type StrategicEmployerScore } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
 
@@ -110,6 +113,9 @@ let candidates: CandidateRow[] = [];
 let sources: SourceRow[] = [];
 let loadError = "";
 let candidateScoresByName = new Map<string, StrategicEmployerScore>();
+// IRS Form 990 profiles for tracked employers (empty, never an error page, when the table is missing).
+let fundingProfiles = new Map<string, FundingProfile>();
+let fundingError: string | null = null;
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -150,6 +156,10 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           candidate,
         ]),
       );
+
+      const funding = await loadFundingProfiles(supabase, user.id);
+      fundingProfiles = funding.profiles;
+      fundingError = funding.error;
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load watched employers.";
@@ -552,6 +562,15 @@ function normalizeEmployerName(name: string) {
           <h2 class="text-xl font-semibold">Saved businesses</h2>
           <p class="mt-2 text-sm text-[var(--muted)]">These are all watched businesses currently saved to your account, including older seeded/test records until you remove or archive them.</p>
         </div>
+        {signedIn && employers.length ? (
+          <Fragment
+            set:html={renderBulkFinancialsControl({
+              total: employers.length,
+              withFilings: employers.filter((employer) => fundingProfiles.get(normOrg(employer.name))?.status === "ok").length,
+              setupError: fundingError,
+            })}
+          />
+        ) : null}
         {employers.length ? employers.map((employer) => (
           <article class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-5 lg:grid-cols-[1fr_auto]">
             <div>
@@ -574,6 +593,14 @@ function normalizeEmployerName(name: string) {
                   ))}
                 </div>
               ) : null}
+              <Fragment
+                set:html={renderFinancialsBlock({
+                  employerId: employer.id,
+                  employerName: employer.name,
+                  profile: fundingProfiles.get(normOrg(employer.name)) ?? null,
+                  setupError: fundingError,
+                })}
+              />
             </div>
             <div class="flex min-w-40 flex-col items-start gap-2 lg:items-end">
               <span class="text-3xl font-semibold text-[var(--accent-strong)]">{employer.fit_score}%</span>

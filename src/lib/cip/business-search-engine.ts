@@ -38,7 +38,7 @@ export interface BusinessSearchCandidate extends EmployerCandidate {
    * from web search or the 990 parent-linker. Empty when it is itself the top-level organization.
    * Used to group and dedupe. */
   parent_organization?: string;
-  /** IRS EIN, present on irs_990-discovered rows; keys the 990 parent-linker. Not persisted. */
+  /** IRS EIN, present on irs_990-discovered rows; keys the 990 parent-linker and is saved with the candidate so promotion can attach the filing profile. */
   ein?: number;
   /** The user's lanes this employer serves (tagged deterministically after discovery; correctable). */
   relevantLanes?: Array<{ lane: string; label: string; reason: string }>;
@@ -94,6 +94,25 @@ export async function runBusinessSearch(input: BusinessSearchInput): Promise<Bus
   }
 }
 
+/**
+ * Upsert one candidate row. A 990-discovered candidate carries its IRS EIN so promotion can attach
+ * the filing profile without parsing notes. If the `ein` column does not exist yet (its migration
+ * not applied), retry WITHOUT it rather than silently losing the candidate: the profile can still be
+ * found by name later. Web-search candidates have no EIN and never touch the column.
+ */
+export async function upsertCandidateRow(
+  supabase: SupabaseClient,
+  row: Record<string, unknown>,
+  ein?: number,
+): Promise<{ error: { message: string } | null }> {
+  const options = { onConflict: "user_id,name,region" };
+  const first = await supabase.from("employer_candidates").upsert(ein ? { ...row, ein } : row, options);
+  if (first.error && ein && /\bein\b/i.test(first.error.message)) {
+    return supabase.from("employer_candidates").upsert(row, options);
+  }
+  return first;
+}
+
 export async function saveBusinessSearchResult(
   supabase: SupabaseClient,
   userId: string,
@@ -141,8 +160,7 @@ export async function saveBusinessSearchResult(
 
   for (const candidate of result.candidates) {
     const scored = scoreEmployer(candidate, intake);
-    const { error } = await supabase.from("employer_candidates").upsert(
-      {
+    const row = {
         user_id: userId,
         name: candidate.name,
         region: result.geography,
@@ -165,9 +183,8 @@ export async function saveBusinessSearchResult(
         review_state: "pending",
         last_reviewed_at: now,
         updated_at: now,
-      },
-      { onConflict: "user_id,name,region" },
-    );
+    };
+    const { error } = await upsertCandidateRow(supabase, row, candidate.ein);
     if (!error) savedCandidates += 1;
   }
 

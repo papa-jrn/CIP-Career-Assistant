@@ -251,3 +251,43 @@ describe("weekly strategy briefing diff", () => {
     expect(diff.recommendedActions.join(" ")).not.toMatch(/lane_fit/);
   });
 });
+
+describe("weekly briefing funding watch (IRS 990)", () => {
+  const entry = (over: Record<string, unknown> = {}) => ({
+    key: "granite community trust", name: "Granite Community Trust", trend: "shrinking" as const, filingYear: 2024, revenueUsd: 820_000,
+    line: "IRS 990 (FY 2024): revenue $820k, down 29% since FY 2022", ...over,
+  });
+  const prior = (entries: unknown[] | null) => ({
+    week_start: "2026-09-30",
+    summary: "Previous.",
+    next_actions: [],
+    evidence: [
+      { type: "strategic_state", conversation_outcome_count: 1, lane_scores: baseState.lanes, employer_scores: baseState.employers },
+      ...(entries ? [{ type: "funding_profiles", entries }] : []),
+    ],
+  });
+
+  it("names a shrinking tracked employer as a standing funding check, ahead of the generic employer checks", () => {
+    const diff = buildBriefingDiff(baseState, prior(null), { ...context, funding: [entry()] });
+    expect(diff.fundingWatch).toHaveLength(1);
+    expect(diff.jobEmployerChecks[0]).toMatch(/Funding check: Granite Community Trust: IRS 990 \(FY 2024\).*Confirm funding/);
+    expect(diff.changed.join(" ")).not.toMatch(/Granite/); // not news: no earlier funding data to compare with
+  });
+
+  it("reports a trend move and a new filing as changes against a snapshot that already had funding data", () => {
+    const diff = buildBriefingDiff(
+      baseState,
+      prior([entry({ trend: "stable", filingYear: 2023 }), { key: "valley arts council", name: "Valley Arts Council", trend: "growing", filingYear: 2023, revenueUsd: 1, line: "x" }]),
+      { ...context, funding: [entry(), { key: "valley arts council", name: "Valley Arts Council", trend: "growing", filingYear: 2024, revenueUsd: 2, line: "IRS 990 (FY 2024): revenue $2M, up 15% since FY 2022" }] },
+    );
+    expect(diff.changed.join(" ")).toMatch(/Granite Community Trust's revenue trend moved from steady to shrinking/);
+    expect(diff.changed.join(" ")).toMatch(/A new IRS 990 is on file for Valley Arts Council/);
+    expect(diff.displayChanged.join(" ")).toMatch(/Granite Community Trust's revenue trend moved/);
+  });
+
+  it("says nothing about funding when no tracked employer has filing data", () => {
+    const diff = buildBriefingDiff(baseState, prior(null), context);
+    expect(diff.fundingWatch).toEqual([]);
+    expect(diff.jobEmployerChecks.join(" ")).not.toMatch(/Funding check/);
+  });
+});
