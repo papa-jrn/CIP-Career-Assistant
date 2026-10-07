@@ -270,6 +270,9 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
       .filter((lane) => lane.lane)
       .map((lane) => [normalize(lane.lane ?? ""), lane]),
   );
+  // Each verified posting validates the ONE lane its title fits best (not every lane that shares a
+  // generic word), so a tech-exec role tagged loosely by the search can't leak into the ED lane.
+  const postingByLane = assignPostingsToLanes(targetLanes, inputs.verifiedPostings ?? []);
 
   return targetLanes.map((lane, index): StrategicLaneScore => {
     const conversationResearchLane = lane.label === "Conversation research lane";
@@ -328,7 +331,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     // Gap B: verified-open postings from the latest search validate the lane. Each matching posting
     // adds a bounded boost AND exempts the lane from the research cap — the cap asks for "a real role,
     // employer, or current-work evidence," and a verified-open posting is exactly that.
-    const matchingPostings = (inputs.verifiedPostings ?? []).filter((posting) => matchPostingToLane(lane, posting));
+    const matchingPostings = (inputs.verifiedPostings ?? []).filter((posting) => postingByLane.get(posting) === lane.role);
     if (matchingPostings.length) {
       score += Math.min(12, matchingPostings.length * 6);
       const sample = matchingPostings[0];
@@ -646,12 +649,26 @@ function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: st
   return matchesText(lane.role, phrase) || (Boolean(lane.rationale) && matchesText(lane.rationale as string, phrase));
 }
 
-// A verified posting validates a lane when its title matches the lane's role, or the search already
-// tagged it to that role family via matched_role_term (the skill marker never counts as a lane match).
-function matchPostingToLane(lane: { role: string }, posting: VerifiedPostingLike) {
-  if (matchesText(lane.role, posting.title)) return true;
-  const term = posting.matchedRoleTerm;
-  return Boolean(term && term !== "skill" && matchesText(lane.role, term));
+// Assign each verified posting to the single lane whose role its TITLE fits best (≥2 shared
+// significant tokens). Title-based on purpose: a posting's `matched_role_term` is the search's loose
+// tag (a CIO can be tagged "executive director"), so using it leaks tech-exec roles into the ED lane.
+// Requiring two shared title tokens also stops a lone generic word ("director") from binding a lane.
+function assignPostingsToLanes(lanes: Array<{ role: string }>, postings: VerifiedPostingLike[]) {
+  const assignment = new Map<VerifiedPostingLike, string>();
+  for (const posting of postings) {
+    const title = normalize(posting.title);
+    let bestLane: string | null = null;
+    let bestScore = 1; // require at least 2 shared tokens to count as a match
+    for (const lane of lanes) {
+      const shared = sharedTokenCount(title, normalize(lane.role));
+      if (shared >= 2 && shared > bestScore) {
+        bestScore = shared;
+        bestLane = lane.role; // ties keep the earlier (higher-priority) lane
+      }
+    }
+    if (bestLane) assignment.set(posting, bestLane);
+  }
+  return assignment;
 }
 
 function trimPhrase(phrase: string) {

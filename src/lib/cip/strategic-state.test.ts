@@ -372,6 +372,34 @@ describe("lane scoring talks to the evidence re-analysis and the search (propaga
     expect(cto?.reasons.join(" ")).not.toMatch(/Capped as research/);
   });
 
+  it("B2: a tech-exec posting attributes to the tech-exec lane, not the ED lane (fixes the leak)", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        roleBriefs: [
+          { role: "Executive Director / Nonprofit Media Leader", whyItFits: "Proven nonprofit media leadership.", evidenceNeeded: "Refresh metrics.", searchTargets: [] },
+          { role: "Chief Technology and Media Innovation Officer", whyItFits: "A potential direction worth exploring.", evidenceNeeded: "Needs validation.", searchTargets: [] },
+        ],
+      },
+      // The search tagged this CIO role with the loose term "executive director". Title-based
+      // attribution must keep it OUT of the ED lane and route it to the technology-executive lane,
+      // which it then validates (lifting it out of the research cap).
+      verifiedPostings: [{ title: "Vice President and Chief Information Officer", employer: "Dartmouth College", matchedRoleTerm: "executive director", tier: "target_page" }],
+    });
+    expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
+    const cto = laneBy(lanes, /Chief Technology/);
+    expect(cto?.reasons.join(" ")).toMatch(/verified-open posting/);
+    expect(cto?.label).toBe("Strong alternate");
+  });
+
+  it("B3: a real Executive Director posting validates the ED lane, not the CTO lane", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: cappedAdvisor,
+      verifiedPostings: [{ title: "Executive Director", employer: "Faunalytics", matchedRoleTerm: "", tier: "preferred_source" }],
+    });
+    expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).toMatch(/verified-open posting/);
+    expect(laneBy(lanes, /Chief Technology/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
+  });
+
   it("C: a speculative lane with neither a posting nor a strong conversation stays capped", () => {
     const lanes = scoreLanes({ latestAdvisor: cappedAdvisor });
     const cto = laneBy(lanes, /Chief Technology/);

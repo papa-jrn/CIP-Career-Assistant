@@ -1011,6 +1011,23 @@ The FIX QUEUED above (2026-09-29, "lane scoring is siloed…") is built, per its
   lifts a capped lane to Strong alternate with a cited reason; (C) a speculative lane with neither stays
   capped; (D) re-analysis strength alone stays capped. Full suite: **238 tests**; SSR build compiles.
 
+**Refinement from the first two live analyses (2026-10-07).** The founder's week-over-week data showed
+Gap B working (the ED Primary lane validated by ~6 real "Executive Director" postings) but also a
+mis-attribution: a Dartmouth "VP and Chief Information Officer", tagged by the search with the loose
+term "executive director", leaked into the ED lane via `matched_role_term` substring matching, while
+the technology-executive lane it actually belonged to got nothing and fell from Strong alternate back
+to research. Fixed: posting→lane matching is now **title-based, best-lane** (`assignPostingsToLanes`) —
+each verified posting validates the single lane whose role its TITLE fits best, requiring ≥2 shared
+significant tokens; `matched_role_term` is no longer used (it is the search's loose tag). Result on the
+founder's data: the VP/CIO now attributes to the Director-of-Media-Innovation/CTO lane (not ED) and
+lifts it to Strong alternate, and the ED count reflects only real ED titles. Known limitation: two
+shared generic rank tokens (e.g. "chief"+"officer") can still bind a mis-fit like a CFO to a CTO lane;
+a distinctive-token weighting is a possible later refinement. Also surfaced, not a bug: the
+Strong-alternate "volatility" the founder saw between weeks is the strengthened/weakened re-analysis
+delta being per-analysis (it correctly does not persist when a later pass finds no new changes) — a
+lane stays elevated across weeks only on durable signals (verified postings, conversations,
+positioning), which is the intended discipline.
+
 With this, the Opportunities + lane-scoring work is done. Next: the Employers-page reassessment incl.
 local-business discovery.
 
