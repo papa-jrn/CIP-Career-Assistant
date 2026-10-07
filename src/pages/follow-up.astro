@@ -504,9 +504,17 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
             <div class="grid gap-3 lg:grid-cols-3">
               <label class="grid gap-1">
                 <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact</span>
-                <select name="contact_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                <select name="contact_name" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" data-outcome-contact-select>
                   {queue.map((person) => <option value={person.contact.name}>{person.contact.name}</option>)}
+                  <option value="__other__">Other (someone not listed)…</option>
                 </select>
+                <input
+                  name="contact_name_other"
+                  class={`mt-1 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm${queue.length ? " hidden" : ""}`}
+                  placeholder="Type the person's name"
+                  autocomplete="off"
+                  data-outcome-contact-other
+                />
               </label>
               <label class="grid gap-1">
                 <span class="text-xs font-semibold uppercase text-[var(--muted)]">Organization</span>
@@ -840,6 +848,21 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
 
     draftContactSelect?.addEventListener("change", syncDraftContactContext);
     syncDraftContactContext();
+
+    // Conversation-outcome contact: reveal a free-text field when "Other" is chosen, so a conversation
+    // with someone not already in the contact list can still be captured.
+    const outcomeContactSelect = document.querySelector("[data-outcome-contact-select]");
+    const outcomeContactOther = document.querySelector("[data-outcome-contact-other]");
+    function syncOutcomeContactOther() {
+      if (!(outcomeContactSelect instanceof HTMLSelectElement) || !(outcomeContactOther instanceof HTMLInputElement)) return;
+      const isOther = outcomeContactSelect.value === "__other__";
+      outcomeContactOther.classList.toggle("hidden", !isOther);
+      outcomeContactOther.required = isOther;
+      if (isOther) outcomeContactOther.focus();
+      else outcomeContactOther.value = "";
+    }
+    outcomeContactSelect?.addEventListener("change", syncOutcomeContactOther);
+    syncOutcomeContactOther();
 
     // Scroll to the single contact card a worklist link points at.
     function openTargetCard() {

@@ -56,7 +56,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const form = await request.formData();
-  const contactName = getText(form, "contact_name");
+  // "Other" in the conversation-outcome contact dropdown reveals a free-text field; use that name so a
+  // conversation with someone not already in the contact list can still be captured.
+  const selectedContact = getText(form, "contact_name");
+  const contactName = selectedContact === "__other__" ? getText(form, "contact_name_other") : selectedContact;
   if (!contactName) {
     return html('<p class="text-sm font-semibold text-red-700">Missing contact name.</p>', 400);
   }
