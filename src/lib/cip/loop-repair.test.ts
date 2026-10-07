@@ -5,14 +5,19 @@
 // strategic inputs always trigger change detection, and an honest "nothing
 // changed" is produced when no new input exists.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAdvisorAnalysis, selectAnalysisTask, type AdvisorAnalysis } from "@/lib/cip/advisor";
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import { intakeFormSchema } from "@/lib/cip/intake";
 
-// Force the deterministic advisor path in tests; never call the real API.
-vi.stubEnv("OPENAI_API_KEY", "");
-vi.stubEnv("OPENAI_MODEL", "test-model");
+// Force the deterministic advisor path in tests; never call the real API. vitest.setup.ts strips
+// provider keys suite-wide; re-stubbing in beforeEach (not module scope) keeps the intent local
+// AND alive after every afterEach unstub — module-scope stubs were cancelled by the first unstub,
+// which once let a real .env key through and sent these tests to the live API.
+beforeEach(() => {
+  vi.stubEnv("OPENAI_API_KEY", "");
+  vi.stubEnv("OPENAI_MODEL", "test-model");
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
