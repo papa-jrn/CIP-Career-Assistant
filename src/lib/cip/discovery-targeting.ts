@@ -105,10 +105,12 @@ export function tagCandidateLanes(candidate: { name: string; category: string },
 
 /**
  * Split discovered employers into genuinely new ones and ones already tracked, by resolving each
- * name against the user's existing watched/candidate employers (same resolver the chips use), so the
- * review queue never shows a duplicate under a different name (e.g. "DHMC" vs "Dartmouth Health").
+ * candidate's name AND its parent organization against the user's existing watched/candidate employers
+ * (same resolver the chips use). So "DHMC" dedupes to a watched "Dartmouth-Hitchcock Medical Center",
+ * and a member hospital whose parent is a watched "Dartmouth Health" is recognized as already tracked —
+ * which pure name matching cannot do (member names share no words with the system name).
  */
-export function partitionAgainstExisting<T extends { name: string }>(
+export function partitionAgainstExisting<T extends { name: string; parent_organization?: string }>(
   candidates: T[],
   existingNames: string[],
 ): { fresh: T[]; alreadyTracked: Array<{ candidate: T; trackedAs: string }> } {
@@ -116,7 +118,11 @@ export function partitionAgainstExisting<T extends { name: string }>(
   const fresh: T[] = [];
   const alreadyTracked: Array<{ candidate: T; trackedAs: string }> = [];
   for (const candidate of candidates) {
-    const match = resolveEmployerName(candidate.name, canon, new Map()).canonical;
+    const byName = resolveEmployerName(candidate.name, canon, new Map()).canonical;
+    const byParent = candidate.parent_organization?.trim()
+      ? resolveEmployerName(candidate.parent_organization, canon, new Map()).canonical
+      : null;
+    const match = byName ?? byParent;
     if (match) alreadyTracked.push({ candidate, trackedAs: match });
     else fresh.push(candidate);
   }

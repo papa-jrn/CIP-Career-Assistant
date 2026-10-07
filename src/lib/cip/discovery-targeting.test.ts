@@ -57,4 +57,16 @@ describe("partitionAgainstExisting", () => {
     expect(alreadyTracked.map((entry) => entry.candidate.name).sort()).toEqual(["DHMC", "Vital Communities Inc"]);
     expect(alreadyTracked.find((entry) => entry.candidate.name === "DHMC")?.trackedAs).toBe("Dartmouth-Hitchcock Medical Center");
   });
+
+  it("recognizes a member employer whose parent organization is already tracked (name shares no words)", () => {
+    const candidates = [
+      { name: "Mary Hitchcock Memorial Hospital", parent_organization: "Dartmouth Health" },
+      { name: "Dartmouth-Hitchcock Clinic", parent_organization: "Dartmouth Health" },
+      { name: "Unrelated Local Startup", parent_organization: "" },
+    ];
+    const { fresh, alreadyTracked } = partitionAgainstExisting(candidates, ["Dartmouth Health"]);
+    expect(fresh.map((candidate) => candidate.name)).toEqual(["Unrelated Local Startup"]);
+    expect(alreadyTracked.every((entry) => entry.trackedAs === "Dartmouth Health")).toBe(true);
+    expect(alreadyTracked).toHaveLength(2);
+  });
 });

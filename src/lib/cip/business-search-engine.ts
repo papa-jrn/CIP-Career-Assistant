@@ -34,6 +34,9 @@ export interface BusinessSearchSource {
 export interface BusinessSearchCandidate extends EmployerCandidate {
   discovery_channel: string;
   discovery_source_names: string[];
+  /** The larger health system / company / parent this employer rolls up to (e.g. "Dartmouth Health"),
+   * from web search. Empty when it is itself the top-level organization. Used to group and dedupe. */
+  parent_organization?: string;
   /** The user's lanes this employer serves (tagged deterministically after discovery; correctable). */
   relevantLanes?: Array<{ lane: string; label: string; reason: string }>;
 }
@@ -152,6 +155,7 @@ export async function saveBusinessSearchResult(
         confidence: candidate.confidence,
         discovery_channel: candidate.discovery_channel,
         discovery_source_names: candidate.discovery_source_names,
+        parent_organization: candidate.parent_organization ?? "",
         relevant_lanes: candidate.relevantLanes?.map((tag) => tag.lane) ?? [],
         source_notes: candidate.source_notes,
         review_state: "pending",
@@ -238,6 +242,7 @@ async function runOpenAiBusinessSearch(
               "Do not use built-in app fixtures or examples.",
               "Careers URLs should be employer-owned pages when available; otherwise use the best public hiring page and set adapter_status to manual_review.",
               "Target roles should be broad role lanes, not individual job postings.",
+              "Set parent_organization to the larger health system, parent company, or umbrella organization this employer belongs to, using the name the user would recognize (for example, a member hospital or clinic of a health system uses that system's name). Leave it an empty string when the employer is itself the top-level organization. Do not invent a parent.",
             ],
           }),
         },
@@ -272,6 +277,7 @@ async function runOpenAiBusinessSearch(
     sourcePages: parsed.sourcePages,
     candidates: parsed.candidates.map((candidate) => ({
       ...candidate,
+      parent_organization: candidate.parent_organization?.trim() || "",
       priority: candidate.priority ?? "medium",
       adapter_status: candidate.adapter_status ?? "manual_review",
       confidence: candidate.confidence ?? "medium",
@@ -327,6 +333,7 @@ const businessSearchSchema = {
         additionalProperties: false,
         required: [
           "name",
+          "parent_organization",
           "region",
           "category",
           "location",
@@ -343,6 +350,7 @@ const businessSearchSchema = {
         ],
         properties: {
           name: { type: "string" },
+          parent_organization: { type: "string" },
           region: { type: "string" },
           category: { type: "string" },
           location: { type: "string" },

@@ -28,6 +28,7 @@ type CandidateRow = EmployerRow & {
   discovery_channel: string;
   discovery_source_names: string[];
   relevant_lanes?: string[];
+  parent_organization?: string | null;
   review_state: string;
 };
 
@@ -480,6 +481,9 @@ function normalizeEmployerName(name: string) {
                       ) : null}
                     </div>
                     <p class="mt-2 text-sm text-[var(--muted)]">{candidate.location} - {candidate.estimated_size}</p>
+                    {candidate.parent_organization ? (
+                      <p class="mt-1 text-xs font-semibold text-[var(--muted)]">Part of {candidate.parent_organization}</p>
+                    ) : null}
                     {candidate.relevant_lanes?.length ? (
                       <p class="mt-2 flex flex-wrap gap-1">
                         {candidate.relevant_lanes.map((lane) => (

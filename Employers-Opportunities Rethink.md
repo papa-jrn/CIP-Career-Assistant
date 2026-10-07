@@ -1142,6 +1142,21 @@ honestly with no fabricated employers.
 Deferred, unchanged: the ProPublica 990 layer, broader local-business coverage, and the full §14 target-
 workspace UX.
 
+#### Follow-up 2026-10-07 — parent-organization grouping (from first live run)
+
+Live run surfaced three Dartmouth Health members as separate rows (Dartmouth-Hitchcock Clinic, Mary
+Hitchcock Memorial Hospital, Dartmouth-Hitchcock Medical Center). The conservative name resolver cannot
+link them — they share too few words with each other or with "Dartmouth Health" — because that is world
+knowledge, not string overlap. Fix: discovery now asks the web search for each employer's
+`parent_organization` (the health system / parent company it rolls up to; empty if top-level, never
+invented). Then, deterministically: `partitionAgainstExisting` dedupes a candidate when **its name OR its
+parent** resolves to a tracked employer (so a watched "Dartmouth Health" now catches its member
+hospitals); each card is labeled "Part of <parent>"; and when two or more results share a parent, a note
+suggests watching the parent so future runs treat the members as already tracked. Persisted in
+`employer_candidates.parent_organization` (migration `20261007130000_employer_candidate_parent_org.sql` —
+apply to hosted). AI provides the parent, deterministic logic groups/dedupes (house pattern). Full suite
+**248**.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.

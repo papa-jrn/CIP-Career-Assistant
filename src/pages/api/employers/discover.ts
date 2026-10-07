@@ -31,6 +31,7 @@ type SavedCandidateRow = {
   discovery_channel: string;
   discovery_source_names: string[];
   relevant_lanes: string[];
+  parent_organization: string | null;
   review_state: string;
 };
 
@@ -112,7 +113,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (names.length) {
       const { data } = await supabase
         .from("employer_candidates")
-        .select("id,name,category,location,estimated_size,priority,fit_score,fit_summary,discovery_channel,discovery_source_names,relevant_lanes,review_state")
+        .select("id,name,category,location,estimated_size,priority,fit_score,fit_summary,discovery_channel,discovery_source_names,relevant_lanes,parent_organization,review_state")
         .eq("user_id", user.id)
         .eq("region", result.geography)
         .in("name", names)
@@ -157,6 +158,17 @@ function renderTargetingBanner(targeting: DiscoveryTargeting | null) {
       <p class="text-sm font-semibold text-[var(--accent-strong)]">Targeting your lanes</p>
       <p class="mt-1 text-sm text-[var(--muted)]">This search looked for employers that fit: ${laneNames}. Pick sectors manually above to override.</p>
     </div>`;
+}
+
+function renderParentGroupingNote(candidates: BusinessSearchCandidate[]) {
+  const counts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const parent = candidate.parent_organization?.trim();
+    if (parent) counts.set(parent, (counts.get(parent) ?? 0) + 1);
+  }
+  const shared = [...counts.entries()].filter(([, count]) => count >= 2).map(([parent]) => parent);
+  if (!shared.length) return "";
+  return `<p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">Several results belong to the same organization: <span class="font-semibold">${shared.map(escapeHtml).join(", ")}</span>. Add the parent to your watched list and future searches will treat its members as already tracked.</p>`;
 }
 
 function renderAlreadyTracked(alreadyTracked: AlreadyTracked[]) {
@@ -221,6 +233,7 @@ function renderDiscoveryResult({
     </div>
     ${renderSourcePages(result.sourcePages)}
     ${renderAlreadyTracked(alreadyTracked)}
+    ${renderParentGroupingNote(result.candidates)}
     ${renderCurrentSearchSaveForm(currentSearchCandidates)}
     <div class="mt-4 grid gap-3">
       ${result.candidates.length ? result.candidates.map((candidate) => `
@@ -233,6 +246,7 @@ function renderDiscoveryResult({
             <span class="rounded-md bg-[var(--accent-tint)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">${escapeHtml(candidate.priority)} priority</span>
           </div>
           <p class="mt-3 text-sm leading-6 text-[var(--muted)]">${escapeHtml(candidate.category)}</p>
+          ${candidate.parent_organization ? `<p class="mt-1 text-xs font-semibold text-[var(--muted)]">Part of ${escapeHtml(candidate.parent_organization)}</p>` : ""}
           ${renderLaneChips(candidate.relevantLanes)}
           <p class="mt-2 text-xs text-[var(--muted)]">Sources: ${candidate.discovery_source_names.map(escapeHtml).join(", ")}</p>
         </article>
@@ -262,6 +276,7 @@ function renderCurrentSearchSaveForm(candidates: SavedCandidateRow[]) {
               <span class="font-semibold">${escapeHtml(candidate.name)}</span>
               <span class="mt-1 block text-sm text-[var(--muted)]">${escapeHtml(candidate.location ?? "")} - ${escapeHtml(candidate.estimated_size ?? "")}</span>
               <span class="mt-1 block text-xs text-[var(--muted)]">${escapeHtml(candidate.category)} - ${escapeHtml(candidate.discovery_channel)}</span>
+              ${candidate.parent_organization ? `<span class="mt-1 block text-xs font-semibold text-[var(--muted)]">Part of ${escapeHtml(candidate.parent_organization)}</span>` : ""}
               ${candidate.relevant_lanes?.length ? `<span class="mt-1 block text-xs font-semibold text-[var(--accent-strong)]">Fits: ${candidate.relevant_lanes.map(escapeHtml).join(", ")}</span>` : ""}
             </span>
             <span class="text-sm font-semibold text-[var(--accent-strong)]">${candidate.fit_score}%</span>
