@@ -1157,6 +1157,44 @@ suggests watching the parent so future runs treat the members as already tracked
 apply to hosted). AI provides the parent, deterministic logic groups/dedupes (house pattern). Full suite
 **248**.
 
+### 2026-10-07 — NEXT SESSION: ProPublica 990 nonprofit discovery (plan sketch, not built)
+
+Founder's next priority (approaching session limit): add the IRS Form 990 layer so **small/mid local
+nonprofits that web search misses** are picked up. Rationale: open-web discovery finds the prominent orgs
+(Dartmouth, chambers, big hospitals); smaller nonprofits don't rank, but they are all in 990 filings —
+structured, geocodable, not dependent on web prominence.
+
+**Source:** ProPublica Nonprofit Explorer API (free, public, no key). `…/api/v2/search.json?q=&state[id]=
+VT&ntee[id]=…` (state + NTEE category filters; returns city) and `…/organizations/{ein}.json` (name, NTEE,
+revenue/expenses/assets, address, filings by year). Real public-filing data → provenance = EIN + filing
+year + ProPublica URL; no fabrication (§19). Deterministic (no model call); rate-limit + cache geocodes.
+
+**First slice (discovery, the "slipping through the cracks" fix):**
+1. `propublica-990.ts` client: search by state + NTEE, fetch org detail, with caching + polite rate limit;
+   stub the fetch in tests.
+2. **Geo-filter to the labor shed.** ProPublica search is state-level; filter orgs to the radius by
+   matching the org city against the `geography-engine` nearby-places list first (cheap), geocoding only
+   ambiguous cities (Geocodio) and Haversine against the anchor. Reuse the existing geographic spine.
+3. **NTEE → lane mapping (config).** Derive NTEE major categories from the user's nonprofit lanes
+   (human services, arts/media/communications, education, health, community/advocacy…). Small data map.
+4. **Size by BUDGET, not headcount.** The whole point is smaller orgs — do NOT apply the 100+ employee
+   minimum; use a revenue floor (e.g. ≥ ~$250k) and bucket revenue → small/medium/large. A $1–5M nonprofit
+   with 15 staff is a prime target.
+5. **Merge into the existing candidate flow.** Map each 990 org → `EmployerCandidate`
+   (`discovery_channel: "irs_990"`, budget-based `estimated_size`, `source_notes` = EIN / revenue / NTEE /
+   latest filing year, `parent_organization` usually empty). Then the lane tagging, parent/name dedupe,
+   and review queue already built apply unchanged. Rank by proximity + budget + lane fit; cap volume.
+6. **UI:** a "Include small nonprofits from IRS 990 filings" toggle on the discovery form; candidate cards
+   show budget + an EIN/ProPublica provenance link.
+
+**Decisions to make next session:** (a) revenue floor + size buckets; (b) the NTEE↔lane map (start broad
+for nonprofit lanes); (c) city-match vs geocode-every-org for the geo filter (start with city-match);
+(d) volume cap per run.
+
+**Deferred beyond this slice:** enriching *existing* watched/candidate nonprofit targets with their 990
+financials (feeds the search brief + fit reasoning — §9/§13), year-over-year financial trend signals, and
+scheduled refresh. Build discovery first; enrichment is the natural follow-on.
+
 ### Decisions made by the founder (2026-09-23)
 
 - Rethink first, built de-foundered from the start; the rest of Phase 5 and the legacy parsers (Phase 6) follow the slice.
