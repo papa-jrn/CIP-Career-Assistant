@@ -644,9 +644,33 @@ function matchesText(left: string, right: string) {
 
 // A re-analysis delta / positioning phrase is about this lane when it shares enough language with the
 // lane's role or its "why it fits" rationale.
+// Generic rank/filler words that, shared alone, do NOT mean a re-analysis phrase is about a lane. A
+// delta must share a DISTINCTIVE (domain) word with the lane's role or rationale — otherwise a long
+// phrase about, say, "big tech roles where you're not the head" would bleed into a nonprofit lane
+// just because both mention "roles" and "leadership".
+const GENERIC_DELTA_TOKEN = new Set([
+  "role", "roles", "leadership", "leader", "leaders", "experience", "success", "successful", "strategic",
+  "strategy", "management", "managing", "manager", "organization", "organizations", "organizational",
+  "director", "executive", "executives", "senior", "current", "recent", "evidence", "proven", "strong",
+  "stronger", "weaker", "modern", "demonstrated", "similar", "potential", "expressed", "concerns", "concern",
+  "support", "supported", "supports", "direction", "directions", "company", "companies", "user", "users",
+  "where", "this", "that", "with", "head", "large", "well", "aligns", "align", "team", "teams", "work",
+  "working", "worth", "level", "levels", "high", "highly", "good", "better", "best", "capacity", "capable",
+  "suitable", "appropriate", "combines", "combined", "continue", "skills", "based", "positions", "position",
+]);
+
+function distinctiveTokens(text: string): Set<string> {
+  return new Set(normalize(text).split(" ").filter((token) => token.length > 3 && !GENERIC_DELTA_TOKEN.has(token)));
+}
+
 function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: string) {
   if (!phrase?.trim()) return false;
-  return matchesText(lane.role, phrase) || (Boolean(lane.rationale) && matchesText(lane.rationale as string, phrase));
+  const laneTokens = distinctiveTokens(`${lane.role} ${lane.rationale ?? ""}`);
+  if (!laneTokens.size) return false;
+  for (const token of distinctiveTokens(phrase)) {
+    if (laneTokens.has(token)) return true;
+  }
+  return false;
 }
 
 // Assign each verified posting to the single lane whose role its TITLE fits best (≥2 shared

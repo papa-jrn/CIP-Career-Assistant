@@ -400,6 +400,22 @@ describe("lane scoring talks to the evidence re-analysis and the search (propaga
     expect(laneBy(lanes, /Chief Technology/)?.reasons.join(" ")).not.toMatch(/verified-open posting/);
   });
 
+  it("A2: a weakened delta only hits lanes it shares a distinctive word with, not unrelated ones", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        roleBriefs: [
+          { role: "Executive Director / Nonprofit Media Leader", whyItFits: "Proven nonprofit media leadership with grants and team management.", evidenceNeeded: "Refresh metrics.", searchTargets: [] },
+          { role: "Big tech software engineering", whyItFits: "Adjacent to public GitHub projects.", evidenceNeeded: "Needs proof.", searchTargets: [] },
+        ],
+        changeLog: changeLog({ weakened: ["Potential roles in large AI or tech companies where the user is not the head are weaker now"] }),
+      },
+    });
+    // The "big tech, not the head" note must NOT weaken the nonprofit ED lane (no shared domain word)…
+    expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).not.toMatch(/weakened this direction/);
+    // …but it does weaken the big-tech lane, which shares "tech".
+    expect(laneBy(lanes, /software engineering/)?.reasons.join(" ")).toMatch(/weakened this direction/);
+  });
+
   it("C: a speculative lane with neither a posting nor a strong conversation stays capped", () => {
     const lanes = scoreLanes({ latestAdvisor: cappedAdvisor });
     const cto = laneBy(lanes, /Chief Technology/);

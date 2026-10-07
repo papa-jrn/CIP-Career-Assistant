@@ -1028,6 +1028,22 @@ delta being per-analysis (it correctly does not persist when a later pass finds 
 lane stays elevated across weeks only on durable signals (verified postings, conversations,
 positioning), which is the intended discipline.
 
+**Refinement 2 (2026-10-07, from the third live analysis).** After a conversation that produced a
+weakened delta ("potential roles in large AI/tech companies where the user is not the head"), that
+delta bled into the nonprofit ED and nonprofit-CTO lanes — because `matchDeltaToLane` matched a long
+re-analysis phrase to a lane on any two incidental shared words in its rationale. Tightened to require a
+shared **distinctive** (non-generic) domain token: a delta now adjusts a lane only when the phrase and
+the lane's role/rationale share a meaningful word (not "roles"/"leadership"/"head"/etc., which are in a
+`GENERIC_DELTA_TOKEN` stoplist). The big-tech-non-head note now weakens only a genuinely tech-IC lane,
+not the nonprofit lanes. Mirrors the posting title-attribution fix — stop matching on incidental/generic
+tokens. Test added; full suite **241**.
+
+Known-limitation still open (Issue B): a verified tech-exec posting ("VP and CIO") does not validate the
+founder's "Director of Media Innovation / CTO" lane because the title shares no token with the lane name
+(CIO ≠ "CTO"/"Director of Media Innovation"). Lifting that lane to Strong alternate on real postings
+needs either lane synonym vocabulary (CIO/CTO/technology officer → tech-exec lane) or trusting the
+search's own lane tagging (store which lane scope matched, not the loose term). Deferred as a decision.
+
 With this, the Opportunities + lane-scoring work is done. Next: the Employers-page reassessment incl.
 local-business discovery.
 
