@@ -187,6 +187,7 @@ export function renderTargetCard(d: TargetDossier, options: WorkspaceViewOptions
       <p class="mt-1 text-sm font-semibold">${escapeHtml(d.action.label)}</p>
       <p class="mt-1 text-sm leading-6">${escapeHtml(d.action.rationale)}</p>
       ${why}
+      <a class="mt-3 inline-block text-sm font-semibold underline" href="/workbench?view=work&amp;context=${encodeURIComponent(d.name)}&amp;title=${encodeURIComponent(d.action.label)}">Work on this in Workbench</a>
     </div>
     ${fundingLine}${changes}
     <details class="mt-3">

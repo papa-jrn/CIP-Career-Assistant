@@ -1,6 +1,6 @@
 # Workbench and Career Loop Redesign
 
-Status: founder-approved direction, documented 2026-10-19. Planning only; this document does not claim implementation.
+Status: founder-approved direction, documented 2026-10-19. First Workbench foundation implemented locally; see the implementation-progress sections for completed work and remaining boundaries. The full redesign is not complete.
 
 This is the current UX and sequencing plan. It complements the master project plan, Next Steps.md, Project Plan Autumn 2026.md, and Employers-Opportunities Rethink.md. Existing security, verification, evidence-lineage, and beta obligations remain in force.
 
@@ -220,3 +220,57 @@ The founder accepted the following recommendations before implementation:
 - Verify imported jobs at submission. Always display the source and last-checked time. Automatically recheck when the user chooses to pursue or apply if the last check is more than 24 hours old, with visible progress. The threshold is an initial policy, not a guarantee. A failed recheck retains historical evidence but marks current status unconfirmed; a live listing does not establish hiring intent. Do not repeatedly recheck every saved job in the background during alpha.
 
 The agent will inspect existing persistence and define additive migrations, orchestration, route compatibility, and report inventory. External-job evaluation caps require a code/cost review before numbers are proposed. Detailed layout and palette require a reviewable prototype. These remaining implementation choices do not reopen the approved product direction.
+
+## Implementation progress - 2026-10-19, slice 1
+
+First working foundation: the Workbench now has Overview, My work, and What changed views, a current-direction summary from saved advisor analysis, research/goal capture, explicit strategy analysis on the same page, and expandable persistent actions with outcome history. Opportunities remains linked to its existing route until its full workspace integration is ready; primary navigation consolidation is not yet implemented.
+
+Storage decision: reuse career_sources under existing RLS. Append workbench_action records for status-only events; findings and their action event share a single evidence_response insert, making outcome capture atomic and readable by the existing advisor. No database migration is needed for this foundation. Read the entire paginated history so older terminal decisions cannot disappear behind a recent-record limit. User-entered goals are labeled as intentions; research remains unverified user-reported evidence. Existing posting dispositions and relationship outcomes remain authoritative in their own domains; automatic task adoption is deferred until recommendation defects are diagnosed.
+
+Current boundaries: text capture only; source ingestion is still explicit on Evidence, the existing advisor limits still apply, and full pending-input orchestration/concurrency handling is not claimed complete. This slice does not build external-job import, streamline People, consolidate navigation, retire Report/Briefing, or apply the final global palette. Those remain required plan work. The Workbench uses a scoped cool-color prototype for review while other pages retain their current design.
+
+## Workbench source and report inventory
+
+Existing stores inspected: career_sources (free source_type, existing user RLS), conversation_outcomes (typed signals and obligations), posting_dispositions (job-specific status keyed by URL), career_strategy_snapshots (generated briefings). They describe different domains; no destructive migration or bulk conversion is needed for slice 1. General captures are evidence records, not artificial completed tasks. Only explicit actions enter the action ledger.
+
+The Report's Executive Summary uses advisor.summary, which Overview now reads from the latest evidence analysis with its analysis mode and date. Report also contains confidence-labeled evidence, lanes, exploration experiments, skill gaps, safety notes, and opportunity context. These are not deleted; the existing report remains reachable pending the later snapshot/export consolidation. No historical report is overwritten.
+
+Employer cards now offer a contextual Workbench handoff with editable employer/action fields, and evidence-analysis completion links to What changed. Creating an already-saved matching title/context returns to its existing history, including completed/dismissed work, instead of reopening it. This is initial application-level dedupe; concurrent creation needs a database uniqueness mechanism before broader automated adoption.
+
+Verification for slice 1: TypeScript and all 424 tests passed; SSR build passed. Browser confirmed signed-out handling and signed-in rendering of the founder's saved analysis, pending-input count, and narrow-screen layout. No synthetic research or tasks were inserted into the founder's account during verification; live save/analyze acceptance remains to be exercised with genuine input. No database migration or deployment was performed.
+
+### Live acceptance finding: explicit goal omitted by analysis (2026-10-19)
+
+The founder saved a complete note about launching CIP, testing traction and paying users, and creating their own job. The saved Evidence page showed the full note, but the resulting analysis emphasized older nonprofit metrics and campaign websites. The transport sent a mixed historical evidence list plus a new-answer count, without identifying the new answers explicitly or distinguishing user intentions in the analysis contract. This is a handoff weakness; exact model reasoning cannot be established from its output.
+
+The analysis context now supplies the actual timestamp-selected new answers and a separate list of saved user goals. The AI contract must explicitly address changed intentions, distinguish building a venture from teaching entrepreneurship or seeking startup employment, and avoid inventing commercial validation. Deterministic mode retains intentions verbatim with a feasibility-test caveat. Historical user goals remain visible on later passes; they are not relabeled as new. This correction does not automatically rerun or overwrite the founder's analysis. Goal supersession, historical loading limits, and more complete input lineage remain broader orchestration work.
+
+## Next-session priority: synthesis of changed goals - 2026-10-19 live acceptance
+
+Status: newly identified analysis gap; the five changes below are planned, not implemented by the earlier goal-handoff repair. The founder confirmed the expected response would have made CIP feel like it understood the situation.
+
+Live sequence: the founder saved the conference/entrepreneurship update and ran analysis. The initial result focused on older achievements. After the handoff correction, a second live result acknowledged the CIP direction but said it needed outcome evidence to adjust positioning and reported no changes. Capture and goal recognition improved, but the synthesis acceptance bar still failed. The earlier note that live save/analyze acceptance was pending is superseded by this observation: genuine input was saved and analyzed; meaningful goal-to-strategy interpretation remains unresolved.
+
+Expected behavior: recognize the user's desire to finish and launch CIP as a viable SaaS/AI product and potentially create their own job; connect that intention to existing career context, potentially including CTO/technical leadership, as a clearly labeled inference for confirmation; distinguish ambition from proven customers, traction, revenue, or viability; propose a bounded next experiment. Do not assume abandoning employment or infer that launching a product means teaching entrepreneurship. The founder subsequently confirmed the CTO connection was plausible even though it was not explicitly named in the captured update.
+
+Core rule: a changed goal can change the plan immediately; evidence determines confidence in the path. Users should not have to establish business success before CIP helps them explore building it.
+
+### Five required analysis improvements
+
+1. Separate goals from evidence. Model what the user wants to pursue independently from proof of ability, feasibility, or market outcomes. A changed intention can revise the strategy without requiring proof of success. Preserve both kinds of information and their provenance; never turn an intention into a verified accomplishment.
+
+2. Compare a new direction with the existing career model. Require analysis to identify supported connections, tensions, and alternatives rather than merely acknowledge the new text. For this case, founder/product exploration may reinforce technical leadership while creating a different route to income. Label that relationship as an inference, explain its basis, and invite correction. Do not hardcode the founder/CTO relationship for other users.
+
+3. Expand what counts as change. The strengthened/weakened/questions-answered contract is insufficient for intention changes. Add direction added or revised and implications for your plan, with compatible schema, persistence, rendering, and deterministic behavior. An unchanged evidence score does not establish an unchanged plan.
+
+4. Require a practical implication. Each meaningful change must explain what CIP understood, how it connects to existing context, what remains uncertain, and one useful next action. An illustrative experiment here is testing CIP with prospective users while documenting technical decisions relevant to technical-leadership positioning; this is an example, not a prescribed answer or evidence of demand. Avoid generic credential requirements unless the selected path or sourced requirements justify them. The live result's executive-certification gap needs this scrutiny.
+
+5. Preserve unresolved changes across runs. Newly saved input and adequately addressed input are different states. A goal overlooked in the prior analysis must remain pending review until it is explicitly addressed; timestamps alone cannot prove understanding. Define input-to-analysis lineage and reconciliation behavior, distinguish correction of a prior omission from newly arrived information, and avoid marking a goal resolved merely because its wording appeared in output. Allow user correction of the interpretation.
+
+### Verification and resume point
+
+Build general reasoning-contract regression coverage using multiple structurally different goal changes. Verify connections to prior context, inference labels, uncertainty, actionable experiments, correction handling, and repeat-run behavior. Do not enforce a canned founder/CTO phrase or make a live AI call from the suite. Deterministic fallback must preserve intention and honestly state the limits of its synthesis. Automated tests of structure do not establish that live AI reasoning meets the acceptance bar; repeat a genuine founder pass after implementation.
+
+Latest engineering checkpoint before this documentation: TypeScript and all 427 tests passed; SSR build passed after the goal-handoff correction. Those checks establish the implemented foundation and transport/fallback behavior, not completion of these five new requirements. No database migration or deployment was performed. Workbench first slice and goal handoff are implemented locally; navigation consolidation, People redesign, imported-job evaluation, full update orchestration, and the five synthesis improvements remain open.
+
+Next session: implement this synthesis contract and unresolved-goal handling before expanding the Workbench redesign. Also retain the observed save-to-analysis UX issue: after capture, show Saved - ready to analyze with a nearby strategy-update action, so users do not have to ask where analysis happens. Reuse the genuine saved goal; do not ask the founder to re-enter it or create duplicate evidence.

@@ -1,3 +1,4 @@
+import { collectAnalysisUpdates } from "@/lib/cip/analysis-updates";
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, buildDeterministicAnalysis, type AdvisorAnalysis, type AdvisorAnalysisContext, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
 import { conversationNotesToEvidence } from "@/lib/cip/conversation-notes";
@@ -127,6 +128,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       ? evidenceResponses.filter((item) => item.savedAt && item.savedAt > priorAnalysisAt).length
       : evidenceResponses.length;
 
+    const explicitUpdates = collectAnalysisUpdates(evidenceResponses, priorAnalysisAt);
+
     const sourceEvidence = sourceAnalysesToEvidence(
       (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
     );
@@ -163,6 +166,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       priorAnalysisAt,
       newConversationSignals: newSignals,
       newEvidenceCount,
+      ...explicitUpdates,
     };
     let advisor: AdvisorAnalysis;
     try {
@@ -303,7 +307,7 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number, suffici
         </div>
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(advisor.summary)}</p>
-      ${renderChangeLog(advisor.changeLog)}
+      ${renderChangeLog(advisor.changeLog)}<p class="mt-4"><a class="cip-fancy-button" href="/workbench?view=changes">Review changes and work on next moves in Workbench</a></p>
       <div class="mt-5 grid gap-4 ${isComplete ? "lg:grid-cols-2" : "lg:grid-cols-3"}">
         ${renderList("Stronger positioning", advisor.positioning)}
         ${renderList("Remaining proof gaps", advisor.skillGaps)}

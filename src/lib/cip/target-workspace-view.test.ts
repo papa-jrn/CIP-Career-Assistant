@@ -23,6 +23,12 @@ function dossier(over: Partial<TargetDossier> = {}): TargetDossier {
 }
 
 describe("renderTargetCard", () => {
+  it("hands employer context to Workbench without emitting raw query markup", () => {
+    const html = renderTargetCard(dossier({ name: 'Example & "Trust"' }), options());
+    expect(html).toContain("Work on this in Workbench");
+    expect(html).toContain("context=Example%20%26%20%22Trust%22");
+    expect(html).toContain("title=Keep%20watching");
+  });
   it("shows the name, lane fit, fit score, and the status labeled as the app's suggestion", () => {
     const html = renderTargetCard(dossier(), options());
     expect(html).toContain("Granite Community Trust");
