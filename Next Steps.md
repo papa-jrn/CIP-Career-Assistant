@@ -1,5 +1,10 @@
 # CIP-Career Next Steps
 
+## Current priority - 2026-10-19
+
+Follow [Workbench Redesign Plan.md](Workbench%20Redesign%20Plan.md) for the next UX slice: first-time and returning-user flows, contextual Process-page handoffs, persistent work outcomes, explicit strategy updates, recommendation repairs, and user-supplied job evaluation with honest verification. Broad feature expansion pauses while this loop is made usable. Existing security, cost, and beta gates remain. The review dates and rounds below are historical.
+
+
 Last reviewed: 2026-09-10
 
 This document carries three independent review passes:

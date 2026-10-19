@@ -1,5 +1,10 @@
 # Employers & Opportunities Rethink (Plan)
 
+## Current UX and imported-job plan - 2026-10-19
+
+See [Workbench Redesign Plan.md](Workbench%20Redesign%20Plan.md) for the approved cross-page capture/work/return redesign and the user-supplied job flow. Imported listings must reuse identity, verification, and dispositions where practical; listing authenticity/current status and personal fit are separate conclusions. Workbench actions must capture employer research and funding outcomes. The older implementation status below is historical; this addition does not claim new code is built.
+
+
 Status: **Updated 2026-10-07 — the Opportunities-page redesign AND the lane-scoring ↔ evidence-analysis propagation fix are complete: steps 0-4, weekly diff, recommendation chips + user status / action tracking, employer resolution, lane-scoring propagation (A: re-analysis deltas, B: verified-posting validation + cap exemption), plus step 9, all built and unit-tested (238 tests). Employers-page redesign underway — first slice (lane-aware employer discovery: lane-derived targeting, lane tagging, dedupe) BUILT 2026-10-07 (247 tests); second slice (ProPublica 990 nonprofit discovery, deterministic + standalone) BUILT 2026-10-07 (+26 tests); deferred: broader coverage, target-workspace UX, 990 enrichment of saved targets. See §16.**
 Companion to `Next Steps.md` (Rounds 1–3) and `Project Plan Autumn 2026.md`. This document owns
 the redesign of **Part 6 (Employers)** and **Part 7 (Opportunities)** now that the premise they
