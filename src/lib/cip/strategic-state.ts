@@ -1,3 +1,4 @@
+import { advisorWithLaneHistory, loadAdvisorLaneHistory } from "./lane-continuity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdvisorAnalysis } from "@/lib/cip/advisor";
 import { parseConversationOutcome, type ConversationOutcome } from "@/lib/cip/conversation-outcomes";
@@ -115,7 +116,7 @@ export async function loadStrategicInputs(
 ): Promise<StrategicStateInputs> {
   const [
     { data: intakeRow },
-    { data: analysisRow },
+    analysisHistory,
     { data: structuredConversationRows },
     { data: conversationRows },
     { data: employerRows },
@@ -130,14 +131,7 @@ export async function loadStrategicInputs(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("career_sources")
-      .select("extracted_text")
-      .eq("user_id", userId)
-      .eq("source_type", "evidence_analysis")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    loadAdvisorLaneHistory(supabase, userId),
     supabase
       .from("conversation_outcomes")
       .select("*")
@@ -174,7 +168,7 @@ export async function loadStrategicInputs(
   ]);
 
   const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
-  const latestAdvisor = parseAnalysisAdvisor(analysisRow?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
+  const latestAdvisor = advisorWithLaneHistory(analysisHistory, latestSource?.advisor ?? null);
   const conversationOutcomes = dedupeConversationOutcomes([
     ...(structuredConversationRows ?? [])
       .map((row) => parseStructuredConversationRow(row))

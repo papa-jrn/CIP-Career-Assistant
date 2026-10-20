@@ -1,3 +1,4 @@
+import { goalContext, goalReviewJsonSchema, reconcileGoalAnalysis, type GoalReview } from "./goal-synthesis";
 import type { IntakeForm } from "@/lib/cip/intake";
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyPhase, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 
@@ -12,6 +13,9 @@ export interface AdvisorAnalysis {
   claimSafetyNotes: string[];
   roleBriefs: RoleBrief[];
   changeLog: AdvisorChangeLog;
+  /** Source-linked interpretation; review_ready is not user confirmation. */
+  goalReviews?: GoalReview[];
+  goalReviewIssues?: Array<{ inputId: string; reason: string }>;
 }
 
 /**
@@ -26,6 +30,8 @@ export interface AdvisorChangeLog {
   weakened: string[];
   /** Prior follow-up questions the new inputs answer; those questions retire. */
   newlyAnswered: string[];
+  directionChanges?: string[];
+  planImplications?: string[];
 }
 
 export interface EvidenceLedgerItem {
@@ -59,6 +65,7 @@ export interface AdvisorEvidenceResponse {
   question: string;
   answer: string;
   confidence: string;
+  supersedesGoalId?: string;
   proofUrl?: string;
   sourceNote?: string;
 }
@@ -74,10 +81,12 @@ export interface AdvisorAnalysisContext {
   newConversationSignals?: AdvisorEvidenceResponse[];
   /** Evidence answers saved since the prior analysis. */
   newEvidenceCount?: number;
+  newSourceEvidenceCount?: number;
   /** Exact new answers; a count alone cannot identify the changed input. */
   newEvidenceResponses?: AdvisorEvidenceResponse[];
   /** Explicit user intentions remain relevant even after their first analysis. */
   currentGoalUpdates?: AdvisorEvidenceResponse[];
+  existingLanes?: string[];
 }
 
 export async function buildAdvisorAnalysis(
@@ -107,9 +116,12 @@ async function tryBuildAiAnalysis(
   context: AdvisorAnalysisContext,
   openAiKey: string,
 ) {
+  context = { ...context, existingLanes: context.existingLanes ?? draft.possibleRoles };
   const sufficiency = context.sufficiency ?? calculateEvidenceSufficiency(intake, evidenceResponses, context);
   const newSignals = context.newConversationSignals ?? [];
+  const goals = goalContext(context, evidenceResponses, intake);
   const task = selectAnalysisTask({
+    pendingGoalCount: goals.pending.length,
     phase: sufficiency.phase,
     newConversationSignalCount: newSignals.length,
     newEvidenceCount: context.newEvidenceCount ?? 0,
@@ -159,7 +171,7 @@ async function tryBuildAiAnalysis(
               claimSafetyNotes: ["Claims that should not be used publicly until verified."],
               roleBriefs: [
                 {
-                  role: "Role hypothesis from the provided list.",
+                  role: "Maintain a portfolio of up to three working directions: primary, secondary, tertiary. A new priority reorders existing supported lanes; do not omit them or treat priority as validation. Retain their grounded rationale and gaps. Explain any evidence-based weakening in changeLog.",
                   whyItFits: "Evidence-aware rationale.",
                   evidenceNeeded: "What proof is needed before recommending this path strongly.",
                 },
@@ -174,7 +186,16 @@ async function tryBuildAiAnalysis(
             new_evidence_count: context.newEvidenceCount ?? 0,
             new_evidence_responses: context.newEvidenceResponses ?? [],
             current_user_goals: context.currentGoalUpdates ?? [],
+            goal_synthesis: goals.prompt,
             goal_contract: [
+              "Goals describe desired directions, not proof of capability or success. A changed goal can change a plan immediately; evidence controls confidence in feasibility.",
+              "Produce goalReviews for every id in goal_synthesis.reviewBatch. Other new evidence/conversations may imply a goal: label it inferred and ask the user to confirm, never silently promote it to a stated preference.",
+              "Each review must explain understanding, how it connects to the existing model (connections or a concrete contextAssessment explaining why no lane fits), plan implications, uncertainties, and one bounded experiment.",
+              "Connections must name an existingLanes entry exactly and cite an exact sourceQuote from its sourceRef. Prefer copying the provided laneGrounding values exactly; do not paraphrase a quote or invent a sourceRef. All connections are inferences for user correction, not established suitability.",
+              "Pending goals may be old but overlooked. Correct that omission explicitly without falsely describing them as newly saved. Do not say unchanged merely because timestamps are old or scores are unchanged.",
+              "Do not recommend reducing or sidelining existing employment or income commitments unless the user explicitly chooses that tradeoff. When priority or capacity is unknown, ask and propose a bounded test alongside existing commitments. A new ambition does not establish permission to risk current income.",
+              "Use directionChanges and planImplications in changeLog. Goals need not strengthen or weaken evidence scores. Retain employment alternatives unless the user explicitly abandons them.",
+              "Recommend credentials or certifications only when a specific chosen path or sourced requirement establishes their relevance; otherwise leave skillGaps empty rather than manufacturing generic gaps.",
               "Treat current_user_goals as user-stated intentions, not claims requiring proof of market success. Read their full text.",
               "Every pass must reflect current_user_goals in its summary/positioning and exploration areas. If the prior analysis overlooked a saved goal, explicitly correct that omission; do not pretend the goal was newly saved or claim nothing needs correction solely because new_evidence_count is zero.",
               "Explicit recent intentions can revise older intake preferences; do not force all directions back into employment or an existing role list.",
@@ -186,7 +207,7 @@ async function tryBuildAiAnalysis(
             change_contract: [
               "changeLog is a mandatory output on every pass.",
               "When new_conversation_signals exist or new_evidence_count > 0, process ONLY what is new: name in changeLog what it strengthens, weakens, or answers, and retire follow-up questions the new inputs already answer.",
-              "When no new inputs exist, set changeLog.hasChanges to false and say so plainly; do not re-derive strategy from unchanged inputs.",
+              "When no new inputs and no pending goal interpretations exist, set changeLog.hasChanges to false. Pending-goal correction is a real plan revision even without newly saved evidence.",
               "The stale_question_guardrails below never override change detection.",
             ],
             analysisContext: context,
@@ -214,6 +235,7 @@ async function tryBuildAiAnalysis(
             additionalProperties: false,
             required: [
               "summary",
+              "goalReviews",
               "changeLog",
               "positioning",
               "followUpQuestions",
@@ -225,11 +247,14 @@ async function tryBuildAiAnalysis(
             ],
             properties: {
               summary: { type: "string" },
+              goalReviews: { ...goalReviewJsonSchema, minItems: Math.min(goals.pending.length, 3) },
               changeLog: {
                 type: "object",
                 additionalProperties: false,
-                required: ["hasChanges", "summary", "strengthened", "weakened", "newlyAnswered"],
+                required: ["hasChanges", "summary", "strengthened", "weakened", "newlyAnswered", "directionChanges", "planImplications"],
                 properties: {
+                  directionChanges: { type: "array", items: { type: "string" }, maxItems: 10 },
+                  planImplications: { type: "array", items: { type: "string" }, maxItems: 10 },
                   hasChanges: { type: "boolean" },
                   summary: { type: "string" },
                   strengthened: { type: "array", items: { type: "string" }, maxItems: 8 },
@@ -238,11 +263,11 @@ async function tryBuildAiAnalysis(
                 },
               },
               positioning: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
-              followUpQuestions: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 6 },
-              skillGaps: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
+              followUpQuestions: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 6 },
+              skillGaps: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 5 },
               evidenceLedger: {
                 type: "array",
-                minItems: 5,
+                minItems: 0,
                 maxItems: 10,
                 items: {
                   type: "object",
@@ -268,7 +293,7 @@ async function tryBuildAiAnalysis(
               },
               explorationAreas: {
                 type: "array",
-                minItems: 3,
+                minItems: 0,
                 maxItems: 5,
                 items: {
                   type: "object",
@@ -315,6 +340,8 @@ async function tryBuildAiAnalysis(
     const parsed = JSON.parse(text) as Omit<RoleBrief, "searchTargets"> & {
       summary: string;
       changeLog?: AdvisorChangeLog;
+      goalReviews?: GoalReview[];
+  goalReviewIssues?: Array<{ inputId: string; reason: string }>;
       positioning: string[];
       followUpQuestions: string[];
       skillGaps: string[];
@@ -323,7 +350,7 @@ async function tryBuildAiAnalysis(
       claimSafetyNotes?: string[];
       roleBriefs: Array<Omit<RoleBrief, "searchTargets">>;
     };
-    return {
+    return reconcileGoalAnalysis({
       mode: "ai" as const,
       summary: parsed.summary,
       changeLog: normalizeChangeLog(parsed.changeLog, context, evidenceResponses),
@@ -337,7 +364,7 @@ async function tryBuildAiAnalysis(
         ...brief,
         searchTargets: buildSearchTargets(brief.role, intake),
       })),
-    };
+    }, context, evidenceResponses, intake, parsed.goalReviews);
   } catch {
     return null;
   }
@@ -374,6 +401,7 @@ export function buildDeterministicAnalysis(
 ): AdvisorAnalysis {
   const strongest = draft.strengths.slice(0, 4);
   const evidenceText = evidenceResponses.map((response) => `${response.question}\n${response.answer}\n${response.sourceNote}`).join("\n").toLowerCase();
+  context = { ...context, existingLanes: context.existingLanes ?? draft.possibleRoles };
   const sufficiency = context.sufficiency ?? calculateEvidenceSufficiency(intake, evidenceResponses, context);
   const shouldPivot = shouldMoveToOpportunityMapping(sufficiency);
   const roleBriefs = draft.possibleRoles.slice(0, 5).map((role) => ({
@@ -403,7 +431,7 @@ export function buildDeterministicAnalysis(
     nextValidationStep: "Confirm which lane or employer this affects and record the promised follow-up.",
   }));
 
-  return {
+  return reconcileGoalAnalysis({
     mode: "deterministic",
     summary: changeLog.hasChanges
       ? `Change-detection pass: ${changeLog.summary}`
@@ -441,7 +469,7 @@ export function buildDeterministicAnalysis(
     ],
     roleBriefs,
     changeLog,
-  };
+  }, context, evidenceResponses, intake);
 }
 
 /**
@@ -452,10 +480,12 @@ export function buildDeterministicAnalysis(
  */
 export function selectAnalysisTask(args: {
   phase: EvidenceSufficiencyPhase;
+  pendingGoalCount?: number;
   newConversationSignalCount: number;
   newEvidenceCount: number;
   evidenceResponseCount: number;
 }): string {
+  if (args.pendingGoalCount) return "Goal-to-strategy reconciliation: saved intentions have not been adequately addressed. Interpret them against existing context, distinguish inference from stated intent, revise the plan, and propose a bounded experiment. This corrects an omission; it does not imply newly saved evidence or proven feasibility.";
   const hasNewSignals = args.newConversationSignalCount > 0 || args.newEvidenceCount > 0;
   if (hasNewSignals) {
     return [
@@ -506,6 +536,8 @@ function normalizeChangeLog(
       strengthened: toStringArray(changeLog.strengthened),
       weakened: toStringArray(changeLog.weakened),
       newlyAnswered: toStringArray(changeLog.newlyAnswered),
+      directionChanges: toStringArray(changeLog.directionChanges),
+      planImplications: toStringArray(changeLog.planImplications),
     };
   }
   return buildDeterministicChangeLog(context, evidenceResponses);

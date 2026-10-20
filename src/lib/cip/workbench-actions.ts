@@ -5,12 +5,14 @@ export const workStatus = z.enum(["active", "deferred", "completed", "dismissed"
 export const workInput = z.object({
   operation: z.enum(["create", "outcome", "capture"]),
   actionId: z.string().uuid().optional(),
+  supersedesGoalId: z.string().regex(/^goal-[a-f0-9]{32}$/).optional(),
   title: z.string().trim().max(180).default(""),
   context: z.string().trim().max(300).default(""),
   note: z.string().trim().max(12000).default(""),
   kind: z.enum(["research", "funding", "experiment", "goal", "evidence"]).default("research"),
   status: workStatus.default("active"),
 }).superRefine((v, ctx) => {
+  if (v.supersedesGoalId && (v.operation !== "capture" || v.kind !== "goal")) ctx.addIssue({ code: "custom", message: "A goal correction must be saved as a goal update." });
   if (v.operation === "create" && v.title.length < 4) ctx.addIssue({ code: "custom", message: "Give the action a specific title." });
   if (v.operation === "outcome" && !v.actionId) ctx.addIssue({ code: "custom", message: "Choose an existing action." });
   if (v.operation === "capture" && v.note.length < 12) ctx.addIssue({ code: "custom", message: "Add a little more detail before saving." });

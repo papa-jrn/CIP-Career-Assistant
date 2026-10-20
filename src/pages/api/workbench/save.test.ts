@@ -1,3 +1,4 @@
+import { inputId, loadSavedGoalEvidence } from "@/lib/cip/goal-synthesis";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { actionRecord, loadWorkActions, type WorkEvent } from "@/lib/cip/workbench-actions";
@@ -82,6 +83,35 @@ describe("Workbench save boundary", () => {
     const actions = await loadWorkActions(db as unknown as SupabaseClient, "user-a");
     expect(actions[0].status).toBe("dismissed");
     expect(actions[0].history).toHaveLength(501);
+  });
+  it("keeps goals beyond the ordinary recent-answer window and scopes their history to the user", async () => {
+    const response = { question: "goal: Career direction", answer: "Explore a different career direction.", confidence: "known" };
+    state.rows = [
+      ...Array.from({ length: 501 }, (_, i) => ({ id: String(i), user_id: "user-a", source_type: "evidence_response", extracted_text: JSON.stringify({ response: { question: "Old evidence", answer: "A historical finding.", confidence: "known" } }) })),
+      { id: "goal", user_id: "user-a", source_type: "evidence_response", extracted_text: JSON.stringify({ response }) },
+      { id: "foreign", user_id: "user-b", source_type: "evidence_response", extracted_text: JSON.stringify({ response: { ...response, answer: "Private goal belonging to another user." } }) },
+    ];
+    const goals = await loadSavedGoalEvidence(db as unknown as SupabaseClient, "user-a");
+    expect(goals).toHaveLength(1);
+    expect(goals[0].answer).toBe(response.answer);
+  });
+  it("saves corrections additively and replaces the old goal only in the active view", async () => {
+    const response = { question: "goal: Career direction", answer: "Explore full-time independent work.", confidence: "known" };
+    const oldId = inputId(response);
+    state.rows = [{ id: "old", user_id: "user-a", source_type: "evidence_response", extracted_text: JSON.stringify({ response }) }];
+    expect((await request({ operation: "capture", kind: "goal", supersedesGoalId: oldId, note: "Keep this as a side project while staying employed." })).status).toBe(200);
+    expect(state.rows).toHaveLength(1);
+    state.rows.unshift({ ...state.saved[0], id: "new" });
+    const active = await loadSavedGoalEvidence(db as unknown as SupabaseClient, "user-a");
+    expect(active).toHaveLength(1);
+    expect(active[0].answer).toContain("side project");
+    expect(active[0].supersedesGoalId).toBe(oldId);
+  });
+  it("rejects a correction targeting another user's goal", async () => {
+    const response = { question: "goal: Career direction", answer: "A private goal from another account.", confidence: "known" };
+    state.rows = [{ id: "foreign", user_id: "user-b", source_type: "evidence_response", extracted_text: JSON.stringify({ response }) }];
+    expect((await request({ operation: "capture", kind: "goal", supersedesGoalId: inputId(response), note: "Replace the previous goal with a different plan." })).status).toBe(404);
+    expect(state.saved).toEqual([]);
   });
   it("fails visibly rather than returning empty work on a database error", async () => {
     state.fail = true;

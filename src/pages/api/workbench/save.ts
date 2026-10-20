@@ -1,3 +1,4 @@
+import { inputId, loadSavedGoalEvidence } from "@/lib/cip/goal-synthesis";
 import type { APIRoute } from "astro";
 import { randomUUID } from "node:crypto";
 import { isSameOriginRequest } from "@/lib/security";
@@ -20,6 +21,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const parsed = workInput.safeParse(Object.fromEntries(new URLSearchParams(body)));
     if (!parsed.success) return html(parsed.error.issues[0]?.message ?? "Check your update.", 400);
     const input = parsed.data;
+    if (input.supersedesGoalId) {
+      const ownedInputs = await loadSavedGoalEvidence(db, user.id, true);
+      if (!ownedInputs.some(item => inputId(item) === input.supersedesGoalId)) return html("The goal or source to correct was not found in your workspace.", 404);
+    }
     if (input.operation === "create") {
       const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
       const existing = (await loadWorkActions(db, user.id)).find(a => key(a.title) === key(input.title) && key(a.context) === key(input.context));
@@ -37,8 +42,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const record = actionRecord(event);
     if (input.operation === "capture") {
       const payload = JSON.parse(record.extracted_text);
+      if (input.supersedesGoalId && inputId(payload.response) === input.supersedesGoalId) return html("Describe what changed in the goal before replacing it.", 400);
       delete payload.workbenchAction;
-      payload.workbenchCapture = { kind: input.kind, context: input.context };
+      payload.workbenchCapture = { kind: input.kind, context: input.context, ...(input.supersedesGoalId ? { supersedesGoalId: input.supersedesGoalId } : {}) };
       record.extracted_text = JSON.stringify(payload);
     }
     const { error } = await db.from("career_sources").insert({ user_id: user.id, ...record });

@@ -1,3 +1,6 @@
+import { advisorWithLaneHistory, loadAdvisorLaneHistory } from "@/lib/cip/lane-continuity";
+import { loadSavedGoalEvidence, isStatedGoal, inputId } from "@/lib/cip/goal-synthesis";
+import { renderGoalReviews } from "@/lib/cip/goal-synthesis-view";
 import { collectAnalysisUpdates } from "@/lib/cip/analysis-updates";
 import type { APIRoute } from "astro";
 import { buildAdvisorAnalysis, buildDeterministicAnalysis, type AdvisorAnalysis, type AdvisorAnalysisContext, type AdvisorEvidenceResponse } from "@/lib/cip/advisor";
@@ -63,8 +66,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const [
       { data: evidenceRows, error: evidenceError },
       { data: sourceRows, error: sourceError },
-      { data: conversationRows },
-      { data: priorAnalysisRow },
+      { data: conversationRows, error: conversationError },
+      { data: priorAnalysisRow, error: priorAnalysisError },
       { count: analysisCount },
     ] = await Promise.all([
       supabase
@@ -111,12 +114,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return html(`<p class="text-sm font-semibold text-red-700">Could not load source analysis: ${escapeHtml(sourceError.message)}</p>`, 500);
     }
 
+    if (conversationError || priorAnalysisError) return html("Could not load prior strategy or conversation context. Your saved inputs remain intact; please retry.", 500);
+
     // Everything since the last analysis counts as "new strategic input".
     // Conversation notes are first-class signals now, but they must NOT inflate
     // the evidence-sufficiency count (the old engine counted them toward the
     // saturation threshold, so feeding it more made it less responsive).
     const priorAnalysisAt = priorAnalysisRow?.created_at ?? null;
-    const priorAnalysis = parsePriorAdvisor(priorAnalysisRow?.extracted_text ?? null);
+    const priorAnalysis = advisorWithLaneHistory(await loadAdvisorLaneHistory(supabase, user.id), parsePriorAdvisor(priorAnalysisRow?.extracted_text ?? null));
 
     const evidenceResponses = (evidenceRows ?? [])
       .map((row) => {
@@ -129,6 +134,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       : evidenceResponses.length;
 
     const explicitUpdates = collectAnalysisUpdates(evidenceResponses, priorAnalysisAt);
+    const savedGoals = await loadSavedGoalEvidence(supabase, user.id);
 
     const sourceEvidence = sourceAnalysesToEvidence(
       (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
@@ -146,9 +152,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const conversationEvidence = conversationNotesToEvidence(conversationNotes);
     const newSignals = conversationNotesToEvidence(newConversationNotes);
 
-    const analysisInputs = [...sourceEvidence, ...evidenceResponses];
+    const analysisInputs = [...sourceEvidence, ...evidenceResponses.filter(item => !isStatedGoal(item))];
 
-    if (!analysisInputs.length && !newSignals.length) {
+    if (!analysisInputs.length && !newSignals.length && !savedGoals.length) {
       return html('<p class="text-sm font-semibold text-red-700">Save evidence, analyze linked sources, or add conversation notes before running re-analysis.</p>', 400);
     }
 
@@ -161,12 +167,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const advisorContext: AdvisorAnalysisContext = {
       evidenceRound,
       sourceEvidenceCount: sourceEvidence.length,
+      newSourceEvidenceCount: (sourceRows ?? []).filter(row => !priorAnalysisAt || row.created_at > priorAnalysisAt).length,
       sufficiency,
       priorAnalysis,
       priorAnalysisAt,
       newConversationSignals: newSignals,
       newEvidenceCount,
       ...explicitUpdates,
+      currentGoalUpdates: savedGoals,
     };
     let advisor: AdvisorAnalysis;
     try {
@@ -196,6 +204,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         conversation_note_count: conversationEvidence.length,
         new_conversation_signal_count: newSignals.length,
         new_evidence_count: newEvidenceCount,
+        goal_review_version: 1,
+        goal_input_ids: savedGoals.map(inputId),
+        pending_goal_ids: (advisor.goalReviews ?? []).filter(review => review.status === "pending").map(review => review.inputId),
         evidence_sufficiency: sufficiency,
         advisor,
         created_at: savedAt,
@@ -214,6 +225,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     const propagation = await propagateStrategicStateAfterChange(supabase, user.id);
+
+    if (request.headers.get("X-CIP-Workbench") === "true") return new Response(null, { status: 200, headers: { "HX-Redirect": `/workbench?view=changes${propagation.ok ? "" : "&snapshot=pending"}` } });
 
     // evidenceRound is the prior run count + 1, i.e. the count including this saved run.
     return html(`${renderAnalysis(advisor, analysisInputs.length, sufficiency)}${renderPropagationNotice(propagation)}${renderEvidenceQuestionCardsUpdate(intake, draft, advisor, sufficiency)}${renderPageStatusUpdate(savedAt, evidenceRound)}`);
@@ -307,7 +320,7 @@ function renderAnalysis(advisor: AdvisorAnalysis, evidenceCount: number, suffici
         </div>
       </div>
       <p class="mt-4 text-sm leading-6 text-[var(--muted)]">${escapeHtml(advisor.summary)}</p>
-      ${renderChangeLog(advisor.changeLog)}<p class="mt-4"><a class="cip-fancy-button" href="/workbench?view=changes">Review changes and work on next moves in Workbench</a></p>
+      ${renderChangeLog(advisor.changeLog, advisor.goalReviews?.some(review => review.status === "pending"))}${renderGoalReviews(advisor.goalReviews)}<p class="mt-4"><a class="cip-fancy-button" href="/workbench?view=changes">Review changes and work on next moves in Workbench</a></p>
       <div class="mt-5 grid gap-4 ${isComplete ? "lg:grid-cols-2" : "lg:grid-cols-3"}">
         ${renderList("Stronger positioning", advisor.positioning)}
         ${renderList("Remaining proof gaps", advisor.skillGaps)}
@@ -361,13 +374,13 @@ function renderPageStatusUpdate(savedAt: string, runCount: number) {
   `;
 }
 
-function renderChangeLog(changeLog: AdvisorAnalysis["changeLog"] | undefined) {
+function renderChangeLog(changeLog: AdvisorAnalysis["changeLog"] | undefined, pendingGoals = false) {
   if (!changeLog) return "";
 
   if (!changeLog.hasChanges) {
     return `
       <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
-        <p class="text-sm font-semibold text-[var(--muted)]">No changes since your last analysis</p>
+        <p class="text-sm font-semibold text-[var(--muted)]">${pendingGoals ? "Goal review still pending" : "No changes since your last analysis"}</p>
         <p class="mt-1 text-sm leading-6 text-[var(--muted)]">${escapeHtml(changeLog.summary)}</p>
       </div>
     `;
@@ -387,6 +400,8 @@ function renderChangeLog(changeLog: AdvisorAnalysis["changeLog"] | undefined) {
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">What changed since your last analysis</p>
       <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(changeLog.summary)}</p>
       <div class="mt-3 grid gap-3 lg:grid-cols-3">
+        ${(changeLog.directionChanges ?? []).length ? changeList("Direction added or revised", changeLog.directionChanges!, "text-[var(--accent-strong)]") : ""}
+        ${(changeLog.planImplications ?? []).length ? changeList("Implications for your plan", changeLog.planImplications!, "text-[var(--accent-strong)]") : ""}
         ${changeLog.strengthened.length ? changeList("Strengthened", changeLog.strengthened, "text-[var(--accent-strong)]") : ""}
         ${changeLog.weakened.length ? changeList("Weakened", changeLog.weakened, "text-[var(--warning)]") : ""}
         ${changeLog.newlyAnswered.length ? changeList("Questions this pass retires", changeLog.newlyAnswered, "text-[var(--muted)]") : ""}

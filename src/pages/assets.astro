@@ -125,42 +125,15 @@ function selectAssetLanes(baseLanes: TargetLane[], strategicLanes: StrategicLane
     };
   });
 
-  const ranked = scored.sort((a, b) => effectiveLaneSlotScore(b) - effectiveLaneSlotScore(a));
-  const primary = ranked[0];
-  const strongAlternate = ranked.find((lane) => lane !== primary && lane.score >= 70 && !isExploratoryLane(lane));
-  const targetLanes = [primary, strongAlternate]
-    .filter(Boolean)
-    .map((lane, index) => ({
-      ...lane,
-      label: index === 0 ? "Primary lane" : "Strong alternate",
-      rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
-    }));
-
-  const selected = new Set(targetLanes.map((lane) => normalizeLane(lane.role)));
-  const researchLanes = ranked
-    .filter((lane) => !selected.has(normalizeLane(lane.role)))
-    .slice(0, 3)
-    .map((lane) => ({
-      ...lane,
-      label: "Research lane",
-      rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
-    }));
-
+  // Priority and evidence confidence are separate: preserve three working directions.
+  const ranked = scored;
+  const targetLanes = ranked.slice(0, 3).map((lane, index) => ({
+    ...lane,
+    label: ["Primary lane", "Secondary lane", "Tertiary lane"][index],
+    rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
+  }));
+  const researchLanes = ranked.slice(3).map(lane => ({ ...lane, label: "Additional direction" }));
   return { targetLanes, researchLanes };
-}
-
-function effectiveLaneSlotScore(lane: TargetLane & { score: number; explanation: string }) {
-  return isExploratoryLane(lane) && lane.score < 70 ? lane.score - 25 : lane.score;
-}
-
-function isExploratoryLane(lane: TargetLane & { score?: number; explanation?: string }) {
-  const text = normalizeLane([lane.role, lane.rationale, lane.missing, lane.explanation].join(" "));
-  return (
-    text.includes("entrepreneur") ||
-    text.includes("workforce development") ||
-    text.includes("needs a real posting") ||
-    text.includes("current support is only a light new target signal")
-  );
 }
 
 function normalizeLane(value: string) {
@@ -192,7 +165,7 @@ function normalizeLane(value: string) {
             <h2 class="mt-1 text-2xl font-semibold">Positioning brief</h2>
           </div>
           <span class="rounded-md bg-[rgba(32,120,87,0.12)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-            {targetLanes.length} validated lane{targetLanes.length === 1 ? "" : "s"}
+            {targetLanes.length} working lane{targetLanes.length === 1 ? "" : "s"}
           </span>
         </div>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
@@ -212,11 +185,11 @@ function normalizeLane(value: string) {
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Target lanes</p>
         <h2 class="mt-1 text-2xl font-semibold">Choose focus before generating variants.</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Keep the resume and job-search assets focused on lanes with enough current evidence. We can still track research lanes, but they should not crowd out the main strategy unless a real role, employer, conversation, or proof point strengthens them.
+          Primary, secondary, and tertiary describe your current focus. Each lane keeps its own supporting evidence and remaining gaps. Choosing a new primary direction does not erase the alternatives or establish market validation.
         </p>
         {resumeLaneRecommendation ? (
           <div class="mt-4 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] p-4">
-            <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">Propagated resume lane recommendation</p>
+            <p class="text-xs font-semibold uppercase text-[var(--accent-strong)]">Best-supported next resume variant</p>
             <h3 class="mt-1 font-semibold">{resumeLaneRecommendation.lane}</h3>
             <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
               Score {resumeLaneRecommendation.score} / {resumeLaneRecommendation.direction}. {resumeLaneRecommendation.nextMove}
@@ -235,12 +208,12 @@ function normalizeLane(value: string) {
               <p class="mt-2 text-xs font-semibold text-[var(--warning)]">{lane.missing}</p>
             </article>
           ))}
-          {!targetLanes.some((lane) => lane.label === "Strong alternate") ? (
+          {targetLanes.length < 2 ? (
             <article class="rounded-md border border-dashed border-[var(--line)] bg-[var(--background)] p-4">
-              <p class="text-xs font-semibold uppercase text-[var(--muted)]">Strong alternate</p>
-              <h3 class="mt-1 font-semibold">No validated secondary lane yet.</h3>
+              <p class="text-xs font-semibold uppercase text-[var(--muted)]">Secondary lane</p>
+              <h3 class="mt-1 font-semibold">No secondary lane identified yet.</h3>
               <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-                CIP needs stronger current-work evidence, postings, compensation fit, or high-confidence conversations before treating another lane as worth resume/job-search focus.
+                Add or analyze another direction when you want an alternative. Lane priority does not by itself establish market validation.
               </p>
             </article>
           ) : null}

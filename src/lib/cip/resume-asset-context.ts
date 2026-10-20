@@ -1,3 +1,4 @@
+import { advisorWithLaneHistory, loadAdvisorLaneHistory } from "./lane-continuity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdvisorAnalysis, AdvisorEvidenceResponse } from "@/lib/cip/advisor";
 import type { ResumeAssetContext, ResumeAssetDraft } from "@/lib/cip/resume-assets";
@@ -42,7 +43,7 @@ export async function loadResumeAssetContext(
 ): Promise<LoadedResumeAssetContext> {
   const [
     { data: intakeData },
-    { data: analysisData },
+    analysisHistory,
     { data: evidenceRows },
     { data: sourceRows },
     { data: reviewRows },
@@ -55,14 +56,7 @@ export async function loadResumeAssetContext(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("career_sources")
-      .select("extracted_text")
-      .eq("user_id", userId)
-      .eq("source_type", "evidence_analysis")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    loadAdvisorLaneHistory(supabase, userId),
     supabase
       .from("career_sources")
       .select("extracted_text")
@@ -87,7 +81,7 @@ export async function loadResumeAssetContext(
   ]);
 
   const latestSource = parseIntakeSource(intakeData?.extracted_text ?? null);
-  const latestAdvisor = parseAnalysisAdvisor(analysisData?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
+  const latestAdvisor = advisorWithLaneHistory(analysisHistory, latestSource?.advisor ?? null);
   const savedEvidence = (evidenceRows ?? [])
     .map((row) => parseEvidenceResponse(row.extracted_text))
     .filter(Boolean) as AdvisorEvidenceResponse[];

@@ -1,4 +1,6 @@
 ---
+import { goalContext, loadSavedGoalEvidence, type GoalReview } from "../lib/cip/goal-synthesis";
+import { renderGoalReviews } from "../lib/cip/goal-synthesis-view";
 import Layout from "../layouts/Layout.astro";
 import { createServer } from "../lib/supabase/server";
 import { parseAnalysisAdvisor, parseIntakeSource } from "../lib/cip/resume-asset-context";
@@ -14,6 +16,8 @@ let advisor: Partial<AdvisorAnalysis> | null = null;
 let analysisAt: string | null = null;
 let actions: WorkAction[] = [];
 let pending = 0;
+let pendingGoals = 0;
+let savedGoalIds: string[] = [];
 let error = "";
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -32,6 +36,10 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       advisor = parseAnalysisAdvisor(analysis.data?.extracted_text ?? null);
       analysisAt = analysis.data?.created_at ?? null;
       actions = work;
+      const goals = await loadSavedGoalEvidence(db, user.id);
+      const reviewContext = goalContext({ currentGoalUpdates: goals, priorAnalysis: advisor }, []);
+      pendingGoals = reviewContext.pending.length;
+      savedGoalIds = [...reviewContext.stated.keys(), ...(advisor?.goalReviews ?? []).map(review => review.inputId)];
       let query = db.from("career_sources").select("id", { count: "exact", head: true }).eq("user_id", user.id)
         .in("source_type", ["resume_intake", "evidence_response", "source_analysis", "conversation_outcome"]);
       if (analysisAt) query = query.gt("created_at", analysisAt);
@@ -46,6 +54,8 @@ const savedActions = actions.filter(a => a.status !== "active");
 const changeLog = advisor?.changeLog;
 const incomingContext = (Astro.url.searchParams.get("context") ?? "").slice(0, 300);
 const incomingTitle = (Astro.url.searchParams.get("title") ?? "").slice(0, 180);
+const correctionId = Astro.url.searchParams.get("goalId") ?? "";
+const correctingGoal = savedGoalIds.includes(correctionId) ? correctionId : "";
 const existingHandoff = actions.find(a => a.title.trim().toLowerCase() === incomingTitle.trim().toLowerCase() && a.context.trim().toLowerCase() === incomingContext.trim().toLowerCase());
 ---
 <Layout title="Workbench — CIP" description="Capture what you learn, work your priorities, and update your direction.">
@@ -58,14 +68,15 @@ const existingHandoff = actions.find(a => a.title.trim().toLowerCase() === incom
       <section class="wb-card"><h2>Your work stays with you</h2><p>Sign in to capture updates, keep your actions, and review your direction.</p><a class="wb-button" href="/login">Sign in</a></section>
     ) : (
       <>
+        {Astro.url.searchParams.get("snapshot") === "pending" && <p role="status">Your analysis was saved, but the briefing snapshot could not refresh. Your inputs and goal reviews are safe; retry the snapshot refresh later.</p>}
         <nav class="wb-tabs" aria-label="Workbench views">
           {views.map(v => <a href={`/workbench?view=${v.key}`} aria-current={view === v.key ? "page" : undefined}>{v.label}</a>)}
           <a href="/opportunities">Opportunities ↗</a>
         </nav>
         {!hasIntake && <section class="wb-card"><p class="wb-eyebrow">Start here</p><h2>Build a direction worth exploring</h2><p>First capture your story, then deepen the evidence and review your career lanes. You can return to these whenever your situation changes.</p><div class="wb-links"><a href="/intake">1. Tell your story</a><a href="/evidence">2. Dig deeper</a><a href="/assets">3. Review your lanes</a></div></section>}
         {hasIntake && <section class="wb-update">
-          <div><strong>{pending} saved {pending === 1 ? "input" : "inputs"} since your last analysis</strong><p>Includes evidence, analyzed sources, conversations, and intake updates. Task status changes alone do not require analysis.</p></div>
-          <form method="post" action="/api/evidence/analyze" hx-post="/api/evidence/analyze" hx-target="#strategy-result" hx-swap="innerHTML" hx-indicator="#strategy-progress" hx-disabled-elt="find button">
+          <div>{pendingGoals > 0 && <p><strong>{pendingGoals} saved {pendingGoals === 1 ? "goal still needs" : "goals still need"} strategy synthesis</strong> — this is separate from newly saved inputs.</p>}<strong>{pending} saved {pending === 1 ? "input" : "inputs"} since your last analysis</strong><p>Includes evidence, analyzed sources, conversations, and intake updates. Task status changes alone do not require analysis.</p></div>
+          <form method="post" action="/api/evidence/analyze" hx-post="/api/evidence/analyze" hx-headers=' {"X-CIP-Workbench":"true"} ' hx-target="#strategy-result" hx-swap="innerHTML" hx-indicator="#strategy-progress" hx-disabled-elt="find button">
             <button class="wb-button" type="submit">Update my strategy</button>
           </form>
           <p id="strategy-progress" class="htmx-indicator" role="status">Updating from saved inputs. Your notes remain saved if this fails.</p>
@@ -103,15 +114,17 @@ const existingHandoff = actions.find(a => a.title.trim().toLowerCase() === incom
             <button class="wb-button" type="submit">Add action</button><div id="create-result" aria-live="polite"></div>
           </form></details>
         </section>}
+        {(view === "overview" || view === "changes") && <div set:html={renderGoalReviews(advisor?.goalReviews)} />}
         {view === "changes" && <section class="wb-card"><p class="wb-eyebrow">What changed</p><h2>{changeLog?.hasChanges ? "Your latest strategy changes" : "Your latest analysis"}</h2>
           <p>{changeLog?.summary || "No change explanation is available yet. Add evidence and update your strategy to establish a baseline."}</p>
-          {changeLog && [{ title: "Strengthened", items: changeLog.strengthened }, { title: "Weakened", items: changeLog.weakened }, { title: "Questions answered", items: changeLog.newlyAnswered }].map(group => group.items?.length > 0 && <section><h3>{group.title}</h3><ul>{group.items.map(item => <li>{item}</li>)}</ul></section>)}
+          {changeLog && [{ title: "Direction added or revised", items: changeLog.directionChanges ?? [] }, { title: "Implications for your plan", items: changeLog.planImplications ?? [] }, { title: "Strengthened", items: changeLog.strengthened }, { title: "Weakened", items: changeLog.weakened }, { title: "Questions answered", items: changeLog.newlyAnswered }].map(group => group.items?.length > 0 && <section><h3>{group.title}</h3><ul>{group.items.map(item => <li>{item}</li>)}</ul></section>)}
           <a href="/report">View existing strategy report</a>
         </section>}
         <section id="capture" class="wb-card"><p class="wb-eyebrow">Add an update</p><h2>What happened? What do you want to explore?</h2><p>Save research, a correction, or a change in direction. This adds to your history; it does not overwrite earlier evidence.</p>
           <form method="post" action="/api/workbench/save" hx-post="/api/workbench/save" hx-target="#capture-result" hx-disabled-elt="find button">
             <input type="hidden" name="operation" value="capture" />
-            <label>What kind of update?<select name="kind"><option value="research">Research finding</option><option value="funding">Funding finding</option><option value="goal">Goal or interest change</option><option value="experiment">Experiment result</option><option value="evidence">Evidence or correction</option></select></label>
+            {correctingGoal && <><input type="hidden" name="supersedesGoalId" value={correctingGoal} /><p>Describe the corrected intention. Saving replaces this goal for future analysis while preserving its history.</p></>}
+            <label>What kind of update?<select name="kind"><option value="research" selected={!correctingGoal}>Research finding</option><option value="funding">Funding finding</option><option value="goal" selected={Boolean(correctingGoal)}>Goal or interest change</option><option value="experiment">Experiment result</option><option value="evidence">Evidence or correction</option></select></label>
             <label>Related employer, person, or direction (optional)<input name="context" maxlength="300" value={incomingContext} /></label>
             <label>Your update<textarea name="note" required minlength="12" maxlength="12000" rows="5" placeholder="What did you learn, and what might it change?"></textarea></label>
             <p class="wb-small">Saved as information you provided, not independently verified proof. Goals are labeled as intentions. Conversation capture with structured people and follow-ups is still available in <a href="/network">Network</a>.</p>

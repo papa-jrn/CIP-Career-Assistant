@@ -46,6 +46,7 @@ export function createFakeSupabase(seed: Db = {}) {
     private inserted: Row[] = [];
     private orderBy: { column: string; ascending: boolean } | null = null;
     private max: number | null = null;
+    private offset = 0;
     private wantsCount = false;
     private headOnly = false;
     private mode: "many" | "single" | "maybe" = "many";
@@ -113,6 +114,11 @@ export function createFakeSupabase(seed: Db = {}) {
       this.orderBy = { column, ascending: options?.ascending ?? true };
       return this;
     }
+    range(from: number, to: number) {
+      this.offset = from;
+      this.max = to - from + 1;
+      return this;
+    }
     limit(count: number) {
       this.max = count;
       return this;
@@ -162,7 +168,7 @@ export function createFakeSupabase(seed: Db = {}) {
         });
       }
       const count = found.length;
-      if (this.max !== null) found = found.slice(0, this.max);
+      if (this.max !== null) found = found.slice(this.offset, this.offset + this.max);
       if (this.headOnly) return { data: null, error: null, count };
       if (this.mode === "many") return { data: structuredClone(found), error: null, count: this.wantsCount ? count : undefined };
       if (this.mode === "maybe") return { data: found[0] ? structuredClone(found[0]) : null, error: null };
