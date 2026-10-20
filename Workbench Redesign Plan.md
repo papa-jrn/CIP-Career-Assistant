@@ -124,11 +124,11 @@ Design the Workbench and one complete task flow first, then extend shared tokens
 
 ## 10. Delivery sequence
 
-1. Plan and prototype: preserve founder purpose, map both journeys and the action lifecycle, inventory existing stores/analysis dependencies, and sketch the Workbench plus an opened task. Reproduce recommendation problems.
+1. Review and prototype: preserve founder purpose, inspect the current Workbench flow, map both journeys and the action lifecycle, and inventory existing stores/analysis dependencies. Reproduce recommendation problems. Use Product Design to compare three visual directions with the same content and workflow, then prototype the selected direction through one complete employer-research loop. Include the approved navigation from section 12 in the early prototype. See the October 20 design-process refinement below.
 2. First complete loop: employer research capture, durable outcome, explicit strategy update, supported changes, and action resolution. Include failure/retry and no-new-information paths.
 3. Connect existing pages: Intake, Evidence, Career Lanes, relationships, funding, and opportunity handoffs with shared capture and persistent action context. Preserve the deeper questions.
 4. User-supplied job slice: import, dedupe, source verification, separate personal-fit evaluation, saved recommendation/correction, and Workbench action. This must be delivered before declaring the redesign complete.
-5. Consolidate navigation and apply the shared visual design after the working flow is proven. Earlier prototype work can establish the visual direction.
+5. Complete navigation consolidation and extend the shared visual design after the working flow is proven. Test the approved navigation in the early prototype and migrate actual routes incrementally, preserving existing links. Earlier work establishes the selected visual direction and reusable patterns; this step completes their rollout.
 
 Do not deploy or claim beta readiness merely because this redesign is complete. Existing security, cost, de-founder, and live acceptance gates still apply. Do not expand into mass application, full job-board coverage, new discovery providers, or startup-management software during this work.
 
@@ -309,3 +309,35 @@ No database migration, deployment, commit, or push was performed as part of this
 
 ### October 20: lane continuity correction
 A new entrepreneurial priority must not erase previously supported employment paths. Preserve omitted role briefs and their evidence; order the working portfolio as primary, secondary, tertiary, with additional directions still visible. Priority is distinct from market validation: remove the misleading count of "validated lanes" derived from slot selection. Recover an already-truncated portfolio from the newest saved analysis with a complete three-lane set (fall back to intake), rather than combining all historical suggestions. Future explicit retirement/rejection needs a separate recorded user decision; omission is never such a decision. No new market proof is created by restoring a saved path.
+
+## Design-process refinement - approved 2026-10-20
+
+Product Design is installed locally for the next design phase. It supports review, visual exploration, prototyping, and design QA; it does not change the approved product purpose, navigation composition, integrity requirements, or underlying Astro architecture. These refinements update sections 9-11 and the sequencing of section 12 without reopening those decisions.
+
+### Prototype the complete experience
+
+Review the current Workbench flow before generating concepts. The prototype must cover opening an employer-research action, reviewing its context and sources, recording findings, saving a durable outcome, deliberately updating strategy, reviewing supported changes, and choosing the next move. Preserve the distinction between completing an investigation and incorporating its findings into strategy. A polished Overview alone does not demonstrate that the career loop works.
+
+### Compare three visual directions
+
+Explore three distinct visual concepts using the same representative content, workflow, and navigation so hierarchy, density, typography, color, and usability can be compared fairly. Ground them in captured current screens and the established product brief. The founder's preference remains a sharper AI/technology feel with accessible contrast and clear semantic states. Select a visual direction before building its detailed interactive prototype; do not treat generated imagery or a static mockup as working functionality.
+
+### Design first use and repeated use together
+
+Show both states within one Workbench: a new user receives guidance toward an initial direction and first action; a returning user sees active work, information awaiting analysis, and a clear continuation path. Preserve direct access to Intake, deeper Evidence questions, and Career Lanes. Returning users must not repeat onboarding, and first-time guidance must not obscure ordinary work after setup.
+
+### Make state clarity a design requirement
+
+Include saved/awaiting-analysis, analysis in progress, failed/retry, no meaningful change, and completed-work states in the prototype and acceptance review. Show what is saved, what remains pending, what was incorporated, and what the user can do next. Failed analysis preserves the captured input. Test these states within the same journey rather than presenting only a successful result screen.
+
+### Test navigation early, migrate incrementally
+
+Include Workbench, Your direction, People, and Employers in the early prototype, with Opportunities inside Workbench and utility navigation as specified in section 12. Validate where users expect to find work before polishing individual pages. Prototype navigation does not imply that unfinished People or imported-job functionality has shipped; use honest boundaries. Migrate production routes and links incrementally after the chosen flow is proven, preserving compatibility and saved context.
+
+### Immediate slice and remaining scope
+
+The immediate design/implementation slice is Workbench, one complete employer-research loop, shared navigation, and reusable visual patterns. People consolidation and outside-job evaluation remain required later slices of the overall redesign; they are not removed or prerequisites to completing this first slice. Preserve the protected Intake, Evidence, and Career Lanes functionality. Do not expand this pass into startup-management tools or additional discovery integrations.
+
+Acceptance for this slice: the founder can follow both first-use and returning-use paths, identify the next action, record research, distinguish saving from analysis, understand meaningful changes or an unchanged result, recover from failure, and continue without losing task context. Review desktop, narrow-screen, and keyboard use. Compare the rendered implementation with the selected visual target and exercise the actual interactions; visual similarity alone is insufficient.
+
+Next step: review the current Workbench flow, then present three comparable Workbench concepts grounded in that flow. This documentation update does not claim that the audit, concepts, prototype, navigation consolidation, or remaining redesign slices are implemented.
