@@ -9,15 +9,21 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "../styles/global.css";
+import WorkspaceNav from "../components/WorkspaceNav.astro";
+import "@phosphor-icons/web/regular";
+import "../styles/workspace.css";
+import "../styles/landing.css";
 import TopNav from "../components/TopNav.astro";
 import { createServer } from "../lib/supabase/server";
 
 interface Props {
   title?: string;
   description?: string;
+  publicPage?: boolean;
 }
 
 const {
+  publicPage = false,
   title = "Career Intelligence Platform",
   description = "A trust-first career strategist and job search intelligence workspace.",
 } = Astro.props;
@@ -61,9 +67,10 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       }
     </script>
   </head>
-  <body class="min-h-full flex flex-col">
-    <TopNav signedInEmail={signedInEmail} />
-    <slot />
+  <body class:list={["min-h-full flex flex-col", { "career-app": Boolean(signedInEmail) && !publicPage, "career-public": publicPage || !signedInEmail }]}>
+    <a class="career-skip" href="#main-content">Skip to content</a>
+    {signedInEmail && !publicPage ? <WorkspaceNav signedInEmail={signedInEmail} /> : <TopNav signedInEmail={signedInEmail} />}
+    <div id="main-content" class="career-content" tabindex="-1"><slot /></div>
     <div class="cip-route-loader" data-asset-route-loader hidden role="status" aria-live="polite" aria-label="Preparing career assets">
       <div class="cip-route-loader-panel">
         <div class="cip-thinking-orbit" aria-hidden="true">

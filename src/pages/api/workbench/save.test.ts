@@ -39,7 +39,7 @@ describe("Workbench save boundary", () => {
   });
   it("saves captures as analysis evidence without creating completed tasks", async () => {
     const response = await request({ operation: "capture", kind: "goal", note: "Explore launching my own company." });
-    expect(response.headers.get("HX-Redirect")).toBe("/workbench?view=work");
+    expect(response.headers.get("HX-Redirect")).toBe("/workbench?view=work&saved=update");
     expect(state.saved[0].user_id).toBe("user-a");
     const payload = JSON.parse(String(state.saved[0].extracted_text));
     expect(payload.workbenchAction).toBeUndefined();
@@ -117,4 +117,19 @@ describe("Workbench save boundary", () => {
     state.fail = true;
     await expect(loadWorkActions(db as unknown as SupabaseClient, "user-a")).rejects.toThrow("Could not load your work");
   });
+});
+
+it("keeps a source and an unknown conclusion with completed work and returns to its editor", async () => {
+  state.rows = [{ ...actionRecord(event), id: "1", user_id: "user-a", created_at: "2026-10-19" }];
+  const response = await request({ operation: "outcome", actionId: event.actionId, status: "completed", note: "Public information did not resolve the funding question.", sourceUrl: "https://example.org/report", conclusion: "unknown" });
+  expect(response.headers.get("HX-Redirect")).toContain(`action=${event.actionId}`);
+  const saved = JSON.parse(String(state.saved[0].extracted_text));
+  expect(saved.workbenchAction.conclusion).toBe("unknown");
+  expect(saved.workbenchAction.status).toBe("completed");
+  expect(saved.response.proofUrl).toBe("https://example.org/report");
+  expect(saved.response.answer).toContain("Unable to establish");
+});
+it("rejects active-content source URLs without saving anything", async () => {
+  expect((await request({ operation: "capture", note: "A detailed research finding.", sourceUrl: "javascript:alert(1)" })).status).toBe(400);
+  expect(state.saved).toHaveLength(0);
 });

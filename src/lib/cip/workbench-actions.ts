@@ -9,6 +9,8 @@ export const workInput = z.object({
   title: z.string().trim().max(180).default(""),
   context: z.string().trim().max(300).default(""),
   note: z.string().trim().max(12000).default(""),
+  sourceUrl: z.string().trim().max(2000).refine(value => !value || /^https?:\/\//i.test(value) && URL.canParse(value), "Use a complete http or https source URL.").default(""),
+  conclusion: z.enum(["", "continue", "hold", "unknown"]).default(""),
   kind: z.enum(["research", "funding", "experiment", "goal", "evidence"]).default("research"),
   status: workStatus.default("active"),
 }).superRefine((v, ctx) => {
@@ -21,9 +23,10 @@ export const eventSchema = z.object({
   version: z.literal(1), actionId: z.string().uuid(), title: z.string().min(4).max(180),
   context: z.string().max(300), kind: z.enum(["research", "funding", "experiment", "goal", "evidence"]),
   status: workStatus, note: z.string().max(12000),
+  sourceUrl: z.string().optional(), conclusion: z.enum(["", "continue", "hold", "unknown"]).optional(),
 });
 export type WorkEvent = z.infer<typeof eventSchema>;
-export type WorkAction = WorkEvent & { updatedAt: string; history: Array<{ note: string; status: WorkEvent["status"]; at: string }> };
+export type WorkAction = WorkEvent & { updatedAt: string; history: Array<{ note: string; status: WorkEvent["status"]; at: string; sourceUrl?: string; conclusion?: string }> };
 export interface SourceRow { id: string; source_type: string; extracted_text: string | null; created_at: string }
 
 /** Rows arrive newest first with id as a stable tie-breaker; later arrivals never reopen work implicitly. */
@@ -40,7 +43,7 @@ export function assembleActions(rows: SourceRow[]): WorkAction[] {
       current = { ...event, updatedAt: row.created_at, history: [] };
       actions.set(event.actionId, current);
     }
-    current.history.push({ note: event.note, status: event.status, at: row.created_at });
+    current.history.push({ note: event.note, status: event.status, at: row.created_at, sourceUrl: event.sourceUrl, conclusion: event.conclusion });
   }
   return [...actions.values()];
 }
@@ -62,12 +65,12 @@ export async function loadWorkActions(db: SupabaseClient, userId: string): Promi
 /** Outcome and evidence share ONE insert: no task can complete while its findings fail to save. */
 export function actionRecord(event: WorkEvent) {
   return {
-    source_type: event.note ? "evidence_response" : "workbench_action",
+    source_type: event.note || event.sourceUrl || event.conclusion ? "evidence_response" : "workbench_action",
     title: event.title,
     trust_state: "user_submitted",
-    extracted_text: JSON.stringify({ workbenchAction: event, ...(event.note ? { response: {
+    extracted_text: JSON.stringify({ workbenchAction: event, ...(event.note || event.sourceUrl || event.conclusion ? { response: {
       questionId: `workbench-${event.actionId}`, question: `${event.kind}: ${event.title}${event.context ? ` (${event.context})` : ""}`,
-      answer: event.note, confidence: "needs_verification", proofUrl: "",
+      answer: [event.note, event.conclusion ? `Research conclusion: ${event.conclusion === "unknown" ? "Unable to establish; insufficient information" : event.conclusion}.` : ""].filter(Boolean).join("\n") || "Source reference supplied; not independently reviewed.", confidence: "needs_verification", proofUrl: event.sourceUrl ?? "",
       sourceNote: event.kind === "goal" ? "User intention; not proof of capability or market demand." : "User-reported research; not independently verified.",
     } } : {}) }),
   };

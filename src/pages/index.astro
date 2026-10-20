@@ -1,194 +1,34 @@
 ---
-import Icon from "../components/Icon.astro";
 import Layout from "../layouts/Layout.astro";
-
-// Canonical 8-step process. Keep these labels in sync with `navItems` in
-// src/lib/cip/data.ts — that array is the single source of truth for the
-// step order and names used across the nav, the Workbench, and this page.
-const processSteps = [
-  {
-    title: "Intake",
-    body: "Capture the career story, constraints, target compensation, work model, and public proof sources.",
-  },
-  {
-    title: "Evidence",
-    body: "Separate verified claims, user-supplied context, inferred strengths, and gaps that need confirmation.",
-  },
-  {
-    title: "Career Lanes",
-    body: "Turn the evidence into plausible next-step directions instead of one vague job-title guess \u2014 then generate a resume reframed for each lane.",
-  },
-  {
-    title: "Network",
-    body: "Map advisors and warm connections against the ideal-work profile before anyone asks for a referral.",
-  },
-  {
-    title: "Follow Up",
-    body: "Review the queue: who to talk to now, park, revisit, or remove \u2014 and capture what each conversation confirms or weakens.",
-  },
-  {
-    title: "Employers",
-    body: "Research organizations and hiring environments that fit the lane, geography, and work preferences.",
-  },
-  {
-    title: "Opportunities",
-    body: "Compare real roles against the profile, evidence, salary needs, and missing proof.",
-  },
-  {
-    title: "Briefing",
-    body: "Summarize what was learned each week and feed it back into the next pass \u2014 then generate a fresh report.",
-  },
-];
-
-const outcomes = [
-  "A clearer career lane hypothesis",
-  "Better questions for advisors and warm contacts",
-  "A watched-employer and opportunity research queue",
-  "A final report with evidence status and next actions",
+import { createServer } from "../lib/supabase/server";
+let signedIn = false;
+if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const { data: { user } } = await createServer(Astro.cookies).auth.getUser();
+    signedIn = Boolean(user);
+    if (user && Astro.url.searchParams.get("intro") !== "1") return Astro.redirect("/workbench");
+  } catch { /* The public introduction stays available if auth is unavailable. */ }
+}
+const startHref = signedIn ? "/intake" : "/login";
+const activities = [
+  { icon: "user-circle", title: "Bring your experience", body: "Start with your resume, goals, and what matters to you. Include the work you are proud of, the constraints you face, and the questions you are still figuring out." },
+  { icon: "compass", title: "Explore credible directions", body: "Connect transferable strengths to possible career paths. Targeted questions help uncover the experience behind your story, while evidence and gaps stay visible." },
+  { icon: "magnifying-glass", title: "Test those directions", body: "Research employers, review job listings, have conversations, or try a bounded career experiment. Choose a next step that helps you learn something useful." },
+  { icon: "arrows-clockwise", title: "Bring back what you learn", body: "Save your findings, update your strategy when you are ready, and review what changed. Keep useful alternatives as your priorities evolve." },
 ];
 ---
-
-<Layout
-  title="Career Intelligence Platform"
-  description="A private career intelligence workspace for turning uncertain career transitions into advisory-ready plans."
->
-  <main class="cip-page-shell">
-    <section class="relative isolate min-h-[calc(100vh-4.25rem)] overflow-hidden">
-      <img
-        src="/images/hero-workspace.jpg"
-        alt="A thoughtful workspace conversation"
-        class="absolute inset-0 -z-20 h-full w-full object-cover"
-        width="1800"
-        height="1200"
-      />
-      <div class="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(251,248,241,0.96),rgba(251,248,241,0.82)_44%,rgba(251,248,241,0.24))] dark:bg-[linear-gradient(90deg,rgba(22,26,23,0.97),rgba(22,26,23,0.82)_48%,rgba(22,26,23,0.32))]"></div>
-      <div class="mx-auto flex min-h-[calc(100vh-4.25rem)] w-full max-w-7xl items-center px-5 py-14">
-        <div class="max-w-3xl">
-          <p class="inline-flex items-center gap-2 rounded-md bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
-            <Icon name="spark" class="h-3.5 w-3.5" strokeWidth={2} />
-            Private career intelligence workspace
-          </p>
-          <h1 class="mt-5 max-w-3xl text-4xl leading-[1.06] md:text-6xl" style="font-family: var(--headline-font);">
-            Turn career uncertainty into an advisory-ready plan.
-          </h1>
-          <p class="mt-5 max-w-2xl text-base leading-7 text-[var(--foreground)] md:text-lg md:leading-8">
-            CIP helps people in complex career transitions gather evidence, test next-step role lanes, prepare better advisor conversations, and produce a report they can actually act on.
-          </p>
-          <div class="mt-7 flex flex-wrap items-center gap-3">
-            <a class="cip-fancy-button" href="/login">
-              <span class="flex items-center gap-2">
-                <Icon name="arrow-right" class="h-4 w-4" strokeWidth={2.2} />
-                Create your private workspace
-              </span>
-            </a>
-            <a class="cip-fancy-button cip-fancy-button-secondary" href="/workbench">
-              <span>Open workbench</span>
-            </a>
-          </div>
-          <p class="mt-4 max-w-xl text-sm leading-6 text-[var(--muted)]">
-            Sign-in starts before intake because this work involves resumes, salary goals, network context, and private career questions.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <section class="border-y border-[var(--line)] bg-[var(--panel)]">
-      <div class="mx-auto grid w-full max-w-7xl gap-8 px-5 py-14 lg:grid-cols-[0.85fr_1.15fr]">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">The real problem</p>
-          <h2 class="mt-2 text-3xl md:text-4xl" style="font-family: var(--headline-font);">Most career advice starts with a question that is too big.</h2>
-        </div>
-        <div class="grid gap-5 text-base leading-7 text-[var(--muted)]">
-          <p>
-            Asking someone what job you should pursue next is a heavy ask. They need your history, your proof, your constraints, the market context, and the difference between what sounds interesting and what is credible now.
-          </p>
-          <p>
-            CIP narrows that question. It helps you bring advisors a short, evidence-backed brief: the lanes you are testing, what each lane has going for it, what feels risky, and who else you should talk to next.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <section class="bg-[var(--background)]">
-      <div class="mx-auto w-full max-w-7xl px-5 py-14">
-        <div class="grid gap-8 lg:grid-cols-[1fr_0.85fr] lg:items-center">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">A guided process</p>
-            <h2 class="mt-2 text-3xl md:text-4xl" style="font-family: var(--headline-font);">Eight pieces, one career intelligence loop.</h2>
-            <p class="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-              The app is not trying to answer everything in one pass. It turns scattered data into a working model that can be improved through evidence, conversations, employer research, and role comparison.
-            </p>
-          </div>
-          <img
-            src="/images/intake-coach.jpg"
-            alt="A focused coaching conversation"
-            class="aspect-[4/3] w-full rounded-lg border border-[var(--line)] object-cover shadow-[var(--shadow-card)]"
-            width="900"
-            height="675"
-          />
-        </div>
-
-        <div class="mt-9 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {processSteps.map((step, index) => (
-            <article class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5 shadow-[var(--shadow-card)]">
-              <span class="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] text-xs font-bold text-[var(--accent-strong)]">
-                {index + 1}
-              </span>
-              <h3 class="mt-4 text-lg font-semibold">{step.title}</h3>
-              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{step.body}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <section class="border-y border-[var(--line)] bg-[var(--surface-wash)]">
-      <div class="mx-auto grid w-full max-w-7xl gap-8 px-5 py-14 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-        <img
-          src="/images/report-cover.jpg"
-          alt="Printed career report on a desk"
-          class="aspect-[5/4] w-full rounded-lg border border-[var(--line)] object-cover shadow-[var(--shadow-card)]"
-          width="900"
-          height="720"
-        />
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">What you get</p>
-          <h2 class="mt-2 text-3xl md:text-4xl" style="font-family: var(--headline-font);">A report that makes the next conversation easier.</h2>
-          <p class="mt-4 text-base leading-7 text-[var(--muted)]">
-            The final report is meant to be a working artifact, not a fortune-telling document. It shows the current model, the evidence behind it, what still needs validation, and the next practical moves.
-          </p>
-          <ul class="mt-6 grid gap-3">
-            {outcomes.map((item) => (
-              <li class="flex gap-3 text-sm leading-6 text-[var(--muted)]">
-                <Icon name="check-circle" class="mt-0.5 h-5 w-5 shrink-0 text-[var(--accent-strong)]" strokeWidth={1.9} />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <section class="bg-[var(--panel)]">
-      <div class="mx-auto grid w-full max-w-7xl gap-8 px-5 py-14 lg:grid-cols-[1.05fr_0.95fr]">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Why sign-in comes first</p>
-          <h2 class="mt-2 text-3xl md:text-4xl" style="font-family: var(--headline-font);">This is private work, so the app starts with a private workspace.</h2>
-        </div>
-        <div class="grid gap-4 text-sm leading-6 text-[var(--muted)]">
-          <p>
-            CIP may store resume text, salary targets, private constraints, network names, advisor feedback, and generated reports. That data needs an account boundary before the workflow begins.
-          </p>
-          <p>
-            The public site explains the method. The signed-in workbench is where the app saves progress, builds the model, and keeps the report tied to the person it belongs to.
-          </p>
-          <div class="pt-2">
-            <a class="cip-fancy-button" href="/login">
-              <span>Start with sign-in</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
+<Layout publicPage title="CIP — Career directions that fit you" description="Connect your experience to career directions that fit you. Test them, learn what works, and refine your plan as you go.">
+<main class="landing">
+  <section class="landing-hero">
+    <div class="landing-hero-copy"><p class="landing-eyebrow">Career intelligence, built around you</p><h1>Your experience has a story.<br/><span>Find the directions that fit you.</span></h1><p class="landing-lead">Connect your experience to career directions that fit you. Test them, learn what works, and refine your plan as you go.</p><div class="landing-actions"><a class="landing-primary" href={startHref}>Start with your experience<i class="ph ph-arrow-right" aria-hidden="true"></i></a><a class="landing-text-link" href="#how-it-works">See how CIP works</a></div><p class="landing-note">{signedIn ? "Your saved direction is ready whenever you want to revisit it." : "Sign in to save your experience and return to your work."}</p></div>
+    <figure class="landing-preview"><a href="#workbench-preview" aria-label="Learn about the Workbench preview"><img src="/images/workbench-design-preview.webp" width="1486" height="1058" alt="Illustrative CIP Workbench design with three career directions, a research task, and a separate strategy-update action." fetchpriority="high"/></a><figcaption>Workbench design preview · illustrative content, not a user's records.</figcaption></figure>
+  </section>
+  <section class="landing-story"><p class="landing-eyebrow">A varied career can be a strength</p><h2>You have done more than a job title can explain.</h2><p>Changing roles, industries, or priorities does not erase what you know. CIP helps you connect the threads of your experience, explain the value you bring, and decide where to put your next effort.</p><p class="landing-story-close">A clearer story. Credible possibilities. A practical next move.</p></section>
+  <section class="landing-loop" id="how-it-works"><div class="landing-section-heading"><div><p class="landing-eyebrow">How CIP works</p><h2>A direction to explore.<br/>A plan that keeps learning.</h2></div><p>Start by understanding your experience. Then return as you learn from the world around you. You do not have to repeat onboarding every time something changes.</p></div><div class="landing-activities">{activities.map((item, index) => <article><div class="landing-activity-label"><i class={`ph ph-${item.icon}`} aria-hidden="true"></i><span>{String(index+1).padStart(2,"0")}</span></div><h3>{item.title}</h3><p>{item.body}</p></article>)}</div><p class="landing-loop-note"><i class="ph ph-arrows-clockwise" aria-hidden="true"></i>These activities form a repeating loop. There is no final career answer you have to settle for.</p></section>
+  <section class="landing-workbench" id="workbench-preview"><div><p class="landing-eyebrow">Your place to do the work</p><h2>Turn a possibility into a next step.</h2><p>The Workbench brings your directions, actions, and new learning together. Pick something worth investigating, record what happens, and decide what it means for your plan.</p><ul><li><i class="ph ph-compass" aria-hidden="true"></i><span><strong>Keep alternatives in view.</strong> A new priority does not erase your other career directions.</span></li><li><i class="ph ph-note-pencil" aria-hidden="true"></i><span><strong>Capture useful findings.</strong> Save research, conversations, goal changes, and corrections in the tools designed for them.</span></li><li><i class="ph ph-arrows-clockwise" aria-hidden="true"></i><span><strong>Update deliberately.</strong> Saving information and incorporating it into strategy are separate steps.</span></li></ul><a class="landing-text-link" href={signedIn ? "/workbench" : "/login"}>{signedIn ? "Open your Workbench" : "Sign in to start your Workbench"}<i class="ph ph-arrow-right" aria-hidden="true"></i></a></div><aside><p class="landing-eyebrow">A useful career question</p><blockquote>“What would I need to learn before investing more time in this direction?”</blockquote><p>A conversation, an employer investigation, or a small experiment can move you forward—even when the answer is “not enough information yet.”</p><p class="landing-note">CIP supports decisions. It does not guarantee a job or a business outcome.</p></aside></section>
+  <section class="landing-trust"><div><p class="landing-eyebrow">Use job boards. Bring a better question.</p><h2>Put your effort where it belongs.</h2><p>CIP works alongside your job search. Review discovered listings, research employers, and compare possibilities with your goals and evidence. A listing being open and a role being right for you are different questions.</p><p>See what was checked and when, distinguish an AI interpretation from evidence, and correct the picture when it misses something. New learning should improve the plan.</p></div><div class="landing-principles"><article><h3>Your experience comes first</h3><p>Targeted evidence and questions help you tell your story beyond a generic job-title match.</p></article><article><h3>Uncertainty stays visible</h3><p>A source check is not a promise of hiring intent. An unanswered question is a reason to investigate, not a judgment about your ability.</p></article><article><h3>Your goals can change</h3><p>Explore a new role, a different field, or an entrepreneurial direction while keeping your constraints and alternatives in view.</p></article></div></section>
+  <section class="landing-faq"><p class="landing-eyebrow">Before you begin</p><h2>A few things worth knowing.</h2><details><summary>Do I need to know what job I want?</summary><p>No. Bring your experience and the questions you have. CIP helps you develop directions to investigate; you can refine them as you learn.</p></details><details><summary>Is this a one-time career test?</summary><p>No. Your saved experience is a starting point. Evidence questions, conversations, employer research, and changes in your goals can inform later strategy updates.</p></details><details><summary>Does CIP replace job boards or personal conversations?</summary><p>No. It helps you decide which possibilities deserve attention and prepare better questions. Job boards and people in your network remain useful sources of information.</p></details><details><summary>What happens when I start?</summary><p>You sign in, capture your story and constraints, deepen the evidence, and review possible career lanes. Then choose a next action in Workbench. Returning users can continue their saved work.</p></details></section>
+  <section class="landing-close"><p class="landing-eyebrow">Your next chapter starts with what you already bring</p><h2>Find a direction worth testing.</h2><p>You do not need the whole answer to take a useful next step.</p><a class="landing-primary" href={startHref}>Start with your experience<i class="ph ph-arrow-right" aria-hidden="true"></i></a><a class="landing-text-link" href="/workbench">Already started? Open your Workbench</a></section>
+</main>
+<footer class="landing-footer"><a href="/?intro=1" class="public-brand"><strong>CIP</strong><span>Career Intelligence Platform</span></a><p>Your experience. Your direction. Your next move.</p><nav aria-label="Footer navigation"><a href="#how-it-works">How CIP works</a><a href="/contact">Contact</a><a href={signedIn ? "/workbench" : "/login"}>{signedIn ? "Workbench" : "Sign in"}</a></nav></footer>
 </Layout>

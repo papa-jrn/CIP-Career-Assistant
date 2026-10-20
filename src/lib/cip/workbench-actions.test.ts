@@ -37,3 +37,13 @@ describe("Workbench action history", () => {
     expect(workInput.safeParse({ operation: "capture", note: "x".repeat(12001) }).success).toBe(false);
   });
 });
+
+it("keeps source-only and conclusion-only outcomes in the evidence history", () => {
+  const source = actionRecord({ ...event, sourceUrl: "https://example.org/report" });
+  expect(source.source_type).toBe("evidence_response");
+  expect(JSON.parse(source.extracted_text).response.answer).toContain("not independently reviewed");
+  const unknown = actionRecord({ ...event, status: "completed", conclusion: "unknown" });
+  expect(JSON.parse(unknown.extracted_text).response.answer).toContain("insufficient information");
+  const restored = assembleActions([{ ...source, id: "source", created_at: "2026-10-20" }]);
+  expect(restored[0].history[0].sourceUrl).toBe("https://example.org/report");
+});

@@ -28,16 +28,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (input.operation === "create") {
       const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
       const existing = (await loadWorkActions(db, user.id)).find(a => key(a.title) === key(input.title) && key(a.context) === key(input.context));
-      if (existing) return returnToWork(`/workbench?view=work#action-${existing.actionId}`);
+      if (existing) return returnToWork(`/workbench?view=work&action=${existing.actionId}#research-editor`);
     }
     let event;
     if (input.operation === "outcome") {
       const prior = (await loadWorkActions(db, user.id)).find(a => a.actionId === input.actionId);
       if (!prior) return html("That action was not found in your workspace.", 404);
-      event = { version: 1 as const, actionId: prior.actionId, title: prior.title, context: prior.context, kind: prior.kind, status: input.status, note: input.note };
+      event = { version: 1 as const, actionId: prior.actionId, title: prior.title, context: prior.context, kind: prior.kind, status: input.status, note: input.note, sourceUrl: input.sourceUrl, conclusion: input.conclusion };
     } else {
       event = { version: 1 as const, actionId: randomUUID(), title: input.title || "Career update", context: input.context, kind: input.kind,
-        status: input.operation === "capture" ? "completed" as const : "active" as const, note: input.note };
+        status: input.operation === "capture" ? "completed" as const : "active" as const, note: input.note, sourceUrl: input.sourceUrl, conclusion: input.conclusion };
     }
     const record = actionRecord(event);
     if (input.operation === "capture") {
@@ -49,6 +49,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
     const { error } = await db.from("career_sources").insert({ user_id: user.id, ...record });
     if (error) return html("Could not save. Your form is still here; please retry.", 500);
-    return returnToWork();
+    return returnToWork(input.operation === "capture" ? "/workbench?view=work&saved=update" : `/workbench?view=work&action=${event.actionId}&saved=work#research-editor`);
   } catch { return html("Could not save. Your form is still here; please retry.", 500); }
 };

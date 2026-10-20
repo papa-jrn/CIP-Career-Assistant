@@ -1,0 +1,28 @@
+---
+interface Props { signedInEmail: string }
+const { signedInEmail } = Astro.props;
+const path = Astro.url.pathname;
+const actionParam = Astro.url.searchParams.get("workAction") ?? "";
+const returnAction = /^[a-f0-9-]{36}$/.test(actionParam) ? actionParam : "";
+const groups = [
+  { label: "Workbench", href: "/workbench", icon: "house", paths: ["/workbench", "/opportunities", "/briefing", "/report"] },
+  { label: "Your direction", href: "/intake", icon: "compass", paths: ["/intake", "/evidence", "/assets"] },
+  { label: "People", href: "/network", icon: "users", paths: ["/network", "/follow-up"] },
+  { label: "Employers", href: "/employers", icon: "buildings", paths: ["/employers"] },
+];
+const subviews = ["/intake", "/evidence", "/assets"].includes(path) ? [{ href: "/intake", label: "Your story" }, { href: "/evidence", label: "Evidence" }, { href: "/assets", label: "Career lanes" }] : ["/network", "/follow-up"].includes(path) ? [{ href: "/network", label: "Connections" }, { href: "/follow-up", label: "Follow-ups" }] : path === "/opportunities" ? [{ href: "/workbench?view=overview", label: "Overview" }, { href: "/workbench?view=work", label: "My work" }, { href: "/opportunities", label: "Jobs & opportunities" }, { href: "/workbench?view=changes", label: "What changed" }] : [];
+---
+<aside class="career-sidebar">
+  <a href="/workbench" class="career-brand"><strong>CIP</strong><span>Career Intelligence<br/>Platform</span></a>
+  <nav aria-label="Primary navigation" class="career-primary">
+    {groups.map(item => <a href={item.href} aria-current={item.paths.includes(path) ? "page" : undefined}><i class={`ph ph-${item.icon}`} aria-hidden="true"></i><span>{item.label}</span></a>)}
+  </nav>
+  <div class="career-utilities">
+    <a href="/?intro=1"><i class="ph ph-info" aria-hidden="true"></i>How CIP works</a>
+    <a href="/contact"><i class="ph ph-question" aria-hidden="true"></i>Help & contact</a>
+    <details><summary><i class="ph ph-user-circle" aria-hidden="true"></i>Account</summary><div class="career-account"><p>{signedInEmail}</p><a href="/account">Account settings</a><form method="post" action="/api/auth/logout" hx-post="/api/auth/logout" hx-swap="none"><button type="submit">Sign out</button></form></div></details>
+  </div>
+</aside>
+{subviews.length > 0 && <nav class="career-subviews" aria-label="Section views">{subviews.map(item => <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>)}</nav>}
+
+{returnAction && <div class="career-return"><a href={`/workbench?view=work&action=${returnAction}#research-editor`}><i class="ph ph-arrow-left" aria-hidden="true"></i>Return to your Workbench action</a><span>Keep your research and findings together.</span></div>}
