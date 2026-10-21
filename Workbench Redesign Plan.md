@@ -405,3 +405,42 @@ beta-readiness claim.
 Resume point is unchanged: People (compact Connections/Follow-ups, expandable details, and the
 incorrect met-but-not-logged state for existing notes), then the section 8 recommendation repair gate,
 then imported-job verification and fit evaluation.
+
+## Fixed 2026-10-21: "met but not logged" never cleared
+
+Diagnosis. Conversations are written to two different stores: the `network_feedback` record and
+`career_sources` rows with `source_type = "conversation_outcome"`. The follow-up worklist's
+"Met - capture notes" bucket only consulted the feedback record, so a conversation captured through
+the outcome path never cleared the prompt. The page already loaded those outcome rows - to count
+notes for the header and to synthesise contacts so people only ever talked to still appear - but
+never consulted them when judging whether a person's conversation had been logged, and `QueuePerson`
+had no field to carry them. There was no path by which the bucket could clear except writing a
+second note into the feedback record. The page was asserting something false: that notes were
+missing when they existed.
+
+Fix. The bucket logic moved out of follow-up.astro into `src/lib/cip/follow-up-buckets.ts`
+(`needsNudge`, `feedbackHasConversationContent`, `outcomeHasLoggedConversation`,
+`hasLoggedConversation`, `actionBucket`) with 18 vitest cases, including the regression. Being
+trapped in a page with no tests is why it drifted from the second store. Today's date is injected
+rather than read inside the predicate, so the date-sensitive nudge rule is testable. `buildQueue`
+now indexes outcomes by the same normalized contact name it already uses for feedback and attaches
+them to each person, so no new identity logic was introduced. Cards show a conversations-logged
+count and an expandable list of what was captured, labelled as recorded by the user and not
+re-verified, so a cleared prompt is inspectable rather than merely inferred.
+
+`outcomeHasLoggedConversation` is deliberately narrower than the existing
+`outcomeHasStrategicContent`: a bare related lane or employer is a tag on an otherwise empty record,
+not a captured conversation, and must not silence the prompt. The badge count uses the same
+predicate as the bucket, so the two cannot disagree.
+
+Known limitation, recorded not hidden: any logged conversation with content clears the prompt, so a
+*subsequent* meeting with someone already logged will not re-raise it. Distinguishing that needs
+per-conversation identity, not a timestamp compare - the two stores are written in either order (a
+user may log the note before or after setting the status to Met), so ordering cannot tell "notes for
+the new meeting are missing" from "notes were written first". Prompting for notes that demonstrably
+exist is the worse failure, so this errs toward silence. Re-prompting per conversation remains open
+work for the People slice.
+
+Verification: typecheck clean, 477 tests passing (459 + 18 new), SSR build passed. Founder live pass
+on the running app still to come. This is the focused bug fix only; the People consolidation
+(compact Connections/Follow-ups with expandable details) remains the next slice.
