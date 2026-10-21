@@ -317,23 +317,40 @@ function buildSkills(context: ResumeAssetContext) {
     ...context.proofItems.map((item) => item.claim),
     context.intake.resume_text,
   ].join(" ");
-  const fallbacks = [
+  // A vocabulary for RECOGNISING skills the user's own material already shows.
+  // It is only ever matched against their text, never used to pad: a resume
+  // must not claim skills nobody evidenced. This list previously doubled as a
+  // fallback, so a user whose text matched nothing was handed one person's
+  // skills ("AI adoption", "Product strategy") as if they were their own.
+  const recognised = [
     "Leadership",
     "Operations",
-    "AI adoption",
-    "Product strategy",
     "Research",
     "Communication",
     "Automation",
     "Program management",
     "Stakeholder alignment",
     "Market analysis",
-    "Portfolio storytelling",
     "Process design",
+    "Project management",
+    "Teaching",
+    "Training",
+    "Budgeting",
+    "Fundraising",
+    "Compliance",
+    "Customer service",
+    "Data analysis",
+    "Scheduling",
+    "Logistics",
+    "Quality assurance",
+    "Product strategy",
+    "AI adoption",
   ];
   const normalized = source.toLowerCase();
-  const matches = fallbacks.filter((item) => normalized.includes(item.toLowerCase().split(" ")[0]));
-  return [...new Set(matches.length ? matches : fallbacks.slice(0, 8))].join(" | ");
+  const matches = recognised.filter((item) => normalized.includes(item.toLowerCase().split(" ")[0]));
+  // Nothing recognised means nothing to claim. The draft shows an empty skills
+  // section for the user to fill, which is true, rather than a plausible guess.
+  return [...new Set(matches)].join(" | ");
 }
 
 function buildExperienceRewriteWorksheet(roleSignals: string[], primaryLane: string) {
@@ -367,7 +384,9 @@ function inferEducation(text: string) {
   const educationLines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => /\b(dartmouth|bachelor|b\.a\.|ba\b|b\.s\.|bs\b|master|m\.a\.|mba|university|college|degree)\b/i.test(line));
+    // "dartmouth" was here: one founder's university, so only his education
+    // line was ever recognised. Match credential and institution words instead.
+    .filter((line) => /\b(bachelor|b\.a\.|ba\b|b\.s\.|bs\b|master|m\.a\.|m\.s\.|mba|ph\.?d|associate|diploma|certificate|certification|university|college|institute|academy|school|degree)\b/i.test(line));
   return educationLines.slice(0, 5).join("\n");
 }
 

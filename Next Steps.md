@@ -425,7 +425,13 @@ Strategic conclusion: **stop trying to make the analysis prose smarter than a fr
 
 ## Founder-Specific Hardcoding To Remove (De-Founder Pass)
 
-**Status 2026-10-21:** every row below was re-checked against the source. All remain outstanding
+**Status 2026-10-21 — COMPLETE.** Every row below was fixed; see `Consolidated Finish Plan.md`
+section B for the resolutions and for three founder-specific heuristics that were not in this table:
+a relationship score keyed to the founder's own past employers, warmth vocabularies containing his
+stock phrases, and a role inference keyed to his hometown. Lane role families remain founder-shaped
+and are deferred to Phase 7. Original status note follows.
+
+Every row below was re-checked against the source. All remain outstanding
 except `labor-market.ts`, whose file no longer exists, and the `data.ts` row, which is now done - the
 canned opportunities, recommendations and briefing items are deleted and `/briefing` has an honest
 empty state. One founder-specific heuristic not in this table was found: `source-analysis.ts:400`

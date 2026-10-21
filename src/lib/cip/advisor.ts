@@ -213,10 +213,10 @@ async function tryBuildAiAnalysis(
             analysisContext: context,
             evidenceSufficiency: sufficiency,
             stale_question_guardrails: [
-              "Do not ask the user to clarify involvement with an organization if the resume names a leadership role there and source evidence supports related work.",
+              "Do not ask the user to clarify involvement with an organization if the resume names a role there and source evidence supports related work.",
               "Do not ask for industries to exclude if exclusions already appear in intake or saved evidence.",
-              "Do not ask what AI tools/projects the user can discuss if GitHub/source analysis already lists AI coding projects. Instead ask which project has the strongest outcome, user impact, or technical depth.",
-              "For video/story production links, use metadata as evidence of a public artifact, but ask for transcript, role, audience, reach, or production responsibility if those are missing.",
+              "Do not re-ask what the user's own linked sources already answer. Where a source already lists their projects, tools or skills, ask instead which of them has the strongest outcome, user impact, or depth.",
+              "For a link whose metadata shows a public artifact, treat it as evidence the artifact exists, but ask for the user's role, audience, reach or responsibility when those are missing.",
               "After 3 evidence rounds or many saved evidence answers, do not keep asking increasingly narrow proof questions such as exact budgets or team sizes unless they are crucial to a target role.",
               "Late-stage questions should help the user move toward connections: target industries, target geography, remote/hybrid filters, likely employers, LinkedIn connections, alumni networks, and warm introductions.",
               "When evidence sufficiency is saturated, follow-up questions must shift from 'prove this' to 'can anything strengthen this already useful positioning angle?'",
@@ -660,11 +660,12 @@ function buildRemainingFollowUpQuestions(
   evidenceText: string,
 ) {
   const questions = [...baseQuestions];
-  if (evidenceText.includes("github") || evidenceText.includes("ai") || evidenceText.includes("automation")) {
-    questions.push("Which AI or coding project has the clearest outcome, user impact, or technical depth?");
-  }
-  if (evidenceText.includes("video") || evidenceText.includes("story") || evidenceText.includes("production")) {
-    questions.push("Which video/story projects best prove production responsibility, audience reach, or narrative judgment?");
+  // These were two domain-specific questions - AI/coding, and video/story
+  // production - which are one person's fields. A nurse or an accountant with
+  // public work got neither. Ask the same thing without naming a domain; the
+  // user's own evidence supplies the specifics.
+  if (hasIntakeContent(evidenceText)) {
+    questions.push("Which piece of your public work has the clearest outcome, audience, or impact to point to?");
   }
   if (!intake.claim_boundaries && !evidenceText.includes("do not use publicly")) {
     questions.push("Which strong claims are safe to use publicly, and which should remain private or contextual?");
@@ -685,19 +686,46 @@ function buildRemainingSkillGaps(intake: IntakeForm, evidenceText: string) {
   if (!evidenceText.includes("github") && !evidenceText.includes("ai")) {
     gaps.push("Concrete AI, automation, or technical workflow examples.");
   }
-  if (!intake.industry_preferences.toLowerCase().includes("military") && !evidenceText.includes("military")) {
+  if (!hasIntakeContent(intake.industry_preferences)) {
     gaps.push("Preferred industries and deal-breaker industries.");
   }
   return gaps.slice(0, 5);
 }
 
+/** Whether the user actually put something in an intake field. */
+function hasIntakeContent(value: string | undefined) {
+  return Boolean(value && value.trim().length > 1);
+}
+
+/**
+ * Which intake field answers which kind of follow-up question.
+ *
+ * This used to grep the user's biography for one person's answers - "military"
+ * for industries, "executive director" for involvement - so it retired those
+ * questions for the founder and would have kept asking everyone else. Intake
+ * already collects this as structured fields; ask whether the field that
+ * answers the question was filled in, rather than guessing from prose.
+ */
+const ANSWERED_BY_INTAKE: Array<{ topic: RegExp; answered: (intake: IntakeForm, evidenceText: string) => boolean }> = [
+  { topic: /\bindustr|\bsector/, answered: (intake) => hasIntakeContent(intake.industry_preferences) },
+  { topic: /salary|compensation|\bpay\b/, answered: (intake) => typeof intake.salary_target === "number" },
+  { topic: /remote|hybrid|on-?site|work model/, answered: (intake) => (intake.work_modes ?? []).length > 0 },
+  { topic: /constraint|relocat|geograph|location/, answered: (intake) => hasIntakeContent(intake.career_constraints) },
+  { topic: /achievement|proud|never fit/, answered: (intake) => hasIntakeContent(intake.hidden_achievements) },
+  { topic: /energiz|lose track/, answered: (intake) => hasIntakeContent(intake.energizing_problems) },
+  { topic: /claim|verified|aspirational/, answered: (intake) => hasIntakeContent(intake.claim_boundaries) },
+  {
+    topic: /public evidence|portfolio|public work/,
+    answered: (intake, evidenceText) =>
+      hasIntakeContent(intake.public_evidence) || hasIntakeContent(intake.portfolio_urls) || hasIntakeContent(evidenceText),
+  },
+];
+
 function isAnsweredGenericQuestion(question: string, intake: IntakeForm, evidenceText: string) {
   const normalized = question.toLowerCase();
-  const combined = `${intake.resume_text}\n${intake.industry_preferences}\n${intake.career_constraints}\n${intake.public_evidence}\n${evidenceText}`.toLowerCase();
-  if (normalized.includes("industry") && combined.includes("military")) return true;
-  if ((normalized.includes("ai") || normalized.includes("tool")) && (combined.includes("github") || combined.includes("ai"))) return true;
-  if (normalized.includes("involvement") && combined.includes("executive director")) return true;
-  return false;
+  // Retire a question only when the field that answers it is filled in. Asking
+  // once more is recoverable; dropping a question the user never answered is not.
+  return ANSWERED_BY_INTAKE.some((rule) => rule.topic.test(normalized) && rule.answered(intake, evidenceText));
 }
 
 function normalizeEvidenceLedger(

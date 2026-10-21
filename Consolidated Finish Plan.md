@@ -179,21 +179,39 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
 9. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
    capture a conversation there at all.
 
-### B. Phase 5 — de-founder pass (beta-blocking, barely started)
+### B. Phase 5 — de-founder pass ~~(beta-blocking, barely started)~~ **DONE 2026-10-21**
 
-Every row below was checked against the source on 2026-10-21.
+Every row below was checked against the source and fixed, except where noted. Covered by
+`src/lib/cip/de-founder.test.ts`, which contrasts the founder's own answers with a stranger's - a
+nurse, a different university, a service club that is not Rotary - because before this pass the first
+was handled and the second ignored.
 
-| Location | Problem | Status |
+| Location | Problem | Resolution |
 |---|---|---|
-| `advisor.ts:688,697,699` | greps for "military" and "executive director" to retire questions | outstanding |
-| `advisor.ts:218-219` | stale-question guardrails cite "AI coding projects", "video/story production" | outstanding |
-| `resume-assets.ts:370` | `inferEducation()` regex contains "dartmouth" | outstanding |
-| `resume-assets.ts:323-324` | skills fallback is founder-flavored ("AI adoption", "Product strategy") | outstanding |
-| `network-intelligence.ts:712,715` | BNI and Rotary named directly in scoring reasons | partly generalized at :606, still hardcoded at :712/:715 |
-| `source-analysis.ts:400-401` | matches "claremont" to infer an Executive Director title | outstanding, **not in the original table** |
-| `data.ts:97-147` | canned opportunities/recommendations/briefing items | outstanding, and `briefingItems` is live |
-| `labor-market.ts:261` | hardcoded missing-skills list | obsolete — the file no longer exists |
-| model tiering | every pass defaults to `gpt-4.1-mini` | undecided |
+| `advisor.ts` | greps for "military" and "executive director" to retire questions | replaced by `ANSWERED_BY_INTAKE`: a question is retired when the intake field that answers it is filled in, whatever the answer says |
+| `advisor.ts` | skill-gap builder special-cased "military" | now asks for industries whenever `industry_preferences` is empty |
+| `advisor.ts` | domain questions for AI/coding and video/story production | replaced with one domain-neutral question about the user's strongest public work |
+| `advisor.ts` | stale-question guardrails cite "AI coding projects", "video/story production" | reworded generically; the specifics come from the user's own sources |
+| `resume-assets.ts` | `inferEducation()` regex contains "dartmouth" | matches credential and institution words instead |
+| `resume-assets.ts` | skills fallback padded with "AI adoption", "Product strategy" | the vocabulary now only ever *matches* the user's own material; nothing recognised means an empty skills section, not a plausible guess |
+| `network-intelligence.ts` | BNI and Rotary named directly | `matchMembershipGroup` recognises service clubs, business networking groups, chambers, alumni communities, congregations, professional associations, board affiliations |
+| `network-intelligence.ts` | **not previously catalogued:** a +6 score for notes mentioning the founder's own employers and projects ("world 2 systems", "zapdot", "guiding good", "lyndon institute") | replaced by a signal that is true for anyone: the user wrote substantive notes of their own about this person |
+| `network-intelligence.ts` | **not previously catalogued:** warmth and relationship-context vocabularies containing "best coder", "top coder", "bni" | replaced with relationship words anyone might use |
+| `source-analysis.ts` | **not in the original table:** infers "Executive Director" when the page mentions "claremont" | `findCorroboratedRole` claims a role only where the user's saved context and the source name the same title |
+| `data.ts` | canned opportunities/recommendations/briefing items | deleted 2026-10-21 |
+| `labor-market.ts` | hardcoded missing-skills list | obsolete - the file no longer exists |
+| model tiering | every pass defaults to `gpt-4.1-mini` | **still undecided.** Not a de-founder item; a pricing and quality decision before charging money |
+
+Found while doing this and **deliberately not fixed here:** `strategic-state.ts` `ROLE_FAMILIES`
+recognises exactly three role families - technology executive, nonprofit executive, and education -
+which are the founder's three lanes. A nurse, an accountant or a tradesperson matches none of them,
+so lane scoring silently does less for them. Fixing it properly is Phase 7 lane infrastructure, which
+the plan already says must not become a pile of per-lane special cases; bolting a fourth family on
+here would be the thing Phase 7 exists to prevent.
+
+`buildDeterministicSourceAnalysis` and `scoreContact` were exported so they could be tested at all.
+Both were unreachable from tests, which is how the founder-specific heuristics inside them survived
+this long.
 
 ### C. Phase 6 — state-layer tests (beta-blocking, partial)
 
@@ -229,8 +247,9 @@ extraction, contact dedupe, network-feedback exclusions, evidence-sufficiency ma
 
 ### F. Phases not started
 
-Phase 7 lane infrastructure (no lane config exists; role families are hardcoded in
-`strategic-state.ts:704`), Phase 9 game-dev lane v0 (no references in the codebase), Phase 10 target
+Phase 7 lane infrastructure (no lane config exists; `ROLE_FAMILIES` in `strategic-state.ts`
+recognises only technology-executive, nonprofit-executive and education roles - the founder's three
+lanes - so any other career matches none, confirmed 2026-10-21), Phase 9 game-dev lane v0 (no references in the codebase), Phase 10 target
 organization map beyond slice 1, Phase 11 evidence-to-outreach briefs (only
 `/api/network/draft-message` exists).
 
@@ -265,10 +284,10 @@ pass. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 
-**Step 2 — De-founder.** (B)
-Mechanical, low-judgment, and it unblocks every later step: no later work has to reason about whether
-a behaviour is the founder's or the user's. Add the structured intake fields the heuristics should
-have been reading. Fix `source-analysis.ts` "claremont" along with the rest.
+**Step 2 — De-founder.** (B) ~~Mechanical, low-judgment, and it unblocks every later step.~~
+**Done 2026-10-21.** Three heuristics that were not in the original table turned up during the pass,
+all in the same shape: a vocabulary of the founder's own employers, phrases or hometown deciding a
+score or an inference. Lane role families remain founder-shaped and are deferred to Phase 7.
 
 **Step 3 — Test the parsers that meet strangers first.** (C)
 CSV/XLSX/ZIP, docx/rtf, dedupe, feedback exclusions, evidence-sufficiency, report assembly — written

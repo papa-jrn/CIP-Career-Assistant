@@ -603,7 +603,7 @@ function buildDeterministicNetworkAnalysis({
       "This pass uses user-supplied files and notes only; it does not scrape LinkedIn.",
       "Warmth alone is not enough for a recommendation; named contacts need lane, employer, or role relevance.",
       "Local anchors are not automatically good targets; compensation, seniority, culture, and remote/hybrid fit should be checked before prioritizing them.",
-      "Groups such as Rotary, BNI, alumni communities, and chambers are treated as context pools unless tied to a named person.",
+      "Membership and networking groups - service clubs, business networking groups, chambers, alumni associations, professional bodies, congregations - are treated as context pools unless tied to a named person.",
       "Company/title matches are directional until the user reviews relationship strength and current accuracy.",
       "Referral asks should come after relationship review; many contacts are better first used for market reads or reconnection.",
       "Saved removals, deceased-contact notes, and current-involvement notes suppress inappropriate reconnection recommendations.",
@@ -613,7 +613,7 @@ function buildDeterministicNetworkAnalysis({
   };
 }
 
-function scoreContact(
+export function scoreContact(
   contact: NetworkContact,
   context: {
     intake: Partial<IntakeForm> | null;
@@ -696,23 +696,25 @@ function scoreContact(
   if (contact.email) score += 4;
   if (contact.connectedOn) score += 5;
   const relationshipContext = extractRelationshipContext(contact.notes);
-  if (/(alumni|classmate|coworker|worked|contractor|friend|mentor|school|teacher|partner|bootcamp|former|birthday|invited|wife|spouse|reconnected|discussing|best coder|top coder|bni)/i.test(contact.notes)) {
+  if (/(alumni|classmate|coworker|colleague|worked|contractor|friend|mentor|mentee|neighbou?r|school|teacher|professor|partner|bootcamp|former|birthday|invited|wife|husband|spouse|family|reconnected|discussing|volunteered|served with)/i.test(contact.notes)) {
     score += 8;
     reasons.push("User notes suggest warm context, but warmth is supporting evidence rather than a standalone recommendation");
   }
-  if (/(reconnected|discussing|invited|birthday|partner|hired|worked with|contractor|best coder|top coder)/i.test(contact.notes)) {
+  if (/(reconnected|discussing|invited|birthday|partner|hired|worked with|contractor|referred|introduced|recommended)/i.test(contact.notes)) {
     score += 6;
     reasons.push("Relationship context suggests a stronger-than-ordinary reconnection path");
   }
-  if (/(web developer|tv executive|world 2 systems|zapdot|guiding good|lyndon institute|codex|ai tools)/i.test(contact.notes)) {
+  // This matched one founder's past employers and projects - "world 2 systems",
+  // "zapdot", "guiding good", "lyndon institute" - so only his contacts could
+  // ever earn it. The real signal is that the user wrote substantive notes of
+  // their own about this person, which is true for anyone.
+  if (contact.notes.trim().length >= 40) {
     score += 6;
-    reasons.push("Notes identify a specific shared work story or conversation angle");
+    reasons.push("Your own notes record specific shared context for this person");
   }
-  if (/\bbni\b|business networking international/i.test(contact.notes)) {
-    reasons.push("BNI is treated as a context pool unless tied to a named person, company, and lane");
-  }
-  if (/\brotary\b|rotarian/i.test(contact.notes)) {
-    reasons.push("Rotary is treated as civic/community context unless tied to a named person, company, and lane");
+  const membershipGroup = matchMembershipGroup(contact.notes);
+  if (membershipGroup) {
+    reasons.push(`${membershipGroup} is treated as a context pool unless tied to a named person, company, and lane`);
   }
 
   if (!reasons.length && contact.company) reasons.push("Company can be checked against future employer targets");
@@ -1402,7 +1404,9 @@ function extractRelationshipContext(notes: string) {
   return notes
     .split(/\s+\|\s+|(?<=[.!?])\s+/)
     .map((hint) => hint.trim())
-    .filter((hint) => /(reconnected|discussing|invited|birthday|partner|hired|worked|contractor|web developer|tv executive|world 2 systems|zapdot|guiding good|lyndon institute|codex|ai tools|bni|wife|teacher|best coder|top coder)/i.test(hint))
+    // The founder's own employers and stock phrases used to be listed here, so
+    // only his notes produced relationship context. Match relationship words.
+    .filter((hint) => /(reconnected|discussing|invited|birthday|partner|hired|worked|contractor|referred|introduced|recommended|volunteered|served with|colleague|classmate|alumni|mentor|neighbou?r|wife|husband|spouse|family|teacher|professor)/i.test(hint))
     .slice(0, 4);
 }
 
@@ -1480,6 +1484,30 @@ function extractResponseText(payload: unknown) {
       const text = (part as { text?: unknown }).text;
       if (typeof text === "string") return text;
     }
+  }
+  return null;
+}
+
+/**
+ * Name the kind of membership group a contact's notes mention.
+ *
+ * Previously only BNI and Rotary were recognised - the founder's own two - so
+ * every other user's service club, chamber, alumni association or professional
+ * body was silently treated as if it were an employer.
+ */
+function matchMembershipGroup(notes: string): string | null {
+  const groups: Array<[RegExp, string]> = [
+    [/\bbni\b|business networking international/i, "A business networking group"],
+    [/\brotary\b|rotarian|\bkiwanis\b|\blions club\b|\boptimist club\b|\bjaycees\b/i, "A service club"],
+    [/\bchamber of commerce\b|\bchamber\b/i, "A chamber of commerce"],
+    [/\balumni\b|\balumnae\b|\bclass of \d{4}\b/i, "An alumni community"],
+    [/\btoastmasters\b|\bmeetup\b|\buser group\b/i, "A community group"],
+    [/\bchurch\b|\bsynagogue\b|\bmosque\b|\btemple\b|\bcongregation\b|\bparish\b/i, "A congregation"],
+    [/\bassociation\b|\bsociety\b|\bguild\b|\bunion\b|\bprofessional body\b/i, "A professional association"],
+    [/\bboard of directors\b|\bboard member\b|\btrustee\b/i, "A board affiliation"],
+  ];
+  for (const [pattern, label] of groups) {
+    if (pattern.test(notes)) return label;
   }
   return null;
 }

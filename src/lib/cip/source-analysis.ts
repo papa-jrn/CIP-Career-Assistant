@@ -380,7 +380,7 @@ async function tryBuildAiSourceAnalysis(
   }
 }
 
-function buildDeterministicSourceAnalysis(
+export function buildDeterministicSourceAnalysis(
   snapshot: SourceSnapshot,
   context: {
     intake?: Partial<IntakeForm>;
@@ -396,12 +396,17 @@ function buildDeterministicSourceAnalysis(
     context.intake?.public_evidence,
     ...(context.evidenceResponses ?? []).map((response) => `${response.question} ${response.answer} ${response.sourceNote}`),
   ].join("\n").toLowerCase();
-  const contextualRole =
-    contextText.includes("executive director") && text.includes("claremont")
-      ? "Executive Director / website and operations lead, supported by resume context"
-      : contextText.includes("web developer") || contextText.includes("built")
-        ? "Web/project contributor, supported by saved context"
-        : "Needs user confirmation";
+  // This used to infer "Executive Director" whenever the user's context said so
+  // AND the page mentioned "claremont" - one founder's town. Nobody else could
+  // match it, and he matched it on any page from his area. Infer a role only
+  // where the user's own saved context names a title and this source names the
+  // same one.
+  const corroboratedRole = findCorroboratedRole(contextText, text);
+  const contextualRole = corroboratedRole
+    ? `${corroboratedRole}, named in your saved context and present in this source`
+    : /\b(built|created|developed|designed|wrote|produced|founded|led)\b/.test(contextText)
+      ? "Project contributor, supported by saved context"
+      : "Needs user confirmation";
   return {
     url: snapshot.url,
     sourceType: snapshot.sourceType,
@@ -510,4 +515,34 @@ function cleanUrl(value: string) {
 function excerpt(value: string, max: number) {
   const cleaned = value.replace(/\s+/g, " ").trim();
   return cleaned.length > max ? `${cleaned.slice(0, max - 1)}...` : cleaned;
+}
+
+/**
+ * A job title that both the user's saved context and this source name.
+ *
+ * A generic vocabulary of titles, not one person's job: the role is only
+ * claimed when the user's own material and the fetched page agree on it, so it
+ * stays evidence-backed rather than assumed.
+ */
+function findCorroboratedRole(contextText: string, sourceText: string): string | null {
+  const titles = [
+    "executive director", "managing director", "creative director", "director",
+    "chief executive", "president", "founder", "owner", "partner",
+    "principal", "superintendent", "head teacher", "teacher", "professor", "instructor",
+    "program manager", "project manager", "product manager", "general manager", "manager",
+    "supervisor", "coordinator", "administrator", "officer",
+    "software engineer", "engineer", "developer", "designer", "architect",
+    "analyst", "consultant", "strategist", "specialist", "technician",
+    "producer", "editor", "writer", "photographer",
+    "nurse", "physician", "therapist", "paramedic",
+    "accountant", "controller", "bookkeeper",
+    "volunteer", "board member", "trustee",
+  ];
+  // Longest first, so "executive director" wins over "director".
+  for (const title of [...titles].sort((a, b) => b.length - a.length)) {
+    if (contextText.includes(title) && sourceText.includes(title)) {
+      return title.replace(/\b\w/g, (letter) => letter.toUpperCase());
+    }
+  }
+  return null;
 }
