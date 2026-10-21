@@ -15,10 +15,27 @@ export type FollowUpBucket = "nudge" | "notes" | "week" | "awaiting";
 export type BucketFeedback = {
   conversationStatus?: string;
   followUpDate?: string;
+  // What was learned in the conversation. A feedback record can carry any of
+  // these, so checking only a few of them tells people to write up a
+  // conversation they already wrote up.
   marketSignals?: string;
   newLeads?: string;
   laneImpact?: string;
   note?: string;
+  compensationSignal?: string;
+  workModelSignal?: string;
+  cultureSignal?: string;
+  hiringSignal?: string;
+  warnings?: string;
+  // Deliberately NOT counted below: decisionReason, nextAction and
+  // promisedFollowUp. A reason for a triage decision, or an obligation taken
+  // on, is not a record of what the conversation said. Counting them would
+  // clear the prompt while the conversation really is uncaptured - verified
+  // against live data on 2026-10-21, where a contact marked Met carried only
+  // decisionReason "Need to reach out for a follow up date".
+  decisionReason?: string;
+  nextAction?: string;
+  promisedFollowUp?: string;
 };
 
 export type BucketPerson = {
@@ -42,7 +59,18 @@ export function needsNudge(feedback: BucketFeedback | undefined, today: string) 
 
 /** Conversation substance written into the feedback record itself. */
 export function feedbackHasConversationContent(feedback: BucketFeedback | undefined) {
-  return Boolean(feedback && (feedback.marketSignals || feedback.newLeads || feedback.laneImpact || feedback.note));
+  if (!feedback) return false;
+  return Boolean(
+    feedback.note ||
+      feedback.marketSignals ||
+      feedback.newLeads ||
+      feedback.laneImpact ||
+      feedback.compensationSignal ||
+      feedback.workModelSignal ||
+      feedback.cultureSignal ||
+      feedback.hiringSignal ||
+      feedback.warnings,
+  );
 }
 
 /**

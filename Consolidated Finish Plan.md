@@ -77,15 +77,36 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
      of a resolved obligation anywhere in `strategic-state.ts`: any outcome carrying a promised
      follow-up or due date is an obligation forever. Closing this needs somewhere to record that an
      obligation was met or dropped, which is new persistence, not a scoring change.
-3. **Eric Kidd's June conversation** — unresolved. Six conversation records exist, five were ever
-   displayed. The full list now shows every record so this can be identified or shown absent.
+3. ~~**Eric Kidd's June conversation**~~ **RESOLVED 2026-10-21 — not a bug.** The founder queried
+   Supabase directly. Both Eric Kidd records are `network_feedback`; there is no
+   `conversation_outcome` for him at all, and the six conversation records belong to other people.
+   Every content field on the 2026-09-14 record is empty - `note`, `marketSignals`, `newLeads`,
+   `compensationSignal`, `workModelSignal`, `cultureSignal`, `hiringSignal`, `warnings`,
+   `promisedFollowUp` - and the only text anywhere is `decisionReason`, "Need to reach out for a
+   follow up date." The notes were never written, so "Met - capture notes" was correct and nothing
+   was lost. The record looks like a status and triage update saved through the old combined form,
+   which is the confusion the 2026-10-21 quick-capture change addresses.
+
+   Worth recording: the proposed fix before seeing the data was to widen the content predicate to
+   every text field. That would have cleared the prompt on the strength of a triage reason and
+   asserted a conversation was captured when none was - the same failure class this gate exists to
+   remove. Asking for the data first prevented it.
 4. **Duplicate conversation records** — a raw upload and its structured extraction both count
    (the Vince Berk pair), so a logged-conversations count can overstate.
-5. **Corrections are not read everywhere** — contact corrections apply on Connections and Follow Up;
+5. **The feedback content predicate was too narrow** — fixed 2026-10-21 as a separate, real gap
+   found while investigating the above: `feedbackHasConversationContent` checked 4 of the 9 fields
+   that carry conversation content, so someone who recorded only a hiring or compensation signal was
+   still told to capture notes. It now counts all nine and deliberately excludes `decisionReason`,
+   `nextAction` and `promisedFollowUp`, because a triage reason or an obligation is not a record of
+   what was said.
+6. **Corrections are not read everywhere** — contact corrections apply on Connections and Follow Up;
    weekly strategy propagation and evidence re-analysis still read the extracted name.
-6. **Mis-parsed contact titles at import** — Eric Kidd renders as "Managing Director, Custom Software
-   at Senior Lead Programmer, Managing Directo"; title and company appear swapped and truncated.
-7. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
+7. **Mis-parsed contact titles at import** — confirmed in the stored data 2026-10-21: Eric Kidd's
+   record holds `contactTitle` "Managing Director, Custom Software" and `contactOrganization`
+   "Senior Lead Programmer, Managing Directo", which are swapped, and the organization value is
+   exactly 40 characters, cut mid-word. No 40-character cap exists anywhere in this codebase, so the
+   truncation most likely arrived with the import source; the swap is still ours to trace.
+8. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
    capture a conversation there at all.
 
 ### B. Phase 5 — de-founder pass (beta-blocking, barely started)

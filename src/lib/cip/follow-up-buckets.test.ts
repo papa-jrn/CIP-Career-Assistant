@@ -128,4 +128,34 @@ describe("feedbackHasConversationContent", () => {
     expect(feedbackHasConversationContent(undefined)).toBe(false);
     expect(feedbackHasConversationContent(met())).toBe(false);
   });
+
+  it("counts every field that records what the conversation said", () => {
+    for (const field of [
+      "note",
+      "marketSignals",
+      "newLeads",
+      "laneImpact",
+      "compensationSignal",
+      "workModelSignal",
+      "cultureSignal",
+      "hiringSignal",
+      "warnings",
+    ]) {
+      expect(feedbackHasConversationContent(met({ [field]: "Something they told me" }))).toBe(true);
+    }
+  });
+
+  // Taken from a live record on 2026-10-21: a contact marked Met whose only
+  // text was a triage reason. Counting it would assert the conversation was
+  // captured when nothing about it was written down.
+  it("does not count a triage reason or an obligation as a captured conversation", () => {
+    expect(feedbackHasConversationContent(met({ decisionReason: "Need to reach out for a follow up date." }))).toBe(false);
+    expect(feedbackHasConversationContent(met({ nextAction: "Email him next week" }))).toBe(false);
+    expect(feedbackHasConversationContent(met({ promisedFollowUp: "Send my resume" }))).toBe(false);
+  });
+
+  it("keeps that person in the notes bucket", () => {
+    const person = { latestFeedback: met({ decisionReason: "Need to reach out for a follow up date." }) };
+    expect(actionBucket(person, TODAY)).toBe("notes");
+  });
 });
