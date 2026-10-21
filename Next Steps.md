@@ -425,6 +425,13 @@ Strategic conclusion: **stop trying to make the analysis prose smarter than a fr
 
 ## Founder-Specific Hardcoding To Remove (De-Founder Pass)
 
+**Status 2026-10-21:** every row below was re-checked against the source. All remain outstanding
+except `labor-market.ts`, whose file no longer exists, and the `data.ts` row, which is now done - the
+canned opportunities, recommendations and briefing items are deleted and `/briefing` has an honest
+empty state. One founder-specific heuristic not in this table was found: `source-analysis.ts:400`
+matches "claremont" to infer an Executive Director title. See `Consolidated Finish Plan.md` for the
+reconciled status across all planning docs and the order to finish.
+
 The app is currently tuned to exactly one user. These must go before beta:
 
 | Location | Problem | Fix |
@@ -434,8 +441,8 @@ The app is currently tuned to exactly one user. These must go before beta:
 | `src/lib/cip/advisor.ts:155-163` | `stale_question_guardrails` cite "AI coding projects" and "video/story production links" — founder biography | Keep guardrails generic ("do not re-ask what linked sources already answer"); specifics live in the user's evidence data |
 | `src/lib/cip/resume-assets.ts:370` | `inferEducation()` regex contains "dartmouth" | Parse degree/credential patterns generically |
 | `src/lib/cip/resume-assets.ts:320-333` | Skills fallback list is founder-flavored ("AI adoption", "Product strategy") | Derive from advisor positioning + evidence only; if empty, say so instead of padding |
-| `src/lib/cip/labor-market.ts:261` | "Missing skills" comes from a hardcoded list (`sql, python, analytics, stakeholder, automation, ai, product, program`) | Extract required skills from each posting description and diff against evidence tokens |
-| `src/lib/cip/data.ts:97-147` | Canned opportunities/recommendations/briefing items are the founder's profile rendered as app output ("Remote SaaS company, match: 91") | Delete; users must only ever see data derived from their own inputs |
+| ~~`src/lib/cip/labor-market.ts:261`~~ **obsolete - file removed** | "Missing skills" comes from a hardcoded list (`sql, python, analytics, stakeholder, automation, ai, product, program`) | Extract required skills from each posting description and diff against evidence tokens |
+| ~~`src/lib/cip/data.ts:97-147`~~ **DONE 2026-10-21** | Canned opportunities/recommendations/briefing items are the founder's profile rendered as app output ("Remote SaaS company, match: 91") | Deleted. `/briefing`'s no-snapshot branch now states that no briefing exists yet and what produces one |
 | `src/lib/cip/network-intelligence.ts:1052` | System prompt encodes the founder's org context (BNI/Rotary rules written from his chapters) | Generalize to an org-type rule: relationship groups are context pools, not employers; require named-person evidence |
 
 Model note: every pass defaults to `gpt-4.1-mini`. For beta, decide per-task model tiers — the "senior career strategist" synthesis passes should not run on the cheapest tier while the app charges money or asks for trust.

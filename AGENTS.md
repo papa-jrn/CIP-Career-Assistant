@@ -45,6 +45,9 @@ This is an **Astro** app (SSR), not Next.js. Ignore any prior instruction to rea
 
 ## Decision log (read before large changes)
 Significant product decisions live in repo-root markdown, not just code:
+- `Consolidated Finish Plan.md` — **start here.** Reconciles every plan below against the code
+  (2026-10-21): what is built, what is outstanding, and the order to finish. Keep it updated as work
+  lands.
 - `career_intelligence_platform_project_plan.md` — the master plan.
 - `Next Steps.md` — Rounds 1–3 (incl. the Autumn 2026 loop-failure diagnosis + repair).
 - `Project Plan Autumn 2026.md` — the phased restart.

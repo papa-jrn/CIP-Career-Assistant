@@ -36,6 +36,9 @@ target workspace slice 1 (read-only dossier cards).
 page, the Workbench action loop with durable outcomes, goal-to-strategy synthesis, lane continuity.
 Founder accepted the visual slice on 2026-10-21 with the composite-artifact limitation recorded.
 
+**Integrity (2026-10-21)** — the canned `data.ts` content is deleted and `/briefing` has an honest
+empty state; the first item of section 2A is closed.
+
 **People (2026-10-21)** — "met but not logged" fixed, user-correctable conversation contacts, every
 saved conversation reachable for correction, Connections leading with the conversation loop,
 compressed follow-up cards, one capture form with the detailed form behind a toggle.
@@ -46,11 +49,12 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
 
 ### A. Integrity bugs — the app currently says things that are not true
 
-1. **Canned founder content renders live.** `src/lib/cip/data.ts:142` exports `briefingItems`, four
-   hardcoded strategy lines written from the founder's profile, and `src/pages/briefing.astro:407`
-   renders them to every user as app output. `opportunities` (match: 91, "Remote SaaS company") and
-   `recommendations` in the same file are dead exports but still present. *Verified.* This is the
-   single clearest violation of "no fabricated data presented as real" still in the product.
+1. ~~**Canned founder content renders live.**~~ **DONE 2026-10-21.** `briefingItems`,
+   `opportunities` and `recommendations` are deleted from `data.ts`, and `/briefing`'s no-snapshot
+   branch now explains that no briefing has been generated yet and what produces one, instead of
+   rendering four hardcoded strategy lines as if CIP had written them for the reader. Verified on the
+   rendered page: the canned strings return zero matches. `data.ts` keeps `navItems` (live) and
+   `intakeQuestions` (an unused but generic question list, left in place).
 2. **Recommendation repair gate** (Workbench §8) — duplicate hospital changes, duplicate Diak
    follow-ups, raw conversation text instead of an objective, employer movement read as a
    strengthened lane, a CRNA opening in founder guidance. Concrete lead found 2026-10-21:
@@ -141,9 +145,9 @@ organization map beyond slice 1, Phase 11 evidence-to-outreach briefs (only
 
 Sequenced so each step makes the next safer, and so nothing ships on top of something known to lie.
 
-**Step 1 — Stop the product asserting false things.** (A1, A2, A4, A5)
-Delete the canned `data.ts` content and give `/briefing` real derived guidance or an honest empty
-state. Then the recommendation repair gate, starting from the exact-title dedupe lead. Then the
+**Step 1 — Stop the product asserting false things.** (A1 done, A2, A4, A5 remain)
+~~Delete the canned `data.ts` content and give `/briefing` an honest empty state.~~ Done 2026-10-21.
+Next: the recommendation repair gate, starting from the exact-title dedupe lead. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

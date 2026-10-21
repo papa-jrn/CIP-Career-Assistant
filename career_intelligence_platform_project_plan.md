@@ -1,4 +1,11 @@
 # Career Intelligence Platform (CIP)
+
+> **Status pointer (2026-10-21):** this master plan predates the Autumn 2026 restart. For what is
+> actually built, what is outstanding, and the order to finish it, read
+> [Consolidated Finish Plan.md](Consolidated%20Finish%20Plan.md), which reconciles this document,
+> the Autumn plan, the baseline, Next Steps, the Employers/Opportunities Rethink and the Workbench
+> Redesign Plan against the current code.
+
 ## Project Planning Document
 
 ### Version

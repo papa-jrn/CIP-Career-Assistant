@@ -1,7 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Icon from "../components/Icon.astro";
-import { briefingItems } from "../lib/cip/data";
 import { loadJobSearchConfig } from "../lib/cip/job-search-config";
 import { loadDueState, loadLatestRunView, type RunView } from "../lib/cip/job-search-run";
 import { renderJobSearchSummary } from "../lib/cip/job-search-view";
@@ -403,12 +402,22 @@ function movementClass(direction: string) {
           ))}
         </div>
       ) : (
-        <div class="mt-6 grid gap-4">
-          {briefingItems.map((item) => (
-            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
-              <p class="text-sm leading-6 text-[var(--muted)]">{item}</p>
-            </article>
-          ))}
+        <div class="mt-6 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+          <h2 class="text-lg font-semibold">No briefing has been generated yet.</h2>
+          <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            A briefing reports what moved since the last one: lanes that strengthened or weakened,
+            employers worth a second look, follow-ups coming due, and the few actions worth doing
+            next. It is built from your own saved work, so there is nothing to report until there is
+            something to compare.
+          </p>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            Add your experience and evidence, capture a conversation, or save employers to watch.
+            Once a first snapshot exists, each new one is measured against the one before it.
+          </p>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <a class="cip-fancy-button" href="/workbench"><span>Go to your Workbench</span></a>
+            <a class="cip-fancy-button cip-fancy-button-secondary" href="/network"><span>Capture a conversation</span></a>
+          </div>
         </div>
       )}
     </section>

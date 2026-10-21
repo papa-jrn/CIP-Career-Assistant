@@ -1,5 +1,9 @@
 # Productionization & Launch Discussion
 
+> **Status pointer (2026-10-21):** the launch gates discussed here are collected, with the rest of
+> the outstanding work and a finish order, in
+> [Consolidated Finish Plan.md](Consolidated%20Finish%20Plan.md) section 2G.
+
 ### Status
 Draft for discussion — set 2026-06-30. Not a commitment; a working document to return to.
 Companion to `career_intelligence_platform_project_plan.md` (which owns the *product* decisions).
