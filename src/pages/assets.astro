@@ -670,13 +670,47 @@ function normalizeLane(value: string) {
     document.querySelector("[data-export-pdf]")?.addEventListener("click", () => {
       if (!confirmExportIsReal()) return;
       captureActiveFromDom();
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
-      if (!printWindow) return;
-      printWindow.document.write(`<!doctype html><html><head><title>Resume</title><style>${printStyles()}</style></head><body>${buildResumeHtml()}</body></html>`);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      printResume();
     });
+
+    // This used to open a pop-up with window.open("", "_blank",
+    // "noopener,noreferrer"). Those options make window.open return null, so
+    // the handler hit its own null guard and the button silently did nothing.
+    // Printing from a hidden iframe avoids the pop-up blocker entirely, so it
+    // also works for users who block pop-ups.
+    function printResume() {
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.setAttribute("title", "Resume print preview");
+      frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+      document.body.appendChild(frame);
+
+      const doc = frame.contentDocument;
+      if (!doc || !frame.contentWindow) {
+        frame.remove();
+        showGenerateStatus("Could not open the print view. Try Export .doc instead.", "error");
+        return;
+      }
+
+      doc.open();
+      doc.write(`<!doctype html><html><head><title>Resume</title><style>${printStyles()}</style></head><body>${buildResumeHtml()}</body></html>`);
+      doc.close();
+
+      const cleanUp = () => frame.remove();
+      frame.contentWindow.addEventListener("afterprint", cleanUp, { once: true });
+
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch {
+        cleanUp();
+        showGenerateStatus("Your browser would not open the print dialog. Try Export .doc instead.", "error");
+        return;
+      }
+
+      // afterprint does not fire everywhere; drop the frame regardless.
+      window.setTimeout(cleanUp, 60000);
+    }
 
     function getResumeData() {
       // Build from the active lane's in-memory draft (kept current by

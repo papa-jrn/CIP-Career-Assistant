@@ -718,3 +718,29 @@ Process note worth keeping: the previous two fixes were verified with unit tests
 page render. The signed-out page cannot show conversation data at all, so a display change shipped
 without ever being looked at. Where a change alters what signed-in data looks like, simulate the real
 stored shapes through the real functions and read the output, or ask the founder for a sample.
+
+## Fixed 2026-10-21: the resume Print / PDF button did nothing
+
+Founder reviewed the de-foundered data, generated a new resume, and found the Print / PDF button
+non-functional.
+
+Cause: the handler called `window.open("", "_blank", "noopener,noreferrer")`. Those options make
+`window.open` return `null` - the opener reference is exactly what they sever - so the very next
+line, `if (!printWindow) return;`, bailed every time. The button had never worked from the moment
+those options were added, and failed silently because the guard returned without saying anything.
+
+Verified in a browser rather than reasoned about: `window.open("", "_blank", "noopener,noreferrer")`
+returned `null`, including from inside a real click handler.
+
+Fixed by not using a pop-up at all. The resume now prints from a hidden iframe, which the pop-up
+blocker is not involved in, so it also works for users who block pop-ups - a failure this code could
+never have distinguished from the bug. The frame is removed on `afterprint`, with a timeout fallback
+because that event does not fire everywhere, and a failure to open the print dialog now says so and
+points at Export .doc instead of failing silently.
+
+Verified by running the shipped logic in the browser pane, in the same environment where the pop-up
+path returned null: the iframe document was created, the resume markup written and readable, the
+title set, and `print()` available. The print dialog itself cannot be exercised there, so the founder
+should confirm the dialog opens with the resume in it.
+
+Noted: no other `window.open` call in the pages carries these options.
