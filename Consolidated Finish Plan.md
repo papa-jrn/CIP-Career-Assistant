@@ -77,20 +77,45 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
      of a resolved obligation anywhere in `strategic-state.ts`: any outcome carrying a promised
      follow-up or due date is an obligation forever. Closing this needs somewhere to record that an
      obligation was met or dropped, which is new persistence, not a scoring change.
-3. ~~**Eric Kidd's June conversation**~~ **RESOLVED 2026-10-21 — not a bug.** The founder queried
+3. ~~**Eric Kidd's June conversation**~~ **RESOLVED 2026-10-21 — it was saved, and orphaned.**
+   **The conclusion first recorded here was wrong and is corrected below.** The conversation had
+   been saved in June as a `conversation_outcome` record with no contact name. Nothing displayed it:
+   the recent-conversations list showed only five records and the queue drops outcomes named
+   "Unknown contact", so a record attached to nobody was unreachable from every surface. It surfaced
+   only once the "Every saved conversation" section listed records regardless of age and the list
+   stopped being capped at five. The founder identified it on 2026-10-21 from a
+   "Contact not identified — saved 6/15/2026" row.
+
+   Root cause: extraction failed to name the contact at capture time, and nothing in the product
+   ever showed a record that had no contact. The notes were never lost; they were invisible.
+   Remaining: the founder re-entered the conversation on 2026-10-21, so two records now describe it
+   (the June original, unnamed, and today's re-entry dated 6/12). Naming the original and removing
+   one is user work, and there is currently **no way to delete a saved conversation from the UI** -
+   an open gap.
+
+   The earlier reasoning, kept because the mistake is instructive: The founder queried
    Supabase directly. Both Eric Kidd records are `network_feedback`; there is no
    `conversation_outcome` for him at all, and the six conversation records belong to other people.
    Every content field on the 2026-09-14 record is empty - `note`, `marketSignals`, `newLeads`,
    `compensationSignal`, `workModelSignal`, `cultureSignal`, `hiringSignal`, `warnings`,
    `promisedFollowUp` - and the only text anywhere is `decisionReason`, "Need to reach out for a
-   follow up date." The notes were never written, so "Met - capture notes" was correct and nothing
-   was lost. The record looks like a status and triage update saved through the old combined form,
-   which is the confusion the 2026-10-21 quick-capture change addresses.
+   follow up date." That much was accurate: those two feedback records carried no conversation
+   content, and "Met - capture notes" was correct for them.
+
+   The error was generalising from it. Having checked `network_feedback` and found nothing, the
+   conclusion drawn was "the notes were never written" - a claim about all of storage, from a query
+   covering one source type and one name. The June record was a `conversation_outcome` with no
+   contact name, so a search by contact name could not have found it either. The lesson: when a
+   query comes back empty, say what the query covered, not what exists.
 
    Worth recording: the proposed fix before seeing the data was to widen the content predicate to
    every text field. That would have cleared the prompt on the strength of a triage reason and
    asserted a conversation was captured when none was - the same failure class this gate exists to
-   remove. Asking for the data first prevented it.
+   remove. Asking for the data first prevented it, and the widened-but-bounded predicate that
+   shipped instead is still right.
+
+   The orphaned record is also the strongest argument for the "Every saved conversation" section:
+   the data-cleanup work surfaced a record that had been unreachable for four months.
 4. ~~**Duplicate conversation records**~~ **INVESTIGATED AND FIXED 2026-10-21 — the bug was the
    reverse of the one assumed.** The suspicion was over-counting: a save writes to both the
    `conversation_outcomes` table and an additive `career_sources` record, and `loadStrategicState`
@@ -135,7 +160,11 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
    "Senior Lead Programmer, Managing Directo", which are swapped, and the organization value is
    exactly 40 characters, cut mid-word. No 40-character cap exists anywhere in this codebase, so the
    truncation most likely arrived with the import source; the swap is still ours to trace.
-8. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
+8. **No way to delete a saved conversation** — found 2026-10-21 when an orphaned June record was
+   recovered and duplicated by a re-entry. Records are additive by design, which is right, but a
+   user who ends up with two records of one conversation has no way to resolve it. Needs a deliberate
+   user-confirmed removal, or a merge, rather than silent deduplication.
+9. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
    capture a conversation there at all.
 
 ### B. Phase 5 — de-founder pass (beta-blocking, barely started)
