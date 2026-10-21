@@ -595,3 +595,12 @@ Noted while working, not fixed: the Follow Ups capture forms are gated behind a 
 user with no imported network cannot capture a conversation there at all. Contact titles from import
 can be mis-parsed - Eric Kidd renders as "Managing Director, Custom Software at Senior Lead
 Programmer, Managing Directo", title and company apparently swapped and truncated. Both are open work.
+
+## Consolidated status - 2026-10-21
+
+`Consolidated Finish Plan.md` reconciles this plan against the Autumn phases, the Rethink, the
+baseline, and the current code. From this document specifically, still outstanding: the section 10
+step 4 imported-job slice (a stated precondition for calling the redesign complete), the section 8
+recommendation repair gate, the People route consolidation, extracting the import block so first use
+can lead with it, and the open acceptance work - first use on an empty account, an induced analysis
+failure and retry, and screen-reader testing.

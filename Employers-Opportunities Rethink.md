@@ -1540,6 +1540,15 @@ save (the EIN write retries without it) but a 990-discovered candidate's EIN is 
 
 ### Next, in order
 
+**Reconciled 2026-10-21:** items 4's chips/action-tracking/employer-resolution and the §14 target
+workspace slice 1 are built (see the dated entries above), as are lane-aware discovery, parent-org
+dedupe, and ProPublica 990 discovery *and* enrichment. Still outstanding here: the two live
+acceptance passes (item 1), each target's real career-page URL (item 3), the rest of the target
+workspace including local-area business discovery, and item 5's de-founder and state-layer work -
+which `Consolidated Finish Plan.md` confirms has barely started and is beta-blocking. The hosted
+migrations listed below are still unapplied, so the 990 and disposition features do not work on
+hosted Supabase.
+
 1. **Two live acceptance passes** (§15.3): establish a baseline run, change a constraint or add evidence, run again, and trace the change
    through brief, search, saved observations, and the visible result. Include a successful-zero-result and a simulated-failure path.
 2. ~~**Step 4: posting identity across runs** and re-verification of earlier finds each run (no model call).~~ **DONE 2026-09-30** — carry-forward + robots-block messaging (see the 2026-09-30 entry above).

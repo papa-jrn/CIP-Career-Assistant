@@ -4,9 +4,20 @@
 
 Workbench Redesign Plan.md section 12 now records the approved consolidation: Workbench (Overview, My work, Opportunities, What changed), Your direction (existing Intake, Evidence, Career Lanes), People (Connections and compact expandable Follow-ups), and Employers. Briefing joins Workbench; the useful Executive Summary moves there; Report becomes an optional snapshot export after content inventory. Both job-first and employer-first paths are supported, and nonprofit discovery follows general geographic employer discovery. Remaining technical/visual decisions are in section 13. Planning only; implementation remains pending.
 
+**Update 2026-10-21:** this navigation consolidation is implemented, along with the purple visual
+system, the public landing page, the Workbench action loop, and the People compression and capture
+work. The imported-job slice and the People route consolidation remain. See
+`Consolidated Finish Plan.md` for the reconciled status.
+
 ## Current sequencing - 2026-10-19
 
 The founder-approved next product slice is documented in [Workbench Redesign Plan.md](Workbench%20Redesign%20Plan.md): a Workbench centered on capture, persistent actions, strategy updates, and contextual returns from Process pages, serving both onboarding and repeated use. Preserve Intake, deeper Evidence questions, and Career Lanes. Include user-supplied jobs with source verification and a separate personal-fit recommendation. Repair observed recommendation issues before elevating the queue. This is a plan, not implemented functionality; prior integrity and beta obligations remain.
+
+**Update 2026-10-21:** substantially implemented — see the dated entries in
+`Workbench Redesign Plan.md`. Still outstanding from this slice: the user-supplied job import with
+separate fit evaluation, and the recommendation repair gate. Both are tracked in
+`Consolidated Finish Plan.md`, which also records that Phases 5 (de-founder) and 6 (state-layer
+tests) remain outstanding and beta-blocking.
 
 
 Last updated: 2026-09-23

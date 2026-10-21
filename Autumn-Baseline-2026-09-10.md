@@ -141,8 +141,17 @@ that failed in August.
   baseline script reading two accounts (see correction above). Gate dropped; no multi-profile
   work needed before Phase 2.
 - ~~Milestone 1 end-to-end proof~~ — passed on live data 2026-09-11 (see smoke test below).
-- Phase 2 (structured conversation outcomes), Phase 3 (propagation), Phase 4 (diff
-  briefing), Phase 5 (de-founder pass), Phase 6 (wider test coverage).
+- ~~Phase 2 (structured conversation outcomes)~~ — complete and smoke tested; see that phase's
+  Autumn 2026 Status block.
+- ~~Phase 3 (propagation)~~ / ~~Phase 4 (diff briefing)~~ — built across two slices each and in use;
+  both status blocks still read "Started" and list small remaining slices, so neither is formally
+  closed.
+- Phase 5 (de-founder pass) and Phase 6 (wider test coverage) remain outstanding and are still
+  beta-blocking. Verified against the source on 2026-10-21: the founder-specific heuristics are
+  still in `advisor.ts`, `resume-assets.ts`, `network-intelligence.ts` and `source-analysis.ts`, and
+  the canned `data.ts` briefing items still render on `/briefing`.
+
+See `Consolidated Finish Plan.md` (2026-10-21) for the reconciled status across all planning docs.
 
 ## Root Cause Addendum — The Dead Buttons (confirmed 2026-09-11 22:xx)
 
