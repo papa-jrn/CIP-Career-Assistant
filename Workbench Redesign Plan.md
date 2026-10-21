@@ -444,3 +444,51 @@ work for the People slice.
 Verification: typecheck clean, 477 tests passing (459 + 18 new), SSR build passed. Founder live pass
 on the running app still to come. This is the focused bug fix only; the People consolidation
 (compact Connections/Follow-ups with expandable details) remains the next slice.
+
+## Implemented 2026-10-21: correct the contact on a saved conversation
+
+Founder decision: extraction is useful but not always right, so the user must be able to adjust what
+it recorded. Found live - a note opening "Notes with Vince Berk" was stored with contactName
+"Unknown contact", and follow-up.astro drops outcomes named "Unknown contact" when building queue
+contacts, so that conversation never reached Vince Berk's card at all. It was visible on Connections
+as a nameless signal and invisible to People: not counted in his logged-conversations badge and
+unable to clear his notes prompt.
+
+Two causes, both dated. The deterministic fallback `contactNameFromNote` was added in e93aa32, after
+that August record was saved, so nothing attempted recovery at the time. It would not have caught it
+regardless: the pattern matches conversation/call/chat/met, and the note opens with "Notes with",
+while "since we chatted" fails because the pattern requires whitespace immediately after "chat".
+Today the name would instead fall through to the filename, producing "Notes with Vince Berk.docx" as
+a person's name - not the placeholder, but not a person either, and rejected from the queue by
+`isLikelyPersonName` for containing a period. Still orphaned, less visibly.
+
+Correction, not overwrite. `src/lib/cip/conversation-corrections.ts` stores a correction as its own
+`conversation_contact_correction` record naming the conversation's career_sources row id, applied
+when the conversation is read. The saved outcome keeps what extraction derived, so what the system
+read and what the user corrected stay distinguishable, and the card says "Contact set by you,
+replacing X". This follows the additive-persistence convention rather than editing the original
+record. The newest correction per conversation wins; superseded ones are retained, not deleted. A
+correction that omits organization or title leaves what was recorded alone rather than erasing it.
+
+`hasUnknownContact` treats both the "Unknown contact" placeholder and a filename that fell through
+as unidentified, so the card asks who the conversation was with instead of presenting either as a
+person. The form opens by default on those records and is available, collapsed, on every other
+conversation.
+
+Endpoint `POST /api/network/contact-correction` is same-origin guarded, authenticates before writing,
+Zod-validates with a name length cap, body-size capped, and confirms the target row belongs to the
+signed-in user and is a conversation record before storing anything - another user's row is a plain
+404. The return path is rejected unless it is an in-app path. Corrections are applied on both
+Connections and Follow-up, so a corrected conversation joins that person's queue card and counts
+toward their logged conversations.
+
+Known limitation, recorded not hidden: corrections are applied where these two pages read
+conversations. Other consumers that read the stored outcome directly - weekly strategy propagation,
+evidence re-analysis - still see the extracted name until they are routed through the same
+application step. The correction record exists and is not lost; it is simply not yet read everywhere.
+Widening the deterministic name patterns at capture time is separate, still-open work; it would
+reduce how often a correction is needed but cannot repair records already saved.
+
+Verification: typecheck clean, 499 tests passing (477 + 22 new), SSR build passed. Founder live pass
+on the running app still to come, including correcting the Vince Berk record and confirming it
+reaches his follow-up card.

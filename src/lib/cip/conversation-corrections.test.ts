@@ -1,0 +1,110 @@
+import { describe, expect, it } from "vitest";
+import { buildConversationOutcome } from "./conversation-outcomes";
+import {
+  applyContactCorrections,
+  contactCorrectionPayload,
+  hasUnknownContact,
+  parseContactCorrection,
+  type ContactCorrection,
+} from "./conversation-corrections";
+
+function conversation(id: string, contactName: string, extra = {}) {
+  return { id, outcome: buildConversationOutcome({ contactName, ...extra }) };
+}
+
+function correction(extra: Partial<ContactCorrection> = {}): ContactCorrection {
+  return { targetId: "row-1", contactName: "Vince Berk", correctedAt: "2026-10-21T10:00:00.000Z", ...extra };
+}
+
+describe("hasUnknownContact", () => {
+  it("flags the placeholder extraction writes when it finds no name", () => {
+    expect(hasUnknownContact(buildConversationOutcome({ contactName: "Unknown contact" }))).toBe(true);
+    expect(hasUnknownContact(buildConversationOutcome({}))).toBe(true);
+  });
+
+  it("flags a filename that fell through as if it were a person", () => {
+    expect(hasUnknownContact(buildConversationOutcome({ contactName: "Notes with Vince Berk.docx" }))).toBe(true);
+    expect(hasUnknownContact(buildConversationOutcome({ contactName: "call-summary.TXT" }))).toBe(true);
+  });
+
+  it("accepts a real name", () => {
+    expect(hasUnknownContact(buildConversationOutcome({ contactName: "Vince Berk" }))).toBe(false);
+  });
+});
+
+describe("parseContactCorrection", () => {
+  it("reads a stored correction", () => {
+    const stored = JSON.stringify(contactCorrectionPayload(correction({ contactOrganization: "Quine" })));
+    const parsed = parseContactCorrection(stored, "2026-10-21T11:00:00.000Z");
+    expect(parsed).toMatchObject({ targetId: "row-1", contactName: "Vince Berk", contactOrganization: "Quine" });
+  });
+
+  it("falls back to the row's created_at when the payload has no timestamp", () => {
+    const stored = JSON.stringify({ correction: { targetId: "row-1", contactName: "Vince Berk" } });
+    expect(parseContactCorrection(stored, "2026-10-21T11:00:00.000Z")?.correctedAt).toBe("2026-10-21T11:00:00.000Z");
+  });
+
+  it("rejects records that cannot identify a conversation or a person", () => {
+    expect(parseContactCorrection(null, "now")).toBeNull();
+    expect(parseContactCorrection("not json", "now")).toBeNull();
+    expect(parseContactCorrection(JSON.stringify({ correction: { targetId: "row-1" } }), "now")).toBeNull();
+    expect(parseContactCorrection(JSON.stringify({ correction: { contactName: "Vince Berk" } }), "now")).toBeNull();
+    expect(parseContactCorrection(JSON.stringify({ correction: { targetId: " ", contactName: " " } }), "now")).toBeNull();
+  });
+});
+
+describe("applyContactCorrections", () => {
+  it("replaces the name on the conversation that was corrected", () => {
+    const [corrected] = applyContactCorrections([conversation("row-1", "Unknown contact")], [correction()]);
+    expect(corrected.outcome.contactName).toBe("Vince Berk");
+    expect(corrected.correctedAt).toBe("2026-10-21T10:00:00.000Z");
+  });
+
+  it("keeps what extraction originally recorded, so the correction is auditable", () => {
+    const [corrected] = applyContactCorrections([conversation("row-1", "Unknown contact")], [correction()]);
+    expect(corrected.extractedContactName).toBe("Unknown contact");
+  });
+
+  it("leaves other conversations untouched", () => {
+    const corrected = applyContactCorrections(
+      [conversation("row-1", "Unknown contact"), conversation("row-2", "Alex Herzog")],
+      [correction()],
+    );
+    expect(corrected[1].outcome.contactName).toBe("Alex Herzog");
+    expect(corrected[1].correctedAt).toBeUndefined();
+  });
+
+  it("does not erase an organization or title the correction did not mention", () => {
+    const stored = conversation("row-1", "Unknown contact", { contactOrganization: "Quine", contactTitle: "CTO" });
+    const [corrected] = applyContactCorrections([stored], [correction()]);
+    expect(corrected.outcome.contactOrganization).toBe("Quine");
+    expect(corrected.outcome.contactTitle).toBe("CTO");
+  });
+
+  it("applies an organization when the correction supplies one", () => {
+    const stored = conversation("row-1", "Unknown contact", { contactOrganization: "Quine" });
+    const [corrected] = applyContactCorrections([stored], [correction({ contactOrganization: "Hypertherm" })]);
+    expect(corrected.outcome.contactOrganization).toBe("Hypertherm");
+  });
+
+  it("lets a later correction supersede an earlier one without deleting it", () => {
+    // Corrections arrive newest-first, as the career_sources query returns them.
+    const corrections = [
+      correction({ contactName: "Vince Berk", correctedAt: "2026-10-21T12:00:00.000Z" }),
+      correction({ contactName: "Vincent Burke", correctedAt: "2026-10-20T09:00:00.000Z" }),
+    ];
+    const [corrected] = applyContactCorrections([conversation("row-1", "Unknown contact")], corrections);
+    expect(corrected.outcome.contactName).toBe("Vince Berk");
+  });
+
+  it("returns conversations unchanged when there are no corrections", () => {
+    const corrected = applyContactCorrections([conversation("row-1", "Alex Herzog")], []);
+    expect(corrected[0].outcome.contactName).toBe("Alex Herzog");
+    expect(corrected[0].correctedAt).toBeUndefined();
+  });
+
+  it("ignores a correction that points at a conversation that is not loaded", () => {
+    const corrected = applyContactCorrections([conversation("row-1", "Alex Herzog")], [correction({ targetId: "row-9" })]);
+    expect(corrected[0].outcome.contactName).toBe("Alex Herzog");
+  });
+});

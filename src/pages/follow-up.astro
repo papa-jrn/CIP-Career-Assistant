@@ -7,6 +7,13 @@ import {
   signalTypes,
   type ConversationOutcome,
 } from "../lib/cip/conversation-outcomes";
+import {
+  applyContactCorrections,
+  CONTACT_CORRECTION_SOURCE_TYPE,
+  parseContactCorrection,
+  type ContactCorrection,
+  type StoredConversation,
+} from "../lib/cip/conversation-corrections";
 import { actionBucket, needsNudge, outcomeHasLoggedConversation } from "../lib/cip/follow-up-buckets";
 import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
@@ -119,6 +126,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         { data: importRows, error: importError },
         { data: feedbackRows, error: feedbackError },
         { data: conversationRows, error: conversationError, count: notesCount },
+        { data: correctionRows },
       ] = await Promise.all([
         supabase
           .from("career_sources")
@@ -143,11 +151,18 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .limit(300),
         supabase
           .from("career_sources")
-          .select("extracted_text, created_at", { count: "exact" })
+          .select("id, extracted_text, created_at", { count: "exact" })
           .eq("user_id", user.id)
           .eq("source_type", "conversation_outcome")
           .order("created_at", { ascending: false })
           .limit(120),
+        supabase
+          .from("career_sources")
+          .select("extracted_text, created_at")
+          .eq("user_id", user.id)
+          .eq("source_type", CONTACT_CORRECTION_SOURCE_TYPE)
+          .order("created_at", { ascending: false })
+          .limit(200),
       ]);
 
       if (analysisError) loadError = analysisError.message;
@@ -159,9 +174,18 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         .map((row) => parseNetworkAnalysis(row.extracted_text ?? null))
         .filter(Boolean) as NetworkAnalysis[];
       const importedContacts = (importRows ?? []).flatMap((row) => parseNetworkImportContacts(row.extracted_text ?? null));
-      const conversationOutcomes = (conversationRows ?? [])
-        .map((row) => parseSavedConversationOutcome(row.extracted_text, row.created_at))
-        .filter(Boolean) as ConversationOutcome[];
+      const storedConversations = (conversationRows ?? [])
+        .map((row) => {
+          const outcome = parseSavedConversationOutcome(row.extracted_text, row.created_at);
+          return outcome ? { id: String(row.id), outcome } : null;
+        })
+        .filter(Boolean) as StoredConversation[];
+      const contactCorrections = (correctionRows ?? [])
+        .map((row) => parseContactCorrection(row.extracted_text, row.created_at))
+        .filter(Boolean) as ContactCorrection[];
+      const conversationOutcomes = applyContactCorrections(storedConversations, contactCorrections).map(
+        (item) => item.outcome,
+      );
       const conversationContacts = conversationOutcomes
         .map((outcome) => conversationOutcomeToContact(outcome))
         .filter(Boolean) as NetworkContact[];
