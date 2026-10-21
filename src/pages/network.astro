@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import ContactCorrectionForm from "../components/ContactCorrectionForm.astro";
 import Icon from "../components/Icon.astro";
 import {
   parseConversationOutcome,
@@ -31,6 +32,10 @@ let latestNetworkAnalysisAt: string | null = null;
 let loadError = "";
 let recentConversationNotes: Array<{ title: string | null; created_at: string }> = [];
 let recentConversationOutcomes: CorrectedConversation[] = [];
+// Conversations whose contact extraction never identified. They are reachable
+// however old they are, because an orphan nobody can see is an orphan nobody
+// can repair - and until it is repaired it reaches no one's follow-up card.
+let unidentifiedConversations: CorrectedConversation[] = [];
 let conversationNoteCount = 0;
 let strategicState: StrategicState | null = null;
 let latestConversationAt: string | null = null;
@@ -85,7 +90,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .eq("user_id", user.id)
           .eq("source_type", "conversation_outcome")
           .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(100),
         supabase
           .from("career_sources")
           .select("extracted_text, created_at")
@@ -95,7 +100,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .limit(200),
       ]);
       conversationNoteCount = noteCount ?? 0;
-      recentConversationNotes = noteRows ?? [];
+      recentConversationNotes = (noteRows ?? []).slice(0, 5);
       latestConversationAt = noteRows?.[0]?.created_at ?? null;
       const storedConversations = (noteRows ?? [])
         .map((row) => {
@@ -106,7 +111,9 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       const contactCorrections = (correctionRows ?? [])
         .map((row) => parseContactCorrection(row.extracted_text, row.created_at))
         .filter(Boolean) as ContactCorrection[];
-      recentConversationOutcomes = applyContactCorrections(storedConversations, contactCorrections);
+      const correctedConversations = applyContactCorrections(storedConversations, contactCorrections);
+      recentConversationOutcomes = correctedConversations.slice(0, 5);
+      unidentifiedConversations = correctedConversations.filter((item) => hasUnknownContact(item.outcome));
     }
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load network intelligence state.";
@@ -400,6 +407,12 @@ const networkAnalysisIsStale = Boolean(
   latestConversationAt &&
   new Date(latestConversationAt).getTime() > new Date(latestNetworkAnalysisAt).getTime(),
 );
+function excerptForMatching(value: string) {
+  const cleaned = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "These notes saved without readable text.";
+  return cleaned.length > 320 ? `${cleaned.slice(0, 319)}...` : cleaned;
+}
+
 const hasNetwork = networkCounts.imports > 0 || networkCounts.analyses > 0;
 const importedOn = latestNetworkAnalysisAt ? new Date(latestNetworkAnalysisAt).toLocaleDateString() : "";
 const networkSummary = hasNetwork
@@ -555,6 +568,41 @@ const networkSummary = hasNetwork
       <div id="loopback-result" class="mt-4" aria-live="polite"></div>
     </section>
 
+    {unidentifiedConversations.length ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Waiting for a name</p>
+        <h2 class="mt-1 text-2xl font-semibold">
+          {unidentifiedConversations.length === 1
+            ? "One saved conversation is not matched to a person"
+            : `${unidentifiedConversations.length} saved conversations are not matched to a person`}
+        </h2>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+          These notes are saved and were never lost. Reading them did not identify who you spoke to, so
+          they do not yet appear on anyone's follow-up card and cannot count as a logged conversation.
+          Name the person and each one joins their card.
+        </p>
+        <div class="mt-4 grid gap-3 lg:grid-cols-2">
+          {unidentifiedConversations.map(({ id, outcome }) => (
+            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <p class="text-xs font-semibold uppercase text-[var(--muted)]">
+                {outcome.conversationDate || (outcome.createdAt ? new Date(outcome.createdAt).toLocaleDateString() : "Date not recorded")}
+                {outcome.relatedEmployer ? ` · ${outcome.relatedEmployer}` : ""}
+              </p>
+              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+                {excerptForMatching(outcome.marketSignal || outcome.rawNoteExcerpt || outcome.newLeads || outcome.nextAction)}
+              </p>
+              <ContactCorrectionForm
+                targetId={id}
+                contactName={outcome.contactName}
+                contactOrganization={outcome.contactOrganization}
+                unknown={true}
+              />
+            </article>
+          ))}
+        </div>
+      </section>
+    ) : null}
+
     {strategicState ? (
       <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -638,46 +686,12 @@ const networkSummary = hasNetwork
                   {(outcome.marketSignal || outcome.newLeads || outcome.nextAction) ? (
                     <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{outcome.marketSignal || outcome.newLeads || outcome.nextAction}</p>
                   ) : null}
-                  <details class="mt-3" open={hasUnknownContact(outcome)}>
-                    <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
-                      {hasUnknownContact(outcome) ? "Say who this was with" : "Correct the contact"}
-                    </summary>
-                    <form
-                      class="mt-2 grid gap-2"
-                      method="post"
-                      action="/api/network/contact-correction"
-                      hx-post="/api/network/contact-correction"
-                    >
-                      <input type="hidden" name="targetId" value={id} />
-                      <input type="hidden" name="returnTo" value="/network" />
-                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
-                        Who you spoke to
-                        <input
-                          name="contactName"
-                          required
-                          maxlength="80"
-                          value={hasUnknownContact(outcome) ? "" : outcome.contactName}
-                          placeholder="Full name"
-                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
-                        />
-                      </label>
-                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
-                        Organization (optional)
-                        <input
-                          name="contactOrganization"
-                          maxlength="120"
-                          value={outcome.contactOrganization}
-                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
-                        />
-                      </label>
-                      <button type="submit" class="justify-self-start rounded-md bg-[var(--accent-strong)] px-3 py-2 text-xs font-semibold text-white">
-                        Save contact
-                      </button>
-                      <p class="text-xs leading-5 text-[var(--muted)]">
-                        Your correction is saved alongside the notes; the original reading is kept, not overwritten.
-                      </p>
-                    </form>
-                  </details>
+                  <ContactCorrectionForm
+                    targetId={id}
+                    contactName={outcome.contactName}
+                    contactOrganization={outcome.contactOrganization}
+                    unknown={hasUnknownContact(outcome)}
+                  />
                 </article>
               ))}
             </div>

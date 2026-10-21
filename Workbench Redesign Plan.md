@@ -529,3 +529,31 @@ Signed-in sections could not be exercised this way; a founder live pass remains.
 Not done here: the People consolidation itself - compact Connections/Follow-ups with expandable
 details under one People surface - plus the duplicate raw-upload versus structured-extraction records
 (the Vince Berk pair) and widening the capture-time contact-name patterns.
+
+## Fixed 2026-10-21: orphaned conversations were unreachable
+
+Founder found Eric Kidd sitting in "Met - capture notes" despite having written up that conversation,
+and asked whether the notes had been lost. The Loop back panel reports 6 saved conversation notes but
+lists only the 5 most recent, the oldest dated 2026-08-06, so at least one stored record predates
+every record the page displays. Nothing points to deletion.
+
+This exposed a gap in the correction feature shipped earlier the same day: the correction form
+appeared only on the 5 most recent conversations, so an older conversation whose contact was never
+identified could not be corrected, and therefore could never reach anyone's follow-up card. The
+repair existed but not for the records most likely to need it.
+
+Connections now loads up to 100 saved conversations rather than 5 and renders a "Waiting for a name"
+section listing every conversation whose contact is unidentified, regardless of age, each with an
+excerpt for recognition and a correction form. The section states plainly that the notes are saved and
+were never lost, that reading them did not identify the person, and that naming the person joins the
+conversation to their card. It does not appear when there are none. The correction form moved into
+`src/components/ContactCorrectionForm.astro` so the recent-signals card and this section share one
+implementation.
+
+This does not confirm what the sixth record contains or that it is the Eric Kidd conversation; it
+makes whatever is stored visible and correctable so the founder can see for themselves. If a record
+turns out to be missing rather than unnamed, that is a different problem and this change will show it.
+
+Verification: typecheck clean, 499 tests passing, SSR build passed, rendered signed-out page confirms
+the section is absent with nothing to show and the section order is unchanged. The signed-in path -
+the list actually populating - needs a founder pass; it cannot be exercised without their session.
