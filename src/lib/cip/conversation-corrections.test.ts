@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildConversationOutcome, conversationOutcomeCareerSourcePayload } from "./conversation-outcomes";
+import {
+  buildConversationOutcome,
+  conversationOutcomeCareerSourcePayload,
+  parseConversationOutcome,
+} from "./conversation-outcomes";
 import {
   applyContactCorrections,
   applyCorrectionsBySourceRef,
@@ -225,5 +229,57 @@ describe("ordering by when the conversation happened", () => {
     const given = [item("Eric Kidd", { conversationDate: "2026-06-12" }), item("Vince Berk", { conversationDate: "2026-07-30" })];
     sortByConversationRecency(given);
     expect(given.map((i) => i.id)).toEqual(["Eric Kidd", "Vince Berk"]);
+  });
+});
+
+describe("reading saved records does not invent a date", () => {
+  const TODAY = new Date().toISOString().slice(0, 10);
+
+  it("leaves a record that never stored a conversation date undated", () => {
+    // A structured summary saved before the date field was captured. Reading it
+    // used to report today, so an old conversation looked like it happened now.
+    const stored = JSON.stringify({
+      fileName: "Structured summary: Vince Berk",
+      captured_at: "2026-09-14T12:00:00.000Z",
+      structured_outcome: { contactName: "Vince Berk", marketSignal: "Large tech is contracting." },
+    });
+    const outcome = parseConversationOutcome(JSON.parse(stored))!;
+    expect(outcome.conversationDate).toBe("");
+    expect(outcome.conversationDate).not.toBe(TODAY);
+  });
+
+  it("sorts an undated record by when it was saved, not to the top", () => {
+    const undated = {
+      id: "vince",
+      outcome: parseConversationOutcome({
+        captured_at: "2026-09-14T12:00:00.000Z",
+        structured_outcome: { contactName: "Vince Berk", marketSignal: "Large tech is contracting." },
+      })!,
+    };
+    const dated = {
+      id: "eric",
+      outcome: parseConversationOutcome({
+        captured_at: "2026-10-21T12:00:00.000Z",
+        structured_outcome: { contactName: "Eric Kidd", conversationDate: "2026-06-12", marketSignal: "Go toward AI coding." },
+      })!,
+    };
+    // Vince's conversation is undated and was saved in September; Eric's really
+    // happened in June. September beats June, and neither is today.
+    expect(sortByConversationRecency([dated, undated]).map((i) => i.id)).toEqual(["vince", "eric"]);
+    expect(conversationRecency(undated.outcome)).toBe(new Date("2026-09-14T12:00:00.000Z").getTime());
+    expect(conversationRecency(dated.outcome)).toBe(new Date("2026-06-12T00:00:00").getTime());
+  });
+
+  it("keeps a stored conversation date exactly as saved", () => {
+    const outcome = parseConversationOutcome({
+      structured_outcome: { contactName: "Eric Kidd", conversationDate: "2026-06-12" },
+    })!;
+    expect(outcome.conversationDate).toBe("2026-06-12");
+  });
+
+  it("still dates a newly captured conversation as today", () => {
+    // Capturing something new with no date given should assume today; only
+    // reading a saved record must not.
+    expect(buildConversationOutcome({ contactName: "New" }).conversationDate).toBe(TODAY);
   });
 });

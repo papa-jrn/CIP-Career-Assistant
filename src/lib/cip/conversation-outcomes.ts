@@ -129,7 +129,7 @@ export function parseConversationOutcome(value: unknown): ConversationOutcome | 
   const text = readAny(record, ["text"]);
   if (!contactName && !text) return null;
 
-  return buildConversationOutcome({
+  const built = buildConversationOutcome({
     contactName: contactName || readContactFromText(text),
     contactOrganization: readAny(nested, ["contactOrganization", "contact_organization"]),
     contactTitle: readAny(nested, ["contactTitle", "contact_title"]),
@@ -154,6 +154,14 @@ export function parseConversationOutcome(value: unknown): ConversationOutcome | 
     rawNoteExcerpt: readAny(nested, ["rawNoteExcerpt", "raw_note_excerpt"]) || text,
     createdAt: readAny(nested, ["createdAt", "created_at"]) || readAny(record, ["captured_at"]),
   });
+
+  // Reading a record must not invent a date for it. buildConversationOutcome
+  // defaults an empty conversation date to today, which is right when capturing
+  // something new and wrong when loading something saved: every record that
+  // never stored a date would read as if the conversation happened today, and
+  // would sort above conversations that really are recent. An undated record
+  // stays undated; callers fall back to when it was saved and say so.
+  return { ...built, conversationDate: readAny(nested, ["conversationDate", "conversation_date"]) };
 }
 
 export function conversationOutcomesToEvidence(outcomes: ConversationOutcome[]): AdvisorEvidenceResponse[] {

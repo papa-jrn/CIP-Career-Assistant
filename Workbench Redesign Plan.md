@@ -690,3 +690,31 @@ conversation date can only come from storage, and the fallback has to be exercis
 field rather than by asking the builder for it.
 
 Verification: typecheck clean, 528 tests passing, SSR build passed.
+
+## Fixed 2026-10-21: reading a saved conversation invented today's date
+
+The ordering change above made the list worse, and the founder caught it: two records showed
+10/21/2026, and Eric Kidd disappeared from the list entirely.
+
+Root cause, latent until the display changed. `parseConversationOutcome` passes the stored date to
+`buildConversationOutcome`, which defaults an empty conversation date to today. Defaulting to today
+is right when capturing something new and wrong when loading something saved: every record that
+never stored a conversation date read as if the conversation had happened today. While the list
+displayed `created_at` this was invisible; once it displayed the conversation date, those records
+showed today's date and sorted above everything, pushing Eric Kidd's real June conversation off the
+five-item list.
+
+Reading a record no longer invents a date for it. An undated record stays undated, sorts by when it
+was saved, and displays "saved <date>" so the difference is visible rather than guessed. Capturing a
+new conversation with no date still assumes today, which is pinned by test alongside the read path.
+The list cap went from five to eight so a seven-record history is not silently truncated.
+
+Verified by simulating the founder's actual records through the real parse, sort and display logic:
+Christopher Diak 10/7, Alexis Jamba 9/23, Vince Berk saved 9/14, Alex Herzog 8/15, Contact not
+identified saved 8/6, Eric Kidd 6/12. No invented dates, and the June conversation sits below the
+July and September ones as it should.
+
+Process note worth keeping: the previous two fixes were verified with unit tests and a signed-out
+page render. The signed-out page cannot show conversation data at all, so a display change shipped
+without ever being looked at. Where a change alters what signed-in data looks like, simulate the real
+stored shapes through the real functions and read the output, or ask the founder for a sample.

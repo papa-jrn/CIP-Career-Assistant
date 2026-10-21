@@ -116,7 +116,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       const correctedConversations = sortByConversationRecency(
         applyContactCorrections(storedConversations, contactCorrections),
       );
-      recentConversationOutcomes = correctedConversations.slice(0, 5);
+      recentConversationOutcomes = correctedConversations.slice(0, 8);
       unidentifiedConversations = [
         ...correctedConversations.filter((item) => hasUnknownContact(item.outcome)),
         ...correctedConversations.filter((item) => !hasUnknownContact(item.outcome)),
