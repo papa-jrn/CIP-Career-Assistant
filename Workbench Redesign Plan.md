@@ -669,3 +669,24 @@ longer depends on them.
 
 Verification: typecheck clean, 522 tests passing, SSR build passed, page renders. The populated list
 needs a founder pass; it cannot be exercised without their session.
+
+## Fixed 2026-10-21: order conversations by when they happened
+
+Founder follow-up to the display fix above: with conversation dates now shown, the June Eric Kidd
+conversation still sat above a July one, because the lists were ordered by `created_at` - the save
+date - while displaying `conversationDate`. A conversation entered months later jumped to the top.
+
+Ordering now uses `conversationRecency`: the conversation's own date, falling back to the save time
+only when no conversation date was captured, so such a record still sorts somewhere sensible rather
+than to the bottom. The sort runs before the five-most-recent slice, so "Most recent" is the five
+most recent conversations rather than the five most recently typed in. The same order applies to the
+full list of saved conversations, within its unidentified-first grouping.
+
+Pinned by test, including that a June conversation entered in October sorts below a July one, that
+the result does not depend on input order, that the conversation date is preferred over the save
+date, and that an unusable date does not throw. One test had to be rewritten after it failed:
+`buildConversationOutcome` defaults an empty conversation date to today, so a record with no
+conversation date can only come from storage, and the fallback has to be exercised by blanking the
+field rather than by asking the builder for it.
+
+Verification: typecheck clean, 528 tests passing, SSR build passed.

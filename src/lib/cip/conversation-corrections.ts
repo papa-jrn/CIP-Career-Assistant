@@ -205,3 +205,27 @@ export function applyCorrectionToPayload(extractedText: string | null, correctio
     return extractedText;
   }
 }
+
+/**
+ * When a conversation happened, for ordering.
+ *
+ * The conversation's own date, not when the record was saved - a conversation
+ * from June entered today belongs in June. Falls back to the save time only
+ * when no conversation date was captured, so a record still sorts somewhere
+ * sensible rather than to the bottom.
+ */
+export function conversationRecency(outcome: ConversationOutcome): number {
+  const date = (outcome.conversationDate ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const value = new Date(`${date}T00:00:00`).getTime();
+    if (!Number.isNaN(value)) return value;
+  }
+  const created = (outcome.createdAt ?? "").trim();
+  const value = created ? new Date(created).getTime() : Number.NaN;
+  return Number.isNaN(value) ? 0 : value;
+}
+
+/** Newest conversation first, by when the conversation happened. */
+export function sortByConversationRecency<T extends { outcome: ConversationOutcome }>(items: T[]): T[] {
+  return [...items].sort((a, b) => conversationRecency(b.outcome) - conversationRecency(a.outcome));
+}

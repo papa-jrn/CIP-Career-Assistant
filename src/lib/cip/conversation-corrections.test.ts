@@ -5,6 +5,8 @@ import {
   applyCorrectionsBySourceRef,
   applyCorrectionToPayload,
   correctionsBySourceRef,
+  conversationRecency,
+  sortByConversationRecency,
   contactCorrectionPayload,
   hasUnknownContact,
   parseContactCorrection,
@@ -170,5 +172,58 @@ describe("reaching every consumer of a conversation", () => {
     expect(applyCorrectionToPayload('{"fileName":"x"}', undefined)).toBe('{"fileName":"x"}');
     expect(applyCorrectionToPayload("not json", correction())).toBe("not json");
     expect(applyCorrectionToPayload(null, correction())).toBeNull();
+  });
+});
+
+describe("ordering by when the conversation happened", () => {
+  const item = (contactName: string, extra = {}) => ({
+    id: contactName,
+    outcome: buildConversationOutcome({ contactName, ...extra }),
+  });
+
+  it("puts an older conversation below a newer one, whenever each was entered", () => {
+    // Eric Kidd's June conversation was entered months later; it still belongs
+    // under a conversation that actually happened in July.
+    const eric = item("Eric Kidd", { conversationDate: "2026-06-12", createdAt: "2026-10-21T12:00:00.000Z" });
+    const vince = item("Vince Berk", { conversationDate: "2026-07-30", createdAt: "2026-08-06T12:00:00.000Z" });
+    expect(sortByConversationRecency([eric, vince]).map((i) => i.id)).toEqual(["Vince Berk", "Eric Kidd"]);
+  });
+
+  it("does not depend on the order it was given", () => {
+    const eric = item("Eric Kidd", { conversationDate: "2026-06-12" });
+    const vince = item("Vince Berk", { conversationDate: "2026-07-30" });
+    expect(sortByConversationRecency([vince, eric]).map((i) => i.id)).toEqual(["Vince Berk", "Eric Kidd"]);
+  });
+
+  it("falls back to when it was saved if no conversation date was captured", () => {
+    // buildConversationOutcome defaults an empty date to today, so a record
+    // with no conversation date can only arrive from storage. Blank it here to
+    // exercise that path.
+    const outcome = {
+      ...buildConversationOutcome({ contactName: "No date", createdAt: "2026-05-01T12:00:00.000Z" }),
+      conversationDate: "",
+    };
+    expect(conversationRecency(outcome)).toBe(new Date("2026-05-01T12:00:00.000Z").getTime());
+  });
+
+  it("prefers the conversation date over the save date", () => {
+    const outcome = buildConversationOutcome({ contactName: "Eric Kidd", conversationDate: "2026-06-12", createdAt: "2026-10-21T12:00:00.000Z" });
+    expect(conversationRecency(outcome)).toBe(new Date("2026-06-12T00:00:00").getTime());
+  });
+
+  it("does not throw on an unusable date", () => {
+    const outcome = {
+      ...buildConversationOutcome({ contactName: "Odd" }),
+      conversationDate: "not a date",
+      createdAt: "also not a date",
+    };
+    expect(Number.isNaN(conversationRecency(outcome))).toBe(false);
+    expect(conversationRecency(outcome)).toBe(0);
+  });
+
+  it("leaves the caller's array alone", () => {
+    const given = [item("Eric Kidd", { conversationDate: "2026-06-12" }), item("Vince Berk", { conversationDate: "2026-07-30" })];
+    sortByConversationRecency(given);
+    expect(given.map((i) => i.id)).toEqual(["Eric Kidd", "Vince Berk"]);
   });
 });
