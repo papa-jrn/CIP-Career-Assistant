@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildConversationOutcome } from "@/lib/cip/conversation-outcomes";
-import { buildFollowUpObligations, buildStrategicState, scoreLanes } from "@/lib/cip/strategic-state";
+import {
+  buildFollowUpObligations,
+  buildStrategicState,
+  dedupeConversationOutcomes,
+  scoreLanes,
+} from "@/lib/cip/strategic-state";
 
 const advisor = {
   roleBriefs: [
@@ -139,5 +144,50 @@ describe("§8 item 4 — employer context is not lane validation", () => {
     } as never);
     const score = (lanes: typeof base) => lanes.find((item) => item.lane.includes("Entrepreneurship"))?.score;
     expect(score(withEmployer)).toBe(score(base));
+  });
+});
+
+describe("conversation identity — one save, two stores, distinct conversations kept", () => {
+  const legacy = (extra = {}) =>
+    buildConversationOutcome({
+      contactName: "Vince Berk",
+      conversationDate: "2026-08-06",
+      marketSignal: "Stay away from large tech right now.",
+      ...extra,
+    });
+
+  it("counts one save as one conversation when both stores hold it", () => {
+    // The dedicated table and the additive career_sources record are two copies
+    // of one save, carrying the same sourceRef.
+    const ref = "loopback:notes-with-vince-berk:2026-09-14T10:00:00.000Z:0";
+    const fromTable = buildConversationOutcome({ contactName: "Vince Berk", sourceRef: ref, marketSignal: "Stay away from large tech." });
+    const fromCareerSources = buildConversationOutcome({ contactName: "Vince Berk", sourceRef: ref, marketSignal: "Stay away from large tech." });
+    expect(dedupeConversationOutcomes([fromTable, fromCareerSources])).toHaveLength(1);
+  });
+
+  it("treats the same sourceRef as one conversation even if a copy lost a field", () => {
+    const ref = "loopback:notes:2026-09-14T10:00:00.000Z:0";
+    const full = buildConversationOutcome({ contactName: "Vince Berk", sourceRef: ref, relatedEmployer: "Hypertherm", marketSignal: "Large tech is a blood bath." });
+    const partial = buildConversationOutcome({ contactName: "Vince Berk", sourceRef: ref, marketSignal: "Large tech is a blood bath." });
+    expect(dedupeConversationOutcomes([full, partial])).toHaveLength(1);
+  });
+
+  // The regression: before sourceRef existed, two genuinely different notes
+  // about one person on one day keyed identically and one was discarded, so a
+  // real conversation disappeared from scoring and from the follow-up queue.
+  it("keeps two different conversations with one person on one day", () => {
+    const first = legacy({ marketSignal: "Stay away from large tech right now.", rawNoteExcerpt: "First note" });
+    const second = legacy({ marketSignal: "Look at Upper Valley nonprofits.", rawNoteExcerpt: "A separate, later note" });
+    expect(dedupeConversationOutcomes([first, second])).toHaveLength(2);
+  });
+
+  it("still collapses an identical legacy record loaded twice", () => {
+    expect(dedupeConversationOutcomes([legacy(), legacy()])).toHaveLength(1);
+  });
+
+  it("does not collapse different people who share a date and a lane", () => {
+    const a = buildConversationOutcome({ contactName: "Vince Berk", conversationDate: "2026-08-06", relatedLane: "Nonprofit operations" });
+    const b = buildConversationOutcome({ contactName: "Alex Herzog", conversationDate: "2026-08-06", relatedLane: "Nonprofit operations" });
+    expect(dedupeConversationOutcomes([a, b])).toHaveLength(2);
   });
 });

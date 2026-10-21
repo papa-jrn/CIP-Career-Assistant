@@ -91,8 +91,25 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
    every text field. That would have cleared the prompt on the strength of a triage reason and
    asserted a conversation was captured when none was - the same failure class this gate exists to
    remove. Asking for the data first prevented it.
-4. **Duplicate conversation records** — a raw upload and its structured extraction both count
-   (the Vince Berk pair), so a logged-conversations count can overstate.
+4. ~~**Duplicate conversation records**~~ **INVESTIGATED AND FIXED 2026-10-21 — the bug was the
+   reverse of the one assumed.** The suspicion was over-counting: a save writes to both the
+   `conversation_outcomes` table and an additive `career_sources` record, and `loadStrategicState`
+   unions the two. Tested directly: both copies parse identically, share a `sourceRef`, and already
+   collapsed to one. No over-count.
+
+   The real defect was silent loss. `dedupeConversationOutcomes` keyed on contact, date, lane and
+   employer alongside `sourceRef`, so two genuinely different notes about one person on one day -
+   which is every record older than `sourceRef` - produced the same key and one was discarded. A
+   real conversation disappeared from lane scoring, employer scoring and the follow-up queue with no
+   trace. Identity now comes from `sourceRef` where a save assigned one, and from what was actually
+   said where it did not. Pinned by test, including that an identical record loaded twice still
+   collapses and that two people sharing a date and lane are not merged.
+
+   Separately: the Vince Berk pair is **not** a double count. Those are two real saves a month
+   apart - an uploaded note on 2026-08-06 and a structured summary on 2026-09-14 - and whether they
+   describe one conversation is something only the user knows. A card reading "2 conversations
+   logged" is reporting the records that exist. Merging them would be guessing; if that becomes
+   worth doing it needs a user-facing merge, not an automatic rule.
 5. **The feedback content predicate was too narrow** — fixed 2026-10-21 as a separate, real gap
    found while investigating the above: `feedbackHasConversationContent` checked 4 of the 9 fields
    that carry conversation content, so someone who recorded only a hiring or compensation signal was
@@ -187,8 +204,9 @@ Sequenced so each step makes the next safer, and so nothing ships on top of some
 ~~Delete the canned `data.ts` content and give `/briefing` an honest empty state.~~ Done 2026-10-21.
 ~~Recommendation repair gate.~~ Four of six repaired 2026-10-21 with regression tests; one appears
 already addressed and needs live confirmation; obligation resolution remains and needs persistence.
-Next: the duplicate conversation records (A4) and routing corrections through propagation and
-re-analysis (A5), then obligation resolution. Then the
+~~Duplicate conversation records (A4).~~ Done 2026-10-21 - the defect was silent loss, not
+over-counting. Next: routing corrections through propagation and re-analysis (A5), then obligation
+resolution, then Step 2. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

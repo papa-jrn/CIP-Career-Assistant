@@ -609,20 +609,50 @@ function parseStructuredConversationRow(value: unknown) {
   return outcome ?? null;
 }
 
-function dedupeConversationOutcomes(outcomes: ConversationOutcome[]) {
+/**
+ * Collapse the copies of a conversation without discarding distinct ones.
+ *
+ * Every save writes to two places - the `conversation_outcomes` table and an
+ * additive `career_sources` record - and this function is what makes those two
+ * copies count as one conversation.
+ *
+ * It used to key on contact, date, lane and employer alongside `sourceRef`.
+ * That silently dropped real conversations: two different notes about the same
+ * person on the same day, from before `sourceRef` existed, produced the same
+ * key, so one of them vanished from lane scoring, employer scoring and the
+ * follow-up queue. Identity now comes from `sourceRef` where a save assigned
+ * one, and from what was actually said where it did not.
+ */
+export function dedupeConversationOutcomes(outcomes: ConversationOutcome[]) {
   const seen = new Set<string>();
   return outcomes.filter((outcome) => {
-    const key = [
-      outcome.sourceRef,
-      outcome.contactName,
-      outcome.conversationDate,
-      outcome.relatedLane,
-      outcome.relatedEmployer,
-    ].join("|").toLowerCase();
+    const key = conversationIdentity(outcome);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function conversationIdentity(outcome: ConversationOutcome) {
+  const ref = (outcome.sourceRef ?? "").trim().toLowerCase();
+  if (ref) return `ref:${ref}`;
+  // Records older than sourceRef: two notes are the same conversation only when
+  // they say the same thing, not merely because they share a person and a date.
+  return [
+    "said",
+    outcome.contactName,
+    outcome.conversationDate,
+    outcome.relatedLane,
+    outcome.relatedEmployer,
+    outcome.marketSignal,
+    outcome.newLeads,
+    outcome.warnings,
+    outcome.promisedFollowUp,
+    outcome.nextAction,
+    outcome.rawNoteExcerpt,
+  ]
+    .join("|")
+    .toLowerCase();
 }
 
 // The one-line "why" leads with the strongest signal, not whatever came first: a verified posting
