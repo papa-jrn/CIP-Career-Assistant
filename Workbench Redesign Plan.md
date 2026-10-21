@@ -383,3 +383,25 @@ The founder reviewed the running Workbench, shared purple navigation/layout, sav
 Resume with People: compact Connections/Follow-ups, expandable details, and the incorrect met-but-not-logged state for existing notes. Then continue employer discovery/funding ordering, recommendation relevance/duplicate repairs, imported-job verification and fit evaluation, and full source-ingestion orchestration. Retain the first-use and analysis-failure acceptance checks still listed above. Existing medical-role recommendations are not validated as personally suitable merely because the source listing or employer is real.
 
 No production deployment was requested. The local server remains available for review. This checkpoint preserves the implementation, selected visual reference, landing asset, tests, and documentation; it does not declare the overall redesign complete.
+
+## Founder acceptance of the visual slice - 2026-10-21
+
+The founder accepted the purple/slate Workbench redesign and public landing page on direct review of
+the running app, and waived the composite reference/implementation comparison artifact that had held
+design-qa.md at blocked. The design QA record is now "accepted with a recorded limitation" rather
+than passed: the artifact was waived, not produced, and the browser-tooling limitation that prevented
+it is unchanged. See the Founder acceptance section in design-qa.md.
+
+Founder assessment: the redesign is not finished, but the direction is substantially better than the
+previous nature-oriented scheme - it reads as a current tool someone would use alongside a live job
+search. Further issues are expected from real use and should be captured as they appear.
+
+Still open and unaffected by this sign-off: first use on an empty new account, a deliberately induced
+analysis failure and retry, and complete screen-reader testing. Section 11 acceptance and the existing
+security, cost, de-founder, and live acceptance gates continue to apply. This acceptance covers the
+visual slice only; it is not a claim that the redesign or any later slice is complete, and it is not a
+beta-readiness claim.
+
+Resume point is unchanged: People (compact Connections/Follow-ups, expandable details, and the
+incorrect met-but-not-logged state for existing notes), then the section 8 recommendation repair gate,
+then imported-job verification and fit evaluation.
