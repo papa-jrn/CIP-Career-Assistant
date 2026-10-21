@@ -104,7 +104,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         workModelSignal: fields.workModelSignal,
         cultureSignal: fields.cultureSignal,
         hiringSignal: fields.hiringSignal,
-        marketSignal: fields.marketSignal || note.text,
+        // Only an extracted finding belongs here. The full note is preserved in
+        // rawNoteExcerpt below; putting it here presents raw text as a finding.
+        marketSignal: fields.marketSignal,
         newLeads: fields.newLeads,
         warnings: fields.warnings,
         promisedFollowUp: fields.promisedFollowUp,

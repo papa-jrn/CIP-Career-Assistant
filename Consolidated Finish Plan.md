@@ -55,11 +55,28 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
    rendering four hardcoded strategy lines as if CIP had written them for the reader. Verified on the
    rendered page: the canned strings return zero matches. `data.ts` keeps `navItems` (live) and
    `intakeQuestions` (an unused but generic question list, left in place).
-2. **Recommendation repair gate** (Workbench §8) — duplicate hospital changes, duplicate Diak
-   follow-ups, raw conversation text instead of an objective, employer movement read as a
-   strengthened lane, a CRNA opening in founder guidance. Concrete lead found 2026-10-21:
-   `replaceConversationOutcome` dedupes by exact `title` match, so any variation in a contact's name
-   spelling leaves the prior row behind and produces duplicates.
+2. **Recommendation repair gate** (Workbench §8) — **diagnosed and four of six repaired 2026-10-21.**
+   - ~~Duplicate hospital changes~~ **fixed**: `buildStrategicState` listed watched employers and
+     employer candidates as separate deltas with no cross-list dedupe, so an organization that was
+     both appeared twice.
+   - ~~Duplicate Diak follow-ups~~ **fixed**: `buildFollowUpObligations` emitted one obligation per
+     conversation record rather than per person. The original exact-title hypothesis was not the
+     main cause - `dedupeConversationOutcomes` keys on `sourceRef`, which differs between a raw
+     upload and its structured extraction, so both survived and each became an obligation.
+   - ~~Raw conversation text instead of an objective~~ **fixed**: `loopback.ts` stored the entire
+     note as `marketSignal` whenever extraction returned none, so raw text appeared wherever a
+     finding belonged. The note is still kept verbatim in `rawNoteExcerpt`.
+   - ~~Employer movement read as a strengthened lane~~ **fixed**: in `exploratoryLaneCap` the mere
+     presence of `relatedEmployer` counted as strong support and exempted a speculative lane from
+     the research cap. Naming an employer is employer context, not lane validation.
+   - **CRNA opening in founder guidance** — appears structurally addressed by `assignPostingsToLanes`
+     (commit f5ae4fd): each posting validates only the one lane its title fits best, and a posting
+     below the match threshold is assigned to none. Not re-confirmed on live data; leave open until
+     a briefing run shows it.
+   - **Old obligations resurfacing without a resolution path** — **not fixed.** There is no concept
+     of a resolved obligation anywhere in `strategic-state.ts`: any outcome carrying a promised
+     follow-up or due date is an obligation forever. Closing this needs somewhere to record that an
+     obligation was met or dropped, which is new persistence, not a scoring change.
 3. **Eric Kidd's June conversation** — unresolved. Six conversation records exist, five were ever
    displayed. The full list now shows every record so this can be identified or shown absent.
 4. **Duplicate conversation records** — a raw upload and its structured extraction both count
@@ -145,9 +162,12 @@ organization map beyond slice 1, Phase 11 evidence-to-outreach briefs (only
 
 Sequenced so each step makes the next safer, and so nothing ships on top of something known to lie.
 
-**Step 1 — Stop the product asserting false things.** (A1 done, A2, A4, A5 remain)
+**Step 1 — Stop the product asserting false things.** (A1 done, A2 mostly done, A4, A5 remain)
 ~~Delete the canned `data.ts` content and give `/briefing` an honest empty state.~~ Done 2026-10-21.
-Next: the recommendation repair gate, starting from the exact-title dedupe lead. Then the
+~~Recommendation repair gate.~~ Four of six repaired 2026-10-21 with regression tests; one appears
+already addressed and needs live confirmation; obligation resolution remains and needs persistence.
+Next: the duplicate conversation records (A4) and routing corrections through propagation and
+re-analysis (A5), then obligation resolution. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

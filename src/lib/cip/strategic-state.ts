@@ -234,6 +234,7 @@ export function buildStrategicState(inputs: StrategicStateInputs): StrategicStat
       .map((employer) => `${employer.name} moved ${employer.direction} to ${employer.score}. ${employer.explanation}`.trim()),
     ...employerCandidates
       .filter((candidate) => candidate.direction !== "steady")
+      .filter((candidate) => !employers.some((employer) => normalize(employer.name) === normalize(candidate.name)))
       .slice(0, 4)
       .map((candidate) => `Candidate ${candidate.name} moved ${candidate.direction} to ${candidate.score}. ${candidate.explanation}`.trim()),
     ...followUpObligations
@@ -391,9 +392,10 @@ export function scoreEmployerCandidates(inputs: StrategicStateInputs): Strategic
 }
 
 export function buildFollowUpObligations(outcomes: ConversationOutcome[]): StrategicFollowUpObligation[] {
-  return outcomes
-    .filter((outcome) => outcome.promisedFollowUp || outcome.followUpDueDate || outcome.nextAction || outcome.signalType === "follow_up_obligation")
-    .map((outcome): StrategicFollowUpObligation => {
+  return collapseObligationsByContact(
+    outcomes
+      .filter((outcome) => outcome.promisedFollowUp || outcome.followUpDueDate || outcome.nextAction || outcome.signalType === "follow_up_obligation")
+      .map((outcome): StrategicFollowUpObligation => {
       const urgency = followUpUrgency(outcome.followUpDueDate);
       const reasons = [
         outcome.promisedFollowUp ? `Promised follow-up: ${outcome.promisedFollowUp}` : "",
@@ -411,9 +413,44 @@ export function buildFollowUpObligations(outcomes: ConversationOutcome[]): Strat
         urgency,
         reasons,
       };
-    })
-    .sort((a, b) => followUpSortValue(a) - followUpSortValue(b))
-    .slice(0, 12);
+      })
+      .sort((a, b) => followUpSortValue(a) - followUpSortValue(b)),
+  ).slice(0, 12);
+}
+
+/**
+ * One person owes one next step.
+ *
+ * Obligations arrive sorted most-urgent first, so the first one seen for a
+ * contact is the one that stands. Where a contact had several, the kept
+ * obligation says so rather than silently dropping the others, because the
+ * user may have promised more than one thing.
+ */
+function collapseObligationsByContact(obligations: StrategicFollowUpObligation[]): StrategicFollowUpObligation[] {
+  const byContact = new Map<string, StrategicFollowUpObligation>();
+  const extras = new Map<string, number>();
+  for (const obligation of obligations) {
+    const key = normalize(obligation.contactName) || obligation.contactName;
+    const kept = byContact.get(key);
+    if (!kept) {
+      byContact.set(key, obligation);
+      continue;
+    }
+    extras.set(key, (extras.get(key) ?? 0) + 1);
+    // Keep anything the earlier record did not capture, rather than losing it.
+    if (!kept.promisedFollowUp && obligation.promisedFollowUp) kept.promisedFollowUp = obligation.promisedFollowUp;
+    if (!kept.relatedEmployer && obligation.relatedEmployer) kept.relatedEmployer = obligation.relatedEmployer;
+    if (!kept.relatedLane && obligation.relatedLane) kept.relatedLane = obligation.relatedLane;
+  }
+  for (const [key, count] of extras) {
+    const kept = byContact.get(key);
+    if (!kept) continue;
+    kept.reasons = [
+      ...kept.reasons,
+      `${count} further saved conversation${count === 1 ? "" : "s"} with this person also recorded a follow-up; the most urgent is shown.`,
+    ];
+  }
+  return [...byContact.values()];
 }
 
 export function buildResumeLaneRecommendation(lanes: StrategicLaneScore[]): StrategicResumeLaneRecommendation | null {
@@ -527,7 +564,6 @@ function exploratoryLaneCap(
     outcome.signalType === "employer_fit" ||
     outcome.signalType === "compensation" ||
     outcome.signalType === "hiring_process" ||
-    outcome.relatedEmployer ||
     outcome.promisedFollowUp ||
     outcome.followUpDueDate,
   );

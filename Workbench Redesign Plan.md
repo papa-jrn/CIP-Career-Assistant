@@ -604,3 +604,46 @@ step 4 imported-job slice (a stated precondition for calling the redesign comple
 recommendation repair gate, the People route consolidation, extracting the import block so first use
 can lead with it, and the open acceptance work - first use on an empty account, an induced analysis
 failure and retry, and screen-reader testing.
+
+## Section 8 repair gate - diagnosed 2026-10-21, four of six repaired
+
+Each symptom was traced to a specific mechanism rather than assumed. Regression tests are in
+`src/lib/cip/recommendation-repair.test.ts`.
+
+Duplicate hospital changes: `buildStrategicState` built its delta list from watched employers and
+employer candidates independently, with no cross-list dedupe, so an organization that was both
+produced two "moved" lines. The watched record now wins and the candidate line is suppressed.
+
+Duplicate Christopher Diak follow-ups: `buildFollowUpObligations` emitted one obligation per
+conversation record, not per person. The earlier exact-title hypothesis about
+`replaceConversationOutcome` was not the main cause: `dedupeConversationOutcomes` keys on
+`sourceRef`, which differs between a raw upload and its structured extraction, so both records
+survived and each produced its own obligation. Obligations now collapse per contact on a normalized
+name; the kept one absorbs an employer or lane the others recorded and says how many further
+conversations also recorded a follow-up, so nothing is silently dropped.
+
+Raw conversation text in place of a concise objective: `loopback.ts` stored the entire note as
+`marketSignal` when extraction returned none, so every surface that displays a market signal showed
+a wall of raw text. Only an extracted finding is stored there now; the note remains verbatim in
+`rawNoteExcerpt`. The heuristic extraction path already supplies a first sentence when the AI path
+is unavailable, so this does not empty the field in normal use.
+
+Employer movement described as a strengthened lane: in `exploratoryLaneCap`, the presence of
+`relatedEmployer` on any matching conversation counted as strong support and exempted a speculative
+lane from the research cap. Naming an employer is employer context, not evidence that the career
+direction is viable. A lane now scores identically with and without an employer named, which is
+pinned by test.
+
+A CRNA opening in founder guidance: appears structurally addressed by `assignPostingsToLanes`
+(f5ae4fd) - a posting validates only the lane its title fits best and needs a synonym hit or two
+shared tokens, so an unrelated clinical role is assigned to no lane even when its employer is
+relevant. This is a reading of the code, not a live confirmation; it stays open until a briefing run
+shows it.
+
+Old obligations resurfacing without a resolution path: NOT fixed. There is no notion of a resolved
+obligation in `strategic-state.ts` - any outcome carrying a promised follow-up or due date remains an
+obligation indefinitely. Fixing it means recording that an obligation was met or dropped, which is
+new persistence and a deliberate next slice, not a scoring tweak.
+
+Verification: typecheck clean, 507 tests passing (499 + 8 new), SSR build passed. These are unit-level
+repairs; a founder briefing run is still needed to confirm the queue reads correctly end to end.
