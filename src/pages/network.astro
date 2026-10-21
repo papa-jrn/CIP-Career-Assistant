@@ -30,7 +30,6 @@ let networkCounts = {
 let latestNetworkAnalysis: NetworkAnalysis | null = null;
 let latestNetworkAnalysisAt: string | null = null;
 let loadError = "";
-let recentConversationNotes: Array<{ title: string | null; created_at: string }> = [];
 let recentConversationOutcomes: CorrectedConversation[] = [];
 // Conversations whose contact extraction never identified. They are reachable
 // however old they are, because an orphan nobody can see is an orphan nobody
@@ -100,7 +99,6 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
           .limit(200),
       ]);
       conversationNoteCount = noteCount ?? 0;
-      recentConversationNotes = (noteRows ?? []).slice(0, 5);
       latestConversationAt = noteRows?.[0]?.created_at ?? null;
       const storedConversations = (noteRows ?? [])
         .map((row) => {
@@ -472,12 +470,20 @@ const networkSummary = hasNetwork
         </div>
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
           <p class="text-xs font-semibold uppercase text-[var(--muted)]">Most recent</p>
-          {recentConversationNotes.length ? (
+          {recentConversationOutcomes.length ? (
             <ul class="mt-2 space-y-1 text-sm text-[var(--muted)]">
-              {recentConversationNotes.map((note) => (
+              {recentConversationOutcomes.map(({ outcome }) => (
                 <li>
-                  <span class="font-semibold text-[var(--foreground)]">{note.title ?? "Conversation notes"}</span>
-                  <span class="ml-1 text-xs">{new Date(note.created_at).toLocaleDateString()}</span>
+                  <span class="font-semibold text-[var(--foreground)]">
+                    {hasUnknownContact(outcome) ? "Contact not identified" : outcome.contactName}
+                  </span>
+                  <span class="ml-1 text-xs">
+                    {outcome.conversationDate
+                      ? new Date(`${outcome.conversationDate}T00:00:00`).toLocaleDateString()
+                      : outcome.createdAt
+                        ? `saved ${new Date(outcome.createdAt).toLocaleDateString()}`
+                        : "date not recorded"}
+                  </span>
                 </li>
               ))}
             </ul>

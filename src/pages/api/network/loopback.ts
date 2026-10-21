@@ -120,6 +120,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       if (structured.error) {
         structuredTableError = structured.error.message;
       }
+      // Only name the record after a real person; "Unknown contact" or a
+      // filename that fell through is not one.
+      const contactTitled =
+        Boolean(outcome.contactName) &&
+        outcome.contactName !== "Unknown contact" &&
+        outcome.contactName !== note.fileName;
       const payload = {
         ...conversationOutcomeCareerSourcePayload(structured.payload),
         fileName: note.fileName,
@@ -129,7 +135,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       const { error } = await supabase.from("career_sources").insert({
         user_id: user.id,
         source_type: "conversation_outcome",
-        title: `Conversation outcome: ${note.fileName}`,
+        title: contactTitled ? `Conversation outcome: ${outcome.contactName}` : `Conversation outcome: ${note.fileName}`,
         url: null,
         extracted_text: JSON.stringify(payload),
         trust_state: "user_supplied",

@@ -647,3 +647,25 @@ new persistence and a deliberate next slice, not a scoring tweak.
 
 Verification: typecheck clean, 507 tests passing (499 + 8 new), SSR build passed. These are unit-level
 repairs; a founder briefing run is still needed to confirm the queue reads correctly end to end.
+
+## Fixed 2026-10-21: the recent-conversations list described the record, not the conversation
+
+Founder captured the June Eric Kidd conversation through the new quick-capture form, supplying the
+name and the June date. The saved outcome holds both correctly - it appears right everywhere that
+reads the outcome - but the "Most recent" list under Saved conversation notes showed
+"Conversation outcome: Pasted conversation notes" dated 10/21/2026.
+
+The list was rendering the `career_sources` row's `title` and `created_at`: how the note arrived and
+when it was saved, not who the conversation was with or when it happened. It now renders from the
+parsed, correction-applied outcomes, showing the contact and the conversation date, falling back to
+"saved <date>" when no conversation date was captured and to "Contact not identified" when extraction
+found no person. This also fixes the display for every record already stored.
+
+Separately, loopback titled the stored record after the note's filename, so a pasted note became
+"Pasted conversation notes" regardless of who it was about. New records are titled after the contact
+when one is identified, matching the structured-summary path; a record with no identified contact
+keeps the filename title rather than inventing a person. Existing titles are unchanged - the list no
+longer depends on them.
+
+Verification: typecheck clean, 522 tests passing, SSR build passed, page renders. The populated list
+needs a founder pass; it cannot be exercised without their session.
