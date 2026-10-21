@@ -1,6 +1,13 @@
 import { advisorWithLaneHistory, loadAdvisorLaneHistory } from "./lane-continuity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdvisorAnalysis } from "@/lib/cip/advisor";
+import {
+  applyContactCorrections,
+  applyCorrectionsBySourceRef,
+  correctionsBySourceRef,
+  loadContactCorrections,
+  type StoredConversation,
+} from "@/lib/cip/conversation-corrections";
 import { parseConversationOutcome, type ConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import {
   buildTargetLanes,
@@ -140,7 +147,7 @@ export async function loadStrategicInputs(
       .limit(40),
     supabase
       .from("career_sources")
-      .select("extracted_text, created_at")
+      .select("id, extracted_text, created_at")
       .eq("user_id", userId)
       .eq("source_type", "conversation_outcome")
       .order("created_at", { ascending: false })
@@ -169,13 +176,31 @@ export async function loadStrategicInputs(
 
   const latestSource = parseIntakeSource(intakeRow?.extracted_text ?? null);
   const latestAdvisor = advisorWithLaneHistory(analysisHistory, latestSource?.advisor ?? null);
+  // Who the user says they spoke to beats who extraction guessed, everywhere -
+  // not only on the pages where the correction was made.
+  const contactCorrections = await loadContactCorrections(supabase, userId);
+  const correctedCareerSources = applyContactCorrections(
+    (conversationRows ?? [])
+      .map((row) => {
+        const outcome = parseSavedConversation(row.extracted_text, row.created_at);
+        return outcome ? { id: String(row.id), outcome } : null;
+      })
+      .filter(Boolean) as StoredConversation[],
+    contactCorrections,
+  );
+  // A correction names a career_sources row, but the same conversation also sits
+  // in the structured table, which has no such id. sourceRef is what the two
+  // copies share - and the structured copy is the one dedupe keeps, so without
+  // this the correction would be thrown away.
+  const correctionsByRef = correctionsBySourceRef(correctedCareerSources);
   const conversationOutcomes = dedupeConversationOutcomes([
-    ...(structuredConversationRows ?? [])
-      .map((row) => parseStructuredConversationRow(row))
-      .filter(Boolean) as ConversationOutcome[],
-    ...(conversationRows ?? [])
-      .map((row) => parseSavedConversation(row.extracted_text, row.created_at))
-      .filter(Boolean) as ConversationOutcome[],
+    ...applyCorrectionsBySourceRef(
+      (structuredConversationRows ?? [])
+        .map((row) => parseStructuredConversationRow(row))
+        .filter(Boolean) as ConversationOutcome[],
+      correctionsByRef,
+    ),
+    ...correctedCareerSources.map((item) => item.outcome),
   ]);
 
   return {

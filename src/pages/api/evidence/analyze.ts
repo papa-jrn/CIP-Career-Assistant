@@ -9,6 +9,7 @@ import { buildEvidenceCards, renderEvidenceCardsHtml } from "@/lib/cip/evidence-
 import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/lib/cip/evidence-sufficiency";
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "@/lib/cip/source-analysis";
+import { applyCorrectionToPayload, loadContactCorrections } from "@/lib/cip/conversation-corrections";
 import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
@@ -86,7 +87,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         .limit(5),
       supabase
         .from("career_sources")
-        .select("extracted_text, created_at")
+        .select("id, extracted_text, created_at")
         .eq("user_id", user.id)
         .eq("source_type", "conversation_outcome")
         .order("created_at", { ascending: false })
@@ -140,9 +141,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       (sourceRows ?? []).flatMap((row) => parseSourceAnalysisItems(row.extracted_text)),
     );
 
+    // The note's payload carries the contact in its fileName, so without the
+    // user's correction the advisor is told it is reading a conversation with
+    // the name extraction guessed.
+    const contactCorrections = await loadContactCorrections(supabase, user.id);
+    const correctionByTarget = new Map(contactCorrections.map((correction) => [correction.targetId, correction]));
     const conversationNotes = (conversationRows ?? [])
       .map((row) => {
-        const parsed = parseConversationNote(row.extracted_text);
+        const corrected = applyCorrectionToPayload(row.extracted_text, correctionByTarget.get(String(row.id)));
+        const parsed = parseConversationNote(corrected);
         return parsed ? { ...parsed, savedAt: row.created_at } : null;
       })
       .filter(Boolean) as Array<{ fileName?: string; text?: string; captured_at?: string; savedAt: string | null }>;

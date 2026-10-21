@@ -116,8 +116,20 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
    still told to capture notes. It now counts all nine and deliberately excludes `decisionReason`,
    `nextAction` and `promisedFollowUp`, because a triage reason or an obligation is not a record of
    what was said.
-6. **Corrections are not read everywhere** — contact corrections apply on Connections and Follow Up;
-   weekly strategy propagation and evidence re-analysis still read the extracted name.
+6. ~~**Corrections are not read everywhere**~~ **DONE 2026-10-21.** Contact corrections now reach
+   propagation and evidence re-analysis as well as Connections and Follow Up, so a corrected contact
+   is the same person everywhere.
+
+   Two things had to be handled. Propagation reads both stores and `dedupeConversationOutcomes`
+   keeps the structured-table copy, which has no `career_sources` id for a correction to name - so
+   correcting only the JSON copy would have had the correction silently thrown away by dedupe.
+   Corrections are now keyed by the `sourceRef` the two copies share and applied to both. Evidence
+   re-analysis reads the note as text, and the payload's `fileName` carries the contact
+   ("Structured conversation with Unknown contact"), so the payload is rewritten before the advisor
+   reads it; the conversation content itself is untouched, only who it is attributed to.
+
+   `loadContactCorrections` is shared, so a new consumer picks corrections up by using it rather
+   than by remembering to.
 7. **Mis-parsed contact titles at import** — confirmed in the stored data 2026-10-21: Eric Kidd's
    record holds `contactTitle` "Managing Director, Custom Software" and `contactOrganization`
    "Senior Lead Programmer, Managing Directo", which are swapped, and the organization value is
@@ -205,8 +217,9 @@ Sequenced so each step makes the next safer, and so nothing ships on top of some
 ~~Recommendation repair gate.~~ Four of six repaired 2026-10-21 with regression tests; one appears
 already addressed and needs live confirmation; obligation resolution remains and needs persistence.
 ~~Duplicate conversation records (A4).~~ Done 2026-10-21 - the defect was silent loss, not
-over-counting. Next: routing corrections through propagation and re-analysis (A5), then obligation
-resolution, then Step 2. Then the
+over-counting. ~~Routing corrections through propagation and re-analysis (A5).~~ Done 2026-10-21.
+Step 1 is now complete except obligation resolution, which needs new persistence and is the one
+section 8 item still open. Next: Step 2, the de-founder pass. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

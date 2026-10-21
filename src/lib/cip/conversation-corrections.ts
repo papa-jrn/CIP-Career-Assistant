@@ -111,3 +111,97 @@ export function hasUnknownContact(outcome: ConversationOutcome) {
 function textValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
+
+/**
+ * Load this user's contact corrections, newest first.
+ *
+ * Shared so every consumer of a saved conversation sees the same corrections.
+ * A correction that only reaches the page it was made on leaves the rest of the
+ * app working from a name the user has already told us is wrong.
+ */
+export async function loadContactCorrections(
+  supabase: { from: (table: string) => any },
+  userId: string,
+): Promise<ContactCorrection[]> {
+  const { data } = await supabase
+    .from("career_sources")
+    .select("extracted_text, created_at")
+    .eq("user_id", userId)
+    .eq("source_type", CONTACT_CORRECTION_SOURCE_TYPE)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  return ((data ?? []) as Array<{ extracted_text: string | null; created_at: string }>)
+    .map((row) => parseContactCorrection(row.extracted_text, row.created_at))
+    .filter(Boolean) as ContactCorrection[];
+}
+
+/**
+ * The corrected contact for each conversation, keyed by the `sourceRef` a save
+ * assigned it.
+ *
+ * Corrections name a `career_sources` row, but the same conversation also lives
+ * in the `conversation_outcomes` table, which has no such id. `sourceRef` is
+ * what the two copies share, so this is how a correction reaches both.
+ */
+export function correctionsBySourceRef(conversations: CorrectedConversation[]) {
+  const byRef = new Map<string, ContactCorrection>();
+  for (const item of conversations) {
+    const ref = (item.outcome.sourceRef ?? "").trim().toLowerCase();
+    if (!ref || !item.correctedAt) continue;
+    byRef.set(ref, {
+      targetId: item.id,
+      contactName: item.outcome.contactName,
+      contactOrganization: item.outcome.contactOrganization || undefined,
+      contactTitle: item.outcome.contactTitle || undefined,
+      correctedAt: item.correctedAt,
+    });
+  }
+  return byRef;
+}
+
+/** Apply corrections to outcomes that are identified only by `sourceRef`. */
+export function applyCorrectionsBySourceRef(
+  outcomes: ConversationOutcome[],
+  byRef: Map<string, ContactCorrection>,
+): ConversationOutcome[] {
+  if (!byRef.size) return outcomes;
+  return outcomes.map((outcome) => {
+    const correction = byRef.get((outcome.sourceRef ?? "").trim().toLowerCase());
+    if (!correction) return outcome;
+    return {
+      ...outcome,
+      contactName: correction.contactName,
+      contactOrganization: correction.contactOrganization ?? outcome.contactOrganization,
+      contactTitle: correction.contactTitle ?? outcome.contactTitle,
+    };
+  });
+}
+
+/**
+ * Rewrite a stored conversation payload so a text-based reader sees the
+ * corrected name.
+ *
+ * Evidence re-analysis reads the note as text, and the payload's `fileName`
+ * carries the contact ("Structured conversation with Unknown contact"), so the
+ * advisor is told the wrong person unless this is applied.
+ */
+export function applyCorrectionToPayload(extractedText: string | null, correction?: ContactCorrection): string | null {
+  if (!extractedText || !correction) return extractedText;
+  try {
+    const parsed = JSON.parse(extractedText);
+    if (!parsed || typeof parsed !== "object") return extractedText;
+    const nested = parsed.structured_outcome;
+    const previousName = typeof nested?.contactName === "string" ? nested.contactName : "";
+    if (nested && typeof nested === "object") {
+      nested.contactName = correction.contactName;
+      if (correction.contactOrganization) nested.contactOrganization = correction.contactOrganization;
+      if (correction.contactTitle) nested.contactTitle = correction.contactTitle;
+    }
+    if (typeof parsed.fileName === "string" && previousName && parsed.fileName.includes(previousName)) {
+      parsed.fileName = parsed.fileName.split(previousName).join(correction.contactName);
+    }
+    return JSON.stringify(parsed);
+  } catch {
+    return extractedText;
+  }
+}

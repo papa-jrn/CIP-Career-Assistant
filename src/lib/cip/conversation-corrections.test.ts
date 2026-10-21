@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildConversationOutcome } from "./conversation-outcomes";
+import { buildConversationOutcome, conversationOutcomeCareerSourcePayload } from "./conversation-outcomes";
 import {
   applyContactCorrections,
+  applyCorrectionsBySourceRef,
+  applyCorrectionToPayload,
+  correctionsBySourceRef,
   contactCorrectionPayload,
   hasUnknownContact,
   parseContactCorrection,
@@ -106,5 +109,66 @@ describe("applyContactCorrections", () => {
   it("ignores a correction that points at a conversation that is not loaded", () => {
     const corrected = applyContactCorrections([conversation("row-1", "Alex Herzog")], [correction({ targetId: "row-9" })]);
     expect(corrected[0].outcome.contactName).toBe("Alex Herzog");
+  });
+});
+
+describe("reaching every consumer of a conversation", () => {
+  const REF = "loopback:notes:2026-09-14T10:00:00.000Z:0";
+
+  function correctedPair() {
+    const stored = { id: "row-1", outcome: buildConversationOutcome({ contactName: "Unknown contact", sourceRef: REF }) };
+    return applyContactCorrections([stored], [correction({ contactOrganization: "Quine" })]);
+  }
+
+  it("keys a correction by the sourceRef the two stores share", () => {
+    const byRef = correctionsBySourceRef(correctedPair());
+    // Keys are lowercased so a sourceRef differing only in case still matches.
+    expect(byRef.get(REF.toLowerCase())?.contactName).toBe("Vince Berk");
+  });
+
+  it("matches a sourceRef that differs only in case", () => {
+    const shouty = buildConversationOutcome({ contactName: "Unknown contact", sourceRef: REF.toUpperCase() });
+    const [corrected] = applyCorrectionsBySourceRef([shouty], correctionsBySourceRef(correctedPair()));
+    expect(corrected.contactName).toBe("Vince Berk");
+  });
+
+  it("ignores conversations nobody corrected", () => {
+    const untouched = [{ id: "row-9", outcome: buildConversationOutcome({ contactName: "Alex Herzog", sourceRef: "ref-9" }) }];
+    expect(correctionsBySourceRef(untouched).size).toBe(0);
+  });
+
+  it("corrects the structured-table copy, which is the one dedupe keeps", () => {
+    // Propagation reads both stores and keeps the structured copy. Without
+    // this the user's correction would be discarded by dedupe.
+    const fromTable = buildConversationOutcome({ contactName: "Unknown contact", sourceRef: REF });
+    const [corrected] = applyCorrectionsBySourceRef([fromTable], correctionsBySourceRef(correctedPair()));
+    expect(corrected.contactName).toBe("Vince Berk");
+    expect(corrected.contactOrganization).toBe("Quine");
+  });
+
+  it("leaves outcomes with no matching sourceRef alone", () => {
+    const other = buildConversationOutcome({ contactName: "Alex Herzog", sourceRef: "a-different-ref" });
+    const [unchanged] = applyCorrectionsBySourceRef([other], correctionsBySourceRef(correctedPair()));
+    expect(unchanged.contactName).toBe("Alex Herzog");
+  });
+
+  it("rewrites the payload a text reader sees, so re-analysis is told the right person", () => {
+    const payload = conversationOutcomeCareerSourcePayload(
+      buildConversationOutcome({ contactName: "Unknown contact", sourceRef: REF, marketSignal: "Large tech is contracting." }),
+    );
+    expect(payload.fileName).toContain("Unknown contact");
+
+    const rewritten = applyCorrectionToPayload(JSON.stringify(payload), correction());
+    const parsed = JSON.parse(rewritten as string);
+    expect(parsed.fileName).toBe("Structured conversation with Vince Berk");
+    expect(parsed.structured_outcome.contactName).toBe("Vince Berk");
+    // The conversation itself is untouched; only who it is attributed to changes.
+    expect(parsed.structured_outcome.marketSignal).toBe("Large tech is contracting.");
+  });
+
+  it("returns the payload untouched without a correction, and survives bad input", () => {
+    expect(applyCorrectionToPayload('{"fileName":"x"}', undefined)).toBe('{"fileName":"x"}');
+    expect(applyCorrectionToPayload("not json", correction())).toBe("not json");
+    expect(applyCorrectionToPayload(null, correction())).toBeNull();
   });
 });
