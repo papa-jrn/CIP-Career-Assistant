@@ -522,6 +522,73 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
               </p>
             </div>
           </div>
+          <form
+            class="mt-4 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
+            enctype="multipart/form-data"
+            hx-encoding="multipart/form-data"
+            hx-post="/api/network/loopback"
+            hx-target="#quick-conversation-result"
+            hx-swap="innerHTML"
+          >
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">Who you talked to</span>
+                <input
+                  name="conversation_contact_name"
+                  list="follow-up-contact-names"
+                  required
+                  maxlength="80"
+                  placeholder="Full name"
+                  class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm"
+                />
+                <datalist id="follow-up-contact-names">
+                  {queue.map((person) => <option value={person.contact.name}></option>)}
+                </datalist>
+              </label>
+              <label class="grid gap-1">
+                <span class="text-xs font-semibold uppercase text-[var(--muted)]">When</span>
+                <input name="conversation_date" type="date" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" />
+              </label>
+            </div>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Your notes</span>
+              <textarea
+                name="conversation_notes"
+                rows="6"
+                placeholder="Paste or type what you took away from the conversation, in your own words."
+                class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm leading-6"
+              ></textarea>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Or upload notes</span>
+              <input
+                name="note_files"
+                type="file"
+                accept=".txt,.md,.docx,.rtf,.json,.doc"
+                multiple
+                class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm"
+              />
+            </label>
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="rounded-md bg-[var(--accent-strong)] px-3 py-2 text-sm font-semibold text-white" type="submit" disabled={!signedIn}>
+                Save these notes
+              </button>
+              <div id="quick-conversation-result" class="text-sm" aria-live="polite"></div>
+            </div>
+            <p class="text-xs leading-5 text-[var(--muted)]">
+              CIP reads the notes for lane, employer, and follow-up signals and labels what it derived.
+              You can correct the contact afterwards if it reads the name wrongly.
+            </p>
+          </form>
+
+          <details class="mt-4">
+            <summary class="cursor-pointer text-sm font-semibold text-[var(--accent-strong)]">
+              Use the detailed form instead
+            </summary>
+            <p class="mt-2 max-w-3xl text-xs leading-5 text-[var(--muted)]">
+              Code the conversation field by field when you want to set the signal, confidence, and
+              obligations yourself rather than have them read from your notes.
+            </p>
           <form class="mt-4 grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4" hx-post="/api/network/feedback" hx-target="#conversation-outcome-result" hx-swap="innerHTML">
             <input type="hidden" name="feedback_type" value="follow_up" />
             <input type="hidden" name="conversation_status" value="Met" />
@@ -630,6 +697,7 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
               <div id="conversation-outcome-result" class="text-sm" aria-live="polite"></div>
             </div>
           </form>
+          </details>
         </section>
 
         <section class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
@@ -686,7 +754,7 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
             const saved = person.latestFeedback;
             const loggedConversations = (person.conversationOutcomes ?? []).filter(outcomeHasLoggedConversation);
             return (
-              <article id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-5">
+              <article id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold">{person.contact.name}</h3>
@@ -727,7 +795,11 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     </a>
                   ) : null}
                 </div>
-                <div class="mt-4">
+                <details class="mt-3">
+                  <summary class="cursor-pointer text-sm font-semibold text-[var(--accent-strong)]">
+                    Open details and update
+                  </summary>
+                  <div class="mt-4">
 
                 {person.match?.recommendedFirstAsk ? (
                   <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm leading-6 text-[var(--muted)]">
@@ -829,7 +901,8 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                     <div id={`follow-up-result-${id}`} class="text-sm" aria-live="polite"></div>
                   </div>
                 </form>
-                </div>
+                  </div>
+                </details>
               </article>
             );
           })}

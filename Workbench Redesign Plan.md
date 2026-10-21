@@ -557,3 +557,41 @@ turns out to be missing rather than unnamed, that is a different problem and thi
 Verification: typecheck clean, 499 tests passing, SSR build passed, rendered signed-out page confirms
 the section is absent with nothing to show and the section order is unchanged. The signed-in path -
 the list actually populating - needs a founder pass; it cannot be exercised without their session.
+
+## Implemented 2026-10-21: compress Follow Ups, one capture form, reach every conversation
+
+Founder review of Follow Ups raised three things.
+
+**The list was unusable at length.** Every person rendered their suggested ask, known context, match
+reasons, logged conversations, interaction history, and a full review form inline - roughly half a
+page each, and worse on a phone. Each card now shows name, title, and status chips, with everything
+else behind an "Open details and update" disclosure. Nothing was removed; the card frame tightened
+from p-5 to p-4.
+
+**Two forms were doing the same job.** Connections and Follow Ups each carried a differently designed
+conversation-capture form. Follow Ups now leads with a quick capture - who, when, paste or upload your
+own notes - posting to the existing loopback endpoint, with the detailed structured form preserved
+intact behind "Use the detailed form instead". The founder's existing framing copy about when to use
+a conversation outcome was kept as written. On Connections the structured tagging fields moved below
+the notes themselves and into an "Add optional structure" disclosure, so the optional fields read as
+optional. No endpoint, field name, or stored shape changed; this is which form leads, not new capture.
+
+**Eric Kidd was still in "Met - capture notes".** The "Waiting for a name" section added earlier only
+listed conversations whose contact was unidentified. A conversation filed under a wrong but plausible
+name - "Eric" for Eric Kidd, or a misspelling - is equally orphaned and that filter cannot see it, so
+the founder had no way to find or fix it. The section now lists every saved conversation with the name
+it is currently filed under, unidentified ones first, each correctable. It states that a conversation
+reaches a follow-up card only when the name matches, that a near-miss leaves it attached to nobody, and
+that nothing has been deleted. This still does not establish what happened to the Eric Kidd notes; it
+makes the stored records visible so the founder can see whether one exists under a wrong name or is
+genuinely absent.
+
+Verification: typecheck clean, 499 tests passing, SSR build passed. Connections rendered signed-out
+confirms the optional-structure disclosure. The Follow Ups capture and person cards sit behind the
+`queue.length` branch and could not be rendered without a session, so their markup was confirmed in
+source and by a clean compile only; a founder pass is required.
+
+Noted while working, not fixed: the Follow Ups capture forms are gated behind a non-empty queue, so a
+user with no imported network cannot capture a conversation there at all. Contact titles from import
+can be mis-parsed - Eric Kidd renders as "Managing Director, Custom Software at Senior Lead
+Programmer, Managing Directo", title and company apparently swapped and truncated. Both are open work.
