@@ -73,10 +73,16 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
      (commit f5ae4fd): each posting validates only the one lane its title fits best, and a posting
      below the match threshold is assigned to none. Not re-confirmed on live data; leave open until
      a briefing run shows it.
-   - **Old obligations resurfacing without a resolution path** — **not fixed.** There is no concept
-     of a resolved obligation anywhere in `strategic-state.ts`: any outcome carrying a promised
-     follow-up or due date is an obligation forever. Closing this needs somewhere to record that an
-     obligation was met or dropped, which is new persistence, not a scoring change.
+   - ~~**Old obligations resurfacing without a resolution path**~~ **DONE 2026-10-21.** A follow-up
+     can be marked done or no longer needed on the Follow Ups page, under "What you promised", and
+     reopened if closed by mistake. Resolution is an additive `follow_up_resolution` record, so the
+     conversation is untouched: it stays as evidence and keeps scoring lanes and employers, and only
+     the debt is closed. An obligation is identified by the conversation that created it -
+     `sourceRef` where a save assigned one, otherwise the promise itself - so two different promises
+     to one person stay separate, and a new promise made later is owed even if an earlier one was
+     closed. An unrecognised state leaves the obligation open, because failing toward "still owed"
+     is safer than telling someone a promise was kept. The key is length-bounded; an unbounded one
+     would exceed the endpoint's cap and fail silently.
 3. ~~**Eric Kidd's June conversation**~~ **RESOLVED 2026-10-21 — it was saved, and orphaned.**
    **The conclusion first recorded here was wrong and is corrected below.** The conversation had
    been saved in June as a `conversation_outcome` record with no contact name. Nothing displayed it:
@@ -278,9 +284,9 @@ Sequenced so each step makes the next safer, and so nothing ships on top of some
 already addressed and needs live confirmation; obligation resolution remains and needs persistence.
 ~~Duplicate conversation records (A4).~~ Done 2026-10-21 - the defect was silent loss, not
 over-counting. ~~Routing corrections through propagation and re-analysis (A5).~~ Done 2026-10-21.
-Step 1 is now complete except obligation resolution, which needs new persistence and is the one
-section 8 item still open. Conversation removal shipped 2026-10-21. Next: Step 2, the de-founder
-pass. Then the
+**Step 1 is complete** as of 2026-10-21, including conversation removal and obligation resolution.
+Of section 8, five of six symptoms are repaired and the sixth (a CRNA opening in guidance) appears
+structurally addressed but is not live-confirmed. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

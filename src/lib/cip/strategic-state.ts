@@ -14,6 +14,13 @@ import {
   removedSourceRefs,
   withoutRemovedOutcomes,
 } from "@/lib/cip/conversation-removals";
+import {
+  currentFollowUpResolutions,
+  isObligationResolved,
+  loadFollowUpResolutions,
+  obligationKey,
+  type FollowUpResolution,
+} from "@/lib/cip/follow-up-resolutions";
 import { parseConversationOutcome, type ConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import {
   buildTargetLanes,
@@ -43,6 +50,8 @@ export interface StrategicEmployerScore {
 }
 
 export interface StrategicFollowUpObligation {
+  /** Identifies the obligation so the user can close it out. */
+  key: string;
   contactName: string;
   relatedLane: string;
   relatedEmployer: string;
@@ -113,6 +122,8 @@ export interface StrategicStateInputs {
   latestNetworkAnalysis?: NetworkAnalysisLike | null;
   /** Verified-open, non-excluded, in-area postings from the latest searched run (lane validation). */
   verifiedPostings?: VerifiedPostingLike[];
+  /** Promises the user has already closed out, so they stop being owed. */
+  followUpResolutions?: FollowUpResolution[];
 }
 
 export async function loadStrategicState(
@@ -228,6 +239,7 @@ export async function loadStrategicInputs(
     employerCandidates: (candidateRows ?? []) as EmployerCandidateLike[],
     latestNetworkAnalysis: parseNetworkAnalysis(networkRow?.extracted_text ?? null),
     verifiedPostings: await loadVerifiedPostingsForLanes(supabase, userId),
+    followUpResolutions: await loadFollowUpResolutions(supabase, userId),
   };
 }
 
@@ -263,7 +275,7 @@ export function buildStrategicState(inputs: StrategicStateInputs): StrategicStat
   const lanes = scoreLanes(inputs);
   const employers = scoreEmployers(inputs);
   const employerCandidates = scoreEmployerCandidates(inputs);
-  const followUpObligations = buildFollowUpObligations(inputs.conversationOutcomes ?? []);
+  const followUpObligations = buildFollowUpObligations(inputs.conversationOutcomes ?? [], inputs.followUpResolutions ?? []);
   const resumeLaneRecommendation = buildResumeLaneRecommendation(lanes);
   const deltas = [
     ...lanes
@@ -433,10 +445,17 @@ export function scoreEmployerCandidates(inputs: StrategicStateInputs): Strategic
   return scoreEmployerLike(candidates, inputs.conversationOutcomes ?? [], "candidate");
 }
 
-export function buildFollowUpObligations(outcomes: ConversationOutcome[]): StrategicFollowUpObligation[] {
+export function buildFollowUpObligations(
+  outcomes: ConversationOutcome[],
+  resolutions: FollowUpResolution[] = [],
+): StrategicFollowUpObligation[] {
+  // A promise the user has marked met or dropped is no longer owed. The
+  // conversation stays as evidence; only the debt is closed.
+  const resolutionState = currentFollowUpResolutions(resolutions);
   return collapseObligationsByContact(
     outcomes
       .filter((outcome) => outcome.promisedFollowUp || outcome.followUpDueDate || outcome.nextAction || outcome.signalType === "follow_up_obligation")
+      .filter((outcome) => !isObligationResolved(outcome, resolutionState))
       .map((outcome): StrategicFollowUpObligation => {
       const urgency = followUpUrgency(outcome.followUpDueDate);
       const reasons = [
@@ -446,6 +465,7 @@ export function buildFollowUpObligations(outcomes: ConversationOutcome[]): Strat
         outcome.relatedEmployer ? `Related employer: ${outcome.relatedEmployer}.` : "",
       ].filter(Boolean);
       return {
+        key: obligationKey(outcome),
         contactName: outcome.contactName,
         relatedLane: outcome.relatedLane,
         relatedEmployer: outcome.relatedEmployer,

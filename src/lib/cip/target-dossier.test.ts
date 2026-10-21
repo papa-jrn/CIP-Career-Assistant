@@ -103,7 +103,7 @@ describe("people: only real, saved, stated-basis paths", () => {
 
   it("a due follow-up beats a warm path; a scheduled one only counts as a path", () => {
     const obligations: StrategicFollowUpObligation[] = [
-      { contactName: "Sam Rivera", relatedLane: "", relatedEmployer: "Granite Community Trust", promisedFollowUp: "Send the intro note", followUpDueDate: "2026-10-01", nextAction: "Send the intro note", urgency: "overdue", reasons: [] },
+      { key: "ref:sam-rivera", contactName: "Sam Rivera", relatedLane: "", relatedEmployer: "Granite Community Trust", promisedFollowUp: "Send the intro note", followUpDueDate: "2026-10-01", nextAction: "Send the intro note", urgency: "overdue", reasons: [] },
     ];
     const contacts = [{ norm: normOrg("Granite Community Trust"), canonical: "Granite Community Trust", name: "Sarah Lin", firstAsk: null }];
     const due = one(bundle({ employers: [GRANITE], obligations, inputs: { contacts } as never }), "Granite Community Trust");

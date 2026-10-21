@@ -744,3 +744,34 @@ title set, and `print()` available. The print dialog itself cannot be exercised 
 should confirm the dialog opens with the resume in it.
 
 Noted: no other `window.open` call in the pages carries these options.
+
+## Implemented 2026-10-21: closing out a follow-up (last open section 8 item)
+
+An obligation was derived from a conversation and never had an end. Any outcome recording a promised
+follow-up, due date or next action made the user owe that person something indefinitely, so old
+promises kept resurfacing in briefings with no way to clear them.
+
+The Follow Ups page now has "What you promised": the open follow-ups taken from the user's own
+conversations, each with "I did this" and "No longer needed". Resolution is an additive
+`follow_up_resolution` record, so the conversation is untouched - it stays as evidence and keeps
+scoring lanes and employers - and only the debt is closed. Reopening is supported and supersedes a
+closure without deleting it. The section sits outside the contact-queue branch, because a promise is
+owed whether or not a contact list has been imported.
+
+An obligation is identified by the conversation that created it: `sourceRef` where a save assigned
+one, otherwise the promise text itself. So two different promises to the same person stay two
+obligations, and a promise made in a later conversation is still owed after an earlier one is closed
+- both pinned by test. An unrecognised stored state leaves the obligation open, because failing
+toward "still owed" is safer than telling someone a promise was kept. The key is length-bounded:
+unbounded, a wordy promise would produce a key longer than the endpoint accepts and closing it would
+fail with nothing explaining why.
+
+The endpoint is same-origin guarded, authenticates before writing, Zod validated and body-size
+capped, and rejects off-site return paths. Unlike corrections and removals there is no target row to
+check ownership against, because an obligation is derived rather than stored; the record is written
+under the signed-in user's id and only ever read back for them.
+
+Verified by simulating the flow through the real functions: three open obligations, marking the
+oldest done leaves two, reopening restores three, and the key the interface submits matches the one
+`buildFollowUpObligations` derives. Typecheck clean, 583 tests passing, SSR build passed. A founder
+pass on the live page remains.

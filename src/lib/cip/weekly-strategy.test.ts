@@ -109,6 +109,7 @@ describe("weekly strategy briefing diff", () => {
         ...baseState,
         followUpObligations: [
           {
+            key: "ref:alex-herzog",
             contactName: "Alex Herzog",
             relatedLane: "Research lane",
             relatedEmployer: "",
