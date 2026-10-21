@@ -14,6 +14,10 @@ import {
   type ContactCorrection,
   type StoredConversation,
 } from "../lib/cip/conversation-corrections";
+import {
+  loadConversationRemovals,
+  partitionRemovedConversations,
+} from "../lib/cip/conversation-removals";
 import { actionBucket, needsNudge, outcomeHasLoggedConversation } from "../lib/cip/follow-up-buckets";
 import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
 import { createServer } from "../lib/supabase/server";
@@ -183,9 +187,13 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       const contactCorrections = (correctionRows ?? [])
         .map((row) => parseContactCorrection(row.extracted_text, row.created_at))
         .filter(Boolean) as ContactCorrection[];
-      const conversationOutcomes = applyContactCorrections(storedConversations, contactCorrections).map(
-        (item) => item.outcome,
-      );
+      // A conversation the user removed no longer counts as logged, so it cannot
+      // silence the prompt to capture one.
+      const removals = await loadConversationRemovals(supabase, user.id);
+      const conversationOutcomes = partitionRemovedConversations(
+        applyContactCorrections(storedConversations, contactCorrections),
+        removals,
+      ).active.map((item) => item.outcome);
       const conversationContacts = conversationOutcomes
         .map((outcome) => conversationOutcomeToContact(outcome))
         .filter(Boolean) as NetworkContact[];

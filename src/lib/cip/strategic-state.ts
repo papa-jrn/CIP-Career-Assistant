@@ -8,6 +8,12 @@ import {
   loadContactCorrections,
   type StoredConversation,
 } from "@/lib/cip/conversation-corrections";
+import {
+  loadConversationRemovals,
+  partitionRemovedConversations,
+  removedSourceRefs,
+  withoutRemovedOutcomes,
+} from "@/lib/cip/conversation-removals";
 import { parseConversationOutcome, type ConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import {
   buildTargetLanes,
@@ -193,14 +199,25 @@ export async function loadStrategicInputs(
   // copies share - and the structured copy is the one dedupe keeps, so without
   // this the correction would be thrown away.
   const correctionsByRef = correctionsBySourceRef(correctedCareerSources);
+  // A conversation the user removed stops counting here too, or it would keep
+  // scoring lanes and employers while showing as removed on the page.
+  const removals = await loadConversationRemovals(supabase, userId);
+  const { active: liveConversations, removed: removedConversations } = partitionRemovedConversations(
+    correctedCareerSources,
+    removals,
+  );
+  const removedRefs = removedSourceRefs(removedConversations);
   const conversationOutcomes = dedupeConversationOutcomes([
-    ...applyCorrectionsBySourceRef(
-      (structuredConversationRows ?? [])
-        .map((row) => parseStructuredConversationRow(row))
-        .filter(Boolean) as ConversationOutcome[],
-      correctionsByRef,
+    ...withoutRemovedOutcomes(
+      applyCorrectionsBySourceRef(
+        (structuredConversationRows ?? [])
+          .map((row) => parseStructuredConversationRow(row))
+          .filter(Boolean) as ConversationOutcome[],
+        correctionsByRef,
+      ),
+      removedRefs,
     ),
-    ...correctedCareerSources.map((item) => item.outcome),
+    ...liveConversations.map((item) => item.outcome),
   ]);
 
   return {

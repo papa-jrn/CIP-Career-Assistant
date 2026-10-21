@@ -160,10 +160,22 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
    "Senior Lead Programmer, Managing Directo", which are swapped, and the organization value is
    exactly 40 characters, cut mid-word. No 40-character cap exists anywhere in this codebase, so the
    truncation most likely arrived with the import source; the swap is still ours to trace.
-8. **No way to delete a saved conversation** — found 2026-10-21 when an orphaned June record was
-   recovered and duplicated by a re-entry. Records are additive by design, which is right, but a
-   user who ends up with two records of one conversation has no way to resolve it. Needs a deliberate
-   user-confirmed removal, or a merge, rather than silent deduplication.
+8. ~~**No way to delete a saved conversation**~~ **DONE 2026-10-21.** A conversation can be removed
+   from Connections, with an optional reason. It stops counting towards lanes, employers,
+   follow-ups and evidence re-analysis, and stops appearing in the conversation lists.
+
+   It is a recoverable removal, not a delete, and the UI says so: "It stays in your records and can
+   be put back." Removal is recorded as its own additive record, like corrections, so the original
+   conversation is never altered and removing the wrong half of a duplicate pair is undoable -
+   which matters because that is exactly the situation that prompted this. Removed conversations
+   live in a collapsed "Removed conversations" section with a Put this back control.
+
+   A removal names a `career_sources` row, so it is also applied by `sourceRef` to the structured
+   table copy that propagation keeps; without that a removed conversation would keep scoring lanes
+   while showing as removed. Verified by simulating removal and restore through the real functions.
+
+   Not done, and worth stating: there is no hard delete. A user who wants a conversation erased from
+   storage rather than withdrawn from use still has no way to do that.
 9. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
    capture a conversation there at all.
 
@@ -248,7 +260,8 @@ already addressed and needs live confirmation; obligation resolution remains and
 ~~Duplicate conversation records (A4).~~ Done 2026-10-21 - the defect was silent loss, not
 over-counting. ~~Routing corrections through propagation and re-analysis (A5).~~ Done 2026-10-21.
 Step 1 is now complete except obligation resolution, which needs new persistence and is the one
-section 8 item still open. Next: Step 2, the de-founder pass. Then the
+section 8 item still open. Conversation removal shipped 2026-10-21. Next: Step 2, the de-founder
+pass. Then the
 duplicate conversation records and routing corrections through propagation and re-analysis. These are
 integrity rules, not polish, and everything downstream inherits them.
 

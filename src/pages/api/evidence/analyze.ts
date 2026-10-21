@@ -10,6 +10,7 @@ import { calculateEvidenceSufficiency, type EvidenceSufficiencyScore } from "@/l
 import { buildIdentityDraft, intakeFormSchema, type IntakeForm } from "@/lib/cip/intake";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "@/lib/cip/source-analysis";
 import { applyCorrectionToPayload, loadContactCorrections } from "@/lib/cip/conversation-corrections";
+import { currentRemovals, loadConversationRemovals } from "@/lib/cip/conversation-removals";
 import { propagateStrategicStateAfterChange } from "@/lib/cip/weekly-strategy";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
@@ -146,7 +147,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     // the name extraction guessed.
     const contactCorrections = await loadContactCorrections(supabase, user.id);
     const correctionByTarget = new Map(contactCorrections.map((correction) => [correction.targetId, correction]));
+    // A removed conversation is not evidence any more.
+    const removalState = currentRemovals(await loadConversationRemovals(supabase, user.id));
     const conversationNotes = (conversationRows ?? [])
+      .filter((row) => !removalState.get(String(row.id))?.removed)
       .map((row) => {
         const corrected = applyCorrectionToPayload(row.extracted_text, correctionByTarget.get(String(row.id)));
         const parsed = parseConversationNote(corrected);
