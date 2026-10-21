@@ -492,3 +492,40 @@ reduce how often a correction is needed but cannot repair records already saved.
 Verification: typecheck clean, 499 tests passing (477 + 22 new), SSR build passed. Founder live pass
 on the running app still to come, including correcting the Vince Berk record and confirming it
 reaches his follow-up card.
+
+## Implemented 2026-10-21: Connections leads with conversations
+
+Founder diagnosis: the page was doing two jobs - bringing a network in, and working the conversations
+- and the wrong one was winning. The returning user's actual work sat at line 923 of 1384, behind six
+explainer sections and roughly 300 lines of import forms. Network intelligence stays valuable and a
+user must still be able to refresh their network after the first pass, but the conversation loop is
+what a returning user comes for.
+
+New order: hero, Loop back (capture what an advisor told you), What saved conversations are changing,
+then two disclosures - "Update your network" holding the import flow and the saved import-based
+analysis, and "How to use your network well" holding the trust-boundary, referral-posture, lane
+question bank, ideal-work, alumni, five-person-list, convert-contacts, and first-ask sections.
+Founder chose to collapse all explainer content into the single disclosure rather than relocate it to
+the public page; nothing was deleted, moved to another route, or reworded.
+
+State-aware rather than fixed: `hasNetwork` is true when a saved import or analysis exists. With no
+network the import disclosure renders open, because then it is the thing the user needs; with a
+network it renders closed and its summary carries the saved import and analysis counts and the last
+analysis date, so collapsing it hides nothing about what is stored. Verified both branches render as
+intended.
+
+The import block is rendered once, below Loop back, rather than in two positions. Rendering it in two
+places would duplicate about 300 lines of form markup and its element ids; reordering it visually with
+CSS would put the visual order at odds with the DOM order for keyboard and screen-reader users. If
+first-use should truly lead with import, the honest fix is extracting the import into its own
+component and rendering it in the chosen slot - open work, not done here.
+
+Verification: typecheck clean, 499 tests passing, SSR build passed. The rendered signed-out page was
+fetched from a build served on a spare port (the founder's dev server holds 4321 and serves a stale
+dist) and its heading order confirmed: Loop back precedes the import disclosure, which precedes the
+explainer disclosure, and the import disclosure carries the open attribute when no network is saved.
+Signed-in sections could not be exercised this way; a founder live pass remains.
+
+Not done here: the People consolidation itself - compact Connections/Follow-ups with expandable
+details under one People surface - plus the duplicate raw-upload versus structured-extraction records
+(the Vince Berk pair) and widening the capture-time contact-name patterns.

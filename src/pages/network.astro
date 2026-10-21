@@ -400,6 +400,17 @@ const networkAnalysisIsStale = Boolean(
   latestConversationAt &&
   new Date(latestConversationAt).getTime() > new Date(latestNetworkAnalysisAt).getTime(),
 );
+const hasNetwork = networkCounts.imports > 0 || networkCounts.analyses > 0;
+const importedOn = latestNetworkAnalysisAt ? new Date(latestNetworkAnalysisAt).toLocaleDateString() : "";
+const networkSummary = hasNetwork
+  ? [
+      `${networkCounts.imports} saved ${networkCounts.imports === 1 ? "import" : "imports"}`,
+      `${networkCounts.analyses} ${networkCounts.analyses === 1 ? "analysis" : "analyses"}`,
+      importedOn ? `last analysed ${importedOn}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  : "Import your connections so CIP can suggest who to talk to";
 ---
 
 <Layout title="CIP Network Intelligence">
@@ -433,175 +444,276 @@ const networkAnalysisIsStale = Boolean(
     </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Trust boundary</p>
-      <h2 class="mt-1 text-2xl font-semibold">Why CIP cannot just scrape LinkedIn</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        Scraping logged-in LinkedIn pages can violate platform rules, create privacy risk, break without warning, and gather data people did not knowingly provide for this use. It can also damage user trust. CIP uses only data you provide directly: exported files, pasted notes, profile PDFs, and relationship context you choose to add. That boundary keeps the workflow professional, transparent, and reviewable.
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Loop back: conversation notes</p>
+      <h2 class="mt-1 text-2xl font-semibold">Bring back what your advisors told you</h2>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        After market-read conversations, save what you learned here. Things change week to week: new employers come up, pay-band reality gets clearer, and your geography or work-model preferences may shift. These notes are additive evidence; the next network analysis and the next evidence re-analysis both read them, so the cycle actually updates instead of repeating itself.
       </p>
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Allowed inputs</h3>
-          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-            <li>LinkedIn data archive or connections CSV supplied by the user.</li>
-            <li>LinkedIn profile PDF or pasted profile sections.</li>
-            <li>Alumni portal contacts, school mentoring data, alumni club lists, coworker, community, event, and personal contact lists the user chooses to provide.</li>
-            <li>Manual notes about relationship strength, history, and comfort level.</li>
-          </ul>
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved conversation notes</p>
+          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{conversationNoteCount}</p>
         </div>
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Not allowed</h3>
-          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-            <li>Automated scraping of private LinkedIn pages.</li>
-            <li>Scraping or bypassing gated alumni directories, career-office portals, or member-only databases.</li>
-            <li>Bypassing access controls, rate limits, or login protections.</li>
-            <li>Implying CIP can inspect private connections directly.</li>
-            <li>Generating outreach without the user's contact-specific approval.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Lane validation</p>
-      <h2 class="mt-1 text-2xl font-semibold">Test career directions before asking for referrals.</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        CIP now treats networking data as a way to validate career lanes first. A former coworker, Rotary chapter, BNI group, or alumni affiliation can be useful context, but it is not a recommendation by itself. The app should identify named people who can help test whether a lane is real, reachable, and worth pursuing.
-      </p>
-      <div class="mt-5 grid gap-4 md:grid-cols-3">
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Career lane first</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Start with the user's current role hypotheses, then ask which contacts can validate those directions through market reads or employer context.
-          </p>
-        </article>
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Named people only</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Groups and affiliations are context pools until they connect to a specific person, company, title, and respectful first ask.
-          </p>
-        </article>
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Market read before referral</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-            The safest early move is often a short conversation about titles, expectations, and employers before asking anyone for a job lead.
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Conversation openers</p>
-      <h2 class="mt-1 text-2xl font-semibold">Questions that get you lane validation, not a referral.</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        The goal of an early conversation is to learn whether a lane is real, reachable, and worth pursuing — not to land a job lead. Use these openers to surface titles, pay bands, employer fit, and proof vocabulary before you rewrite assets or apply. Replace the bracketed text with your own lanes.
-      </p>
-
-      {personalLanes.length > 0 && (
-        <div class="mt-5 rounded-md border border-[var(--accent-soft)] bg-[var(--accent-soft)] p-4">
-          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Your lanes right now</p>
-          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
-            From your current strategy memory. This includes saved conversation outcomes when they have changed the lane picture.
-          </p>
-          <div class="mt-3 grid gap-3 md:grid-cols-3">
-            {personalLanes.map((lane) => (
-              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-                <div class="flex items-start justify-between gap-2">
-                  <h3 class="text-sm font-semibold">{lane.name}</h3>
-                  <span class="shrink-0 rounded-full bg-[var(--brass-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]">{lane.status}</span>
-                </div>
-                <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{lane.recommendedAsk}</p>
-                {lane.missingEvidence && (
-                  <p class="mt-2 text-xs leading-5 text-[var(--warning)]">Still missing: {lane.missingEvidence}</p>
-                )}
-                {lane.namedPeople.length > 0 && (
-                  <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Named contacts: {lane.namedPeople.join(", ")}</p>
-                )}
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Five ground rules</p>
-        <ol class="mt-2 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
-          {conversationGroundRules.map((rule) => (
-            <li class="flex gap-2">
-              <span class="text-[var(--brass)]" aria-hidden="true">&bull;</span>
-              <span>{rule}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        {conversationOpeners.map((group) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <div class="flex items-baseline justify-between gap-2">
-              <h3 class="font-semibold">{group.intent}</h3>
-            </div>
-            <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{group.when}</p>
-            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-              {group.openers.map((line) => (
-                <li class="flex gap-2">
-                  <Icon name="spark" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-strong)]" strokeWidth={2} />
-                  <span>&ldquo;{line}&rdquo;</span>
+          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Most recent</p>
+          {recentConversationNotes.length ? (
+            <ul class="mt-2 space-y-1 text-sm text-[var(--muted)]">
+              {recentConversationNotes.map((note) => (
+                <li>
+                  <span class="font-semibold text-[var(--foreground)]">{note.title ?? "Conversation notes"}</span>
+                  <span class="ml-1 text-xs">{new Date(note.created_at).toLocaleDateString()}</span>
                 </li>
               ))}
             </ul>
-          </article>
-        ))}
+          ) : (
+            <p class="mt-2 text-sm text-[var(--muted)]">No conversation notes saved yet.</p>
+          )}
+        </div>
       </div>
-
-      <p class="mt-5 text-xs leading-5 text-[var(--muted)]">
-        After each conversation, capture what was confirmed or weakened on the follow-up page. Confirmed lanes, rejected lanes, salary evidence, new employers, and new names all feed the next analysis pass.
-      </p>
-    </section>
-
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Ideal work filter</p>
-      <h2 class="mt-1 text-2xl font-semibold">Start with the work life worth aiming for.</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        Network data should not trap the user inside whoever is nearby or familiar. CIP should combine the LinkedIn profile, resume evidence, and these preferences before deciding which relationships are actually useful for advice, market reads, or introductions.
-      </p>
-      <div class="mt-5 grid gap-4 md:grid-cols-3">
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Fit before geography</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Remote, hybrid, national, regional, and local paths should all stay open until the user chooses a constraint.</p>
-        </article>
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Pay and scope matter</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Local anchors need evidence of compensation, seniority, and modern work practices before they become priority targets.</p>
-        </article>
-        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Network keeps expanding</h3>
-          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">The first import is a starting map. As better-fit businesses and roles appear, CIP should ask what new relationship data would make the map stronger.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
-      <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        Alumni data can be valuable, but it follows the same rule as LinkedIn: CIP uses information the user is allowed to access, export, paste, or summarize. The goal is not to mine a university database. The goal is to find legitimate shared context for thoughtful conversations.
-      </p>
-      <div class="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {alumniSources.map((item) => (
-          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <h3 class="font-semibold">{item.label}</h3>
-            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{item.value}</p>
-          </article>
-        ))}
-      </div>
-      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
-        <h3 class="font-semibold">How CIP uses alumni signals</h3>
-        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-          CIP treats shared school, program, region, club, or event history as a warm-context signal. It can help prioritize who to ask for market advice, employer context, or an introduction, but it does not turn an alumni connection into automatic permission to request a referral.
+      <form
+        id="loopback-form"
+        class="mt-5 grid gap-4"
+        enctype="multipart/form-data"
+        hx-encoding="multipart/form-data"
+        hx-post="/api/network/loopback"
+        hx-target="#loopback-result"
+        hx-swap="innerHTML"
+      >
+        <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
+          <p class="text-sm font-semibold text-[var(--foreground)]">Optional structure for these notes</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+            Use these fields when the notes are from one conversation or one clear source. CIP will save the raw note and these tags together, so the next analysis can tell whether the conversation strengthens, weakens, or redirects a lane.
+          </p>
+          <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact / source</span>
+              <input name="conversation_contact_name" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Who you talked to" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation date</span>
+              <input name="conversation_date" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" type="date" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
+              <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. Upper Valley nonprofits" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
+              <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
+              <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalDirections.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
+              <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalTypes.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
+              <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+                {signalConfidences.map((option) => <option value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label class="grid gap-1 md:col-span-2">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action this creates</span>
+              <input name="next_action" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
+            </label>
+            <label class="grid gap-1 lg:col-span-3">
+              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Summary / what changed</span>
+              <textarea
+                name="structured_summary"
+                class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm"
+                placeholder="Short version is enough: what did this source confirm, weaken, redirect, or add?"
+              ></textarea>
+            </label>
+          </div>
+        </div>
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Upload notes files (.txt, .md, .docx, .rtf, .json)</span>
+          <input name="note_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />
+        </label>
+        <label class="grid gap-2">
+          <span class="text-sm font-semibold">Or paste conversation notes</span>
+          <textarea
+            name="conversation_notes"
+            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            placeholder={`Useful things to capture:\nWho you talked to, their company/role, and the date.\nWhat they confirmed or weakened about a career lane, employer, or pay band.\nNew employers, teams, titles, or people they mentioned.\nAnything that changes your targets: geography, remote/hybrid, compensation floor, dealbreakers.`}
+          ></textarea>
+        </label>
+        <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
+          <span>Save conversation notes</span>
+        </button>
+        <p class="text-sm leading-6 text-[var(--muted)]">
+          Notes are saved as additive records; nothing earlier is overwritten. After saving, re-run the network analysis above or the evidence re-analysis on the Evidence page to fold the learnings in.
         </p>
-      </div>
+      </form>
+      <div id="loopback-result" class="mt-4" aria-live="polite"></div>
     </section>
 
+    {strategicState ? (
+      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Current network memory</p>
+            <h2 class="mt-1 text-2xl font-semibold">What saved conversations are changing now</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              This readout is built from the propagated strategic state, so it includes conversation outcomes, current evidence analysis, watched employers, and the older network import when useful. Treat it as the current working view.
+            </p>
+          </div>
+          <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
+            {strategicState.conversationOutcomeCount} conversation signals
+          </span>
+        </div>
+
+        {strategicState.lanes.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Current lane validation</h3>
+            <div class="mt-3 grid gap-3">
+              {strategicState.lanes.slice(0, 6).map((lane) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{lane.lane}</h4>
+                      <p class="mt-1 text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {lane.score} · {lane.direction}
+                    </span>
+                  </div>
+                  {lane.reasons.length ? (
+                    <ul class="mt-3 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
+                      {lane.reasons.slice(0, 3).map((reason) => <li>{reason}</li>)}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {recentConversationOutcomes.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Recent conversation signals</h3>
+            {Astro.url.searchParams.get("corrected") === "contact" ? (
+              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" role="status">
+                Contact saved. This conversation now appears on that person's follow-up card.
+              </p>
+            ) : null}
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              {recentConversationOutcomes.map(({ id, outcome, correctedAt, extractedContactName }) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">
+                        {hasUnknownContact(outcome) ? "Contact not identified" : outcome.contactName}
+                      </h4>
+                      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+                        {[outcome.contactTitle, outcome.contactOrganization].filter(Boolean).join(" at ") || "Conversation source"}
+                      </p>
+                      {hasUnknownContact(outcome) ? (
+                        <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+                          The notes were saved, but reading them did not identify who you spoke to. Set the name below.
+                        </p>
+                      ) : null}
+                      {correctedAt ? (
+                        <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
+                          Contact set by you{extractedContactName && extractedContactName !== outcome.contactName
+                            ? `, replacing "${extractedContactName}"`
+                            : ""}.
+                        </p>
+                      ) : null}
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {outcome.signalDirection}
+                    </span>
+                  </div>
+                  <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
+                    {[outcome.relatedLane, outcome.relatedEmployer].filter(Boolean).join(" · ") || outcome.signalType.replace("_", " ")}
+                  </p>
+                  {(outcome.marketSignal || outcome.newLeads || outcome.nextAction) ? (
+                    <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{outcome.marketSignal || outcome.newLeads || outcome.nextAction}</p>
+                  ) : null}
+                  <details class="mt-3" open={hasUnknownContact(outcome)}>
+                    <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
+                      {hasUnknownContact(outcome) ? "Say who this was with" : "Correct the contact"}
+                    </summary>
+                    <form
+                      class="mt-2 grid gap-2"
+                      method="post"
+                      action="/api/network/contact-correction"
+                      hx-post="/api/network/contact-correction"
+                    >
+                      <input type="hidden" name="targetId" value={id} />
+                      <input type="hidden" name="returnTo" value="/network" />
+                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+                        Who you spoke to
+                        <input
+                          name="contactName"
+                          required
+                          maxlength="80"
+                          value={hasUnknownContact(outcome) ? "" : outcome.contactName}
+                          placeholder="Full name"
+                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+                        />
+                      </label>
+                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+                        Organization (optional)
+                        <input
+                          name="contactOrganization"
+                          maxlength="120"
+                          value={outcome.contactOrganization}
+                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+                        />
+                      </label>
+                      <button type="submit" class="justify-self-start rounded-md bg-[var(--accent-strong)] px-3 py-2 text-xs font-semibold text-white">
+                        Save contact
+                      </button>
+                      <p class="text-xs leading-5 text-[var(--muted)]">
+                        Your correction is saved alongside the notes; the original reading is kept, not overwritten.
+                      </p>
+                    </form>
+                  </details>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {strategicState.employers.length ? (
+          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="text-sm font-semibold">Watched employer movement</h3>
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              {strategicState.employers.slice(0, 4).map((employer) => (
+                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 class="font-semibold">{employer.name}</h4>
+                      <p class="mt-1 text-xs text-[var(--muted)]">{employer.region || "Region not set"}</p>
+                    </div>
+                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {employer.score} · {employer.direction}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{employer.nextMove}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    ) : null}
+
+    <details class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" open={!hasNetwork}>
+      <summary class="cursor-pointer text-lg font-semibold">
+        {hasNetwork ? "Update your network" : "Add your network"}
+        <span class="ml-2 text-sm font-normal text-[var(--muted)]">{networkSummary}</span>
+      </summary>
+      <div class="mt-4">
     <section class="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       <div class="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 1</p>
@@ -920,271 +1032,6 @@ const networkAnalysisIsStale = Boolean(
       <div id="network-import-result"></div>
     </section>
 
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Loop back: conversation notes</p>
-      <h2 class="mt-1 text-2xl font-semibold">Bring back what your advisors told you</h2>
-      <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        After market-read conversations, save what you learned here. Things change week to week: new employers come up, pay-band reality gets clearer, and your geography or work-model preferences may shift. These notes are additive evidence; the next network analysis and the next evidence re-analysis both read them, so the cycle actually updates instead of repeating itself.
-      </p>
-      <div class="mt-4 grid gap-2 sm:grid-cols-2">
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Saved conversation notes</p>
-          <p class="mt-2 text-3xl font-semibold text-[var(--accent-strong)]">{conversationNoteCount}</p>
-        </div>
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <p class="text-xs font-semibold uppercase text-[var(--muted)]">Most recent</p>
-          {recentConversationNotes.length ? (
-            <ul class="mt-2 space-y-1 text-sm text-[var(--muted)]">
-              {recentConversationNotes.map((note) => (
-                <li>
-                  <span class="font-semibold text-[var(--foreground)]">{note.title ?? "Conversation notes"}</span>
-                  <span class="ml-1 text-xs">{new Date(note.created_at).toLocaleDateString()}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p class="mt-2 text-sm text-[var(--muted)]">No conversation notes saved yet.</p>
-          )}
-        </div>
-      </div>
-      <form
-        id="loopback-form"
-        class="mt-5 grid gap-4"
-        enctype="multipart/form-data"
-        hx-encoding="multipart/form-data"
-        hx-post="/api/network/loopback"
-        hx-target="#loopback-result"
-        hx-swap="innerHTML"
-      >
-        <div class="rounded-md border border-[var(--accent)] bg-[var(--background)] p-4">
-          <p class="text-sm font-semibold text-[var(--foreground)]">Optional structure for these notes</p>
-          <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-            Use these fields when the notes are from one conversation or one clear source. CIP will save the raw note and these tags together, so the next analysis can tell whether the conversation strengthens, weakens, or redirects a lane.
-          </p>
-          <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact / source</span>
-              <input name="conversation_contact_name" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Who you talked to" />
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation date</span>
-              <input name="conversation_date" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" type="date" />
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
-              <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. Upper Valley nonprofits" />
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
-              <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
-              <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                {signalDirections.map((option) => <option value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
-              <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                {signalTypes.map((option) => <option value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label class="grid gap-1">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
-              <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
-                {signalConfidences.map((option) => <option value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label class="grid gap-1 md:col-span-2">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action this creates</span>
-              <input name="next_action" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
-            </label>
-            <label class="grid gap-1 lg:col-span-3">
-              <span class="text-xs font-semibold uppercase text-[var(--muted)]">Summary / what changed</span>
-              <textarea
-                name="structured_summary"
-                class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm"
-                placeholder="Short version is enough: what did this source confirm, weaken, redirect, or add?"
-              ></textarea>
-            </label>
-          </div>
-        </div>
-        <label class="grid gap-2">
-          <span class="text-sm font-semibold">Upload notes files (.txt, .md, .docx, .rtf, .json)</span>
-          <input name="note_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />
-        </label>
-        <label class="grid gap-2">
-          <span class="text-sm font-semibold">Or paste conversation notes</span>
-          <textarea
-            name="conversation_notes"
-            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
-            placeholder={`Useful things to capture:\nWho you talked to, their company/role, and the date.\nWhat they confirmed or weakened about a career lane, employer, or pay band.\nNew employers, teams, titles, or people they mentioned.\nAnything that changes your targets: geography, remote/hybrid, compensation floor, dealbreakers.`}
-          ></textarea>
-        </label>
-        <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
-          <span>Save conversation notes</span>
-        </button>
-        <p class="text-sm leading-6 text-[var(--muted)]">
-          Notes are saved as additive records; nothing earlier is overwritten. After saving, re-run the network analysis above or the evidence re-analysis on the Evidence page to fold the learnings in.
-        </p>
-      </form>
-      <div id="loopback-result" class="mt-4" aria-live="polite"></div>
-    </section>
-
-    {strategicState ? (
-      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Current network memory</p>
-            <h2 class="mt-1 text-2xl font-semibold">What saved conversations are changing now</h2>
-            <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-              This readout is built from the propagated strategic state, so it includes conversation outcomes, current evidence analysis, watched employers, and the older network import when useful. Treat it as the current working view.
-            </p>
-          </div>
-          <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
-            {strategicState.conversationOutcomeCount} conversation signals
-          </span>
-        </div>
-
-        {strategicState.lanes.length ? (
-          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <h3 class="text-sm font-semibold">Current lane validation</h3>
-            <div class="mt-3 grid gap-3">
-              {strategicState.lanes.slice(0, 6).map((lane) => (
-                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h4 class="font-semibold">{lane.lane}</h4>
-                      <p class="mt-1 text-xs font-semibold uppercase text-[var(--muted)]">{lane.label}</p>
-                    </div>
-                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                      {lane.score} · {lane.direction}
-                    </span>
-                  </div>
-                  {lane.reasons.length ? (
-                    <ul class="mt-3 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
-                      {lane.reasons.slice(0, 3).map((reason) => <li>{reason}</li>)}
-                    </ul>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {recentConversationOutcomes.length ? (
-          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <h3 class="text-sm font-semibold">Recent conversation signals</h3>
-            {Astro.url.searchParams.get("corrected") === "contact" ? (
-              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" role="status">
-                Contact saved. This conversation now appears on that person's follow-up card.
-              </p>
-            ) : null}
-            <div class="mt-3 grid gap-3 lg:grid-cols-2">
-              {recentConversationOutcomes.map(({ id, outcome, correctedAt, extractedContactName }) => (
-                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h4 class="font-semibold">
-                        {hasUnknownContact(outcome) ? "Contact not identified" : outcome.contactName}
-                      </h4>
-                      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-                        {[outcome.contactTitle, outcome.contactOrganization].filter(Boolean).join(" at ") || "Conversation source"}
-                      </p>
-                      {hasUnknownContact(outcome) ? (
-                        <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-                          The notes were saved, but reading them did not identify who you spoke to. Set the name below.
-                        </p>
-                      ) : null}
-                      {correctedAt ? (
-                        <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
-                          Contact set by you{extractedContactName && extractedContactName !== outcome.contactName
-                            ? `, replacing "${extractedContactName}"`
-                            : ""}.
-                        </p>
-                      ) : null}
-                    </div>
-                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                      {outcome.signalDirection}
-                    </span>
-                  </div>
-                  <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-                    {[outcome.relatedLane, outcome.relatedEmployer].filter(Boolean).join(" · ") || outcome.signalType.replace("_", " ")}
-                  </p>
-                  {(outcome.marketSignal || outcome.newLeads || outcome.nextAction) ? (
-                    <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{outcome.marketSignal || outcome.newLeads || outcome.nextAction}</p>
-                  ) : null}
-                  <details class="mt-3" open={hasUnknownContact(outcome)}>
-                    <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
-                      {hasUnknownContact(outcome) ? "Say who this was with" : "Correct the contact"}
-                    </summary>
-                    <form
-                      class="mt-2 grid gap-2"
-                      method="post"
-                      action="/api/network/contact-correction"
-                      hx-post="/api/network/contact-correction"
-                    >
-                      <input type="hidden" name="targetId" value={id} />
-                      <input type="hidden" name="returnTo" value="/network" />
-                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
-                        Who you spoke to
-                        <input
-                          name="contactName"
-                          required
-                          maxlength="80"
-                          value={hasUnknownContact(outcome) ? "" : outcome.contactName}
-                          placeholder="Full name"
-                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
-                        />
-                      </label>
-                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
-                        Organization (optional)
-                        <input
-                          name="contactOrganization"
-                          maxlength="120"
-                          value={outcome.contactOrganization}
-                          class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
-                        />
-                      </label>
-                      <button type="submit" class="justify-self-start rounded-md bg-[var(--accent-strong)] px-3 py-2 text-xs font-semibold text-white">
-                        Save contact
-                      </button>
-                      <p class="text-xs leading-5 text-[var(--muted)]">
-                        Your correction is saved alongside the notes; the original reading is kept, not overwritten.
-                      </p>
-                    </form>
-                  </details>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {strategicState.employers.length ? (
-          <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-            <h3 class="text-sm font-semibold">Watched employer movement</h3>
-            <div class="mt-3 grid gap-3 lg:grid-cols-2">
-              {strategicState.employers.slice(0, 4).map((employer) => (
-                <article class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h4 class="font-semibold">{employer.name}</h4>
-                      <p class="mt-1 text-xs text-[var(--muted)]">{employer.region || "Region not set"}</p>
-                    </div>
-                    <span class="rounded-md border border-[var(--line)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                      {employer.score} · {employer.direction}
-                    </span>
-                  </div>
-                  <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{employer.nextMove}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </section>
-    ) : null}
-
     {latestNetworkAnalysis ? (
       <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -1315,6 +1162,184 @@ const networkAnalysisIsStale = Boolean(
         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">To save a PDF, open the printable report, choose Print, then select Save as PDF.</p>
       </section>
     ) : null}
+      </div>
+    </details>
+
+    <details class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <summary class="cursor-pointer text-lg font-semibold">
+        How to use your network well
+        <span class="ml-2 text-sm font-normal text-[var(--muted)]">Why CIP will not scrape, what to ask for, and how to run a market read</span>
+      </summary>
+      <div class="mt-4">
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Trust boundary</p>
+      <h2 class="mt-1 text-2xl font-semibold">Why CIP cannot just scrape LinkedIn</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Scraping logged-in LinkedIn pages can violate platform rules, create privacy risk, break without warning, and gather data people did not knowingly provide for this use. It can also damage user trust. CIP uses only data you provide directly: exported files, pasted notes, profile PDFs, and relationship context you choose to add. That boundary keeps the workflow professional, transparent, and reviewable.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Allowed inputs</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>LinkedIn data archive or connections CSV supplied by the user.</li>
+            <li>LinkedIn profile PDF or pasted profile sections.</li>
+            <li>Alumni portal contacts, school mentoring data, alumni club lists, coworker, community, event, and personal contact lists the user chooses to provide.</li>
+            <li>Manual notes about relationship strength, history, and comfort level.</li>
+          </ul>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Not allowed</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>Automated scraping of private LinkedIn pages.</li>
+            <li>Scraping or bypassing gated alumni directories, career-office portals, or member-only databases.</li>
+            <li>Bypassing access controls, rate limits, or login protections.</li>
+            <li>Implying CIP can inspect private connections directly.</li>
+            <li>Generating outreach without the user's contact-specific approval.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Lane validation</p>
+      <h2 class="mt-1 text-2xl font-semibold">Test career directions before asking for referrals.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        CIP now treats networking data as a way to validate career lanes first. A former coworker, Rotary chapter, BNI group, or alumni affiliation can be useful context, but it is not a recommendation by itself. The app should identify named people who can help test whether a lane is real, reachable, and worth pursuing.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Career lane first</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            Start with the user's current role hypotheses, then ask which contacts can validate those directions through market reads or employer context.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Named people only</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            Groups and affiliations are context pools until they connect to a specific person, company, title, and respectful first ask.
+          </p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Market read before referral</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+            The safest early move is often a short conversation about titles, expectations, and employers before asking anyone for a job lead.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Conversation openers</p>
+      <h2 class="mt-1 text-2xl font-semibold">Questions that get you lane validation, not a referral.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        The goal of an early conversation is to learn whether a lane is real, reachable, and worth pursuing — not to land a job lead. Use these openers to surface titles, pay bands, employer fit, and proof vocabulary before you rewrite assets or apply. Replace the bracketed text with your own lanes.
+      </p>
+
+      {personalLanes.length > 0 && (
+        <div class="mt-5 rounded-md border border-[var(--accent-soft)] bg-[var(--accent-soft)] p-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Your lanes right now</p>
+          <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
+            From your current strategy memory. This includes saved conversation outcomes when they have changed the lane picture.
+          </p>
+          <div class="mt-3 grid gap-3 md:grid-cols-3">
+            {personalLanes.map((lane) => (
+              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+                <div class="flex items-start justify-between gap-2">
+                  <h3 class="text-sm font-semibold">{lane.name}</h3>
+                  <span class="shrink-0 rounded-full bg-[var(--brass-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]">{lane.status}</span>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{lane.recommendedAsk}</p>
+                {lane.missingEvidence && (
+                  <p class="mt-2 text-xs leading-5 text-[var(--warning)]">Still missing: {lane.missingEvidence}</p>
+                )}
+                {lane.namedPeople.length > 0 && (
+                  <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Named contacts: {lane.namedPeople.join(", ")}</p>
+                )}
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Five ground rules</p>
+        <ol class="mt-2 space-y-1.5 text-sm leading-6 text-[var(--muted)]">
+          {conversationGroundRules.map((rule) => (
+            <li class="flex gap-2">
+              <span class="text-[var(--brass)]" aria-hidden="true">&bull;</span>
+              <span>{rule}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        {conversationOpeners.map((group) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <div class="flex items-baseline justify-between gap-2">
+              <h3 class="font-semibold">{group.intent}</h3>
+            </div>
+            <p class="mt-1 text-xs leading-5 text-[var(--muted)]">{group.when}</p>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              {group.openers.map((line) => (
+                <li class="flex gap-2">
+                  <Icon name="spark" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-strong)]" strokeWidth={2} />
+                  <span>&ldquo;{line}&rdquo;</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+
+      <p class="mt-5 text-xs leading-5 text-[var(--muted)]">
+        After each conversation, capture what was confirmed or weakened on the follow-up page. Confirmed lanes, rejected lanes, salary evidence, new employers, and new names all feed the next analysis pass.
+      </p>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Ideal work filter</p>
+      <h2 class="mt-1 text-2xl font-semibold">Start with the work life worth aiming for.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Network data should not trap the user inside whoever is nearby or familiar. CIP should combine the LinkedIn profile, resume evidence, and these preferences before deciding which relationships are actually useful for advice, market reads, or introductions.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Fit before geography</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Remote, hybrid, national, regional, and local paths should all stay open until the user chooses a constraint.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Pay and scope matter</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Local anchors need evidence of compensation, seniority, and modern work practices before they become priority targets.</p>
+        </article>
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Network keeps expanding</h3>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">The first import is a starting map. As better-fit businesses and roles appear, CIP should ask what new relationship data would make the map stronger.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
+      <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Alumni data can be valuable, but it follows the same rule as LinkedIn: CIP uses information the user is allowed to access, export, paste, or summarize. The goal is not to mine a university database. The goal is to find legitimate shared context for thoughtful conversations.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {alumniSources.map((item) => (
+          <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+            <h3 class="font-semibold">{item.label}</h3>
+            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{item.value}</p>
+          </article>
+        ))}
+      </div>
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-4">
+        <h3 class="font-semibold">How CIP uses alumni signals</h3>
+        <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
+          CIP treats shared school, program, region, club, or event history as a warm-context signal. It can help prioritize who to ask for market advice, employer context, or an introduction, but it does not turn an alumni connection into automatic permission to request a referral.
+        </p>
+      </div>
+    </section>
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Market-read coaching</p>
@@ -1380,5 +1405,7 @@ const networkAnalysisIsStale = Boolean(
         ))}
       </div>
     </section>
+      </div>
+    </details>
   </main>
 </Layout>
