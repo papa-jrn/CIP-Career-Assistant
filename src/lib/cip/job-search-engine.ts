@@ -302,11 +302,32 @@ export function dedupeWithinRun<T extends { source_url: string; employer: string
   });
 }
 
+/**
+ * Parameters that identify where a link was shared, not which posting it is.
+ *
+ * Kept deliberately narrow. Functional parameters decide what the page shows -
+ * a job id, a requisition, iCIMS' in_iframe - and stripping one would merge two
+ * different postings into a single identity, which is far worse than keeping
+ * two copies of one.
+ */
+const TRACKING_PARAMS = new Set([
+  "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+  "gclid", "fbclid", "msclkid", "dclid", "igshid", "mc_cid", "mc_eid", "_ga", "_gl",
+]);
+
 export function normalizeUrl(value: string) {
   try {
     const url = new URL(value);
     url.hash = "";
-    return `${url.hostname.toLowerCase().replace(/^www\./, "")}${url.pathname.replace(/\/+$/, "")}${url.search}`;
+    // Two people sharing the same posting add different tracking tags. Without
+    // this, each tagged copy is a separate posting identity, so a status the
+    // user saved on one does not follow to the other.
+    for (const key of [...url.searchParams.keys()]) {
+      if (TRACKING_PARAMS.has(key.toLowerCase())) url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
+    const search = url.searchParams.toString();
+    return `${url.hostname.toLowerCase().replace(/^www\./, "")}${url.pathname.replace(/\/+$/, "")}${search ? `?${search}` : ""}`;
   } catch {
     return value.toLowerCase();
   }

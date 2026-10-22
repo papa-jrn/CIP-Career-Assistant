@@ -775,3 +775,53 @@ Verified by simulating the flow through the real functions: three open obligatio
 oldest done leaves two, reopening restores three, and the key the interface submits matches the one
 `buildFollowUpObligations` derives. Typecheck clean, 583 tests passing, SSR build passed. A founder
 pass on the live page remains.
+
+## Implemented 2026-10-22: bring a job found elsewhere (section 7, slice 1)
+
+Capture and honest state. A user can bring in a job from anywhere by pasting a link, the posting
+text, or both, from Opportunities. CIP keeps exactly what was supplied with the capture time, and
+claims nothing it has not checked.
+
+Where imports live, and why it needs no migration. `job_search_observations` belongs to a search run
+and is read run-first everywhere, and an import has no run; making `run_id` nullable would have meant
+a migration and touching every posting query. Imports are additive `career_sources` records with
+`source_type = "imported_job"` instead. A useful consequence: section 7 requires that an unverified
+import never counts as lane validation, and because lane scoring reads observations by run, that is
+now true by construction rather than by a filter somebody has to remember. Dispositions still apply,
+because `posting_dispositions` is keyed by normalized URL and knows nothing about runs.
+
+The three questions stay separate on the card: "Is the listing real and live?" and "Does it suit
+you?" are shown side by side, each able to say it has no answer yet. Pasted text reads as the user's
+own material, not a listing. A reachable page says the page is live and explicitly not that the
+employer is hiring or will reply. An unreadable page says it could not be checked either way and that
+being unreadable does not make a posting fake - a login wall and a bot block look identical from
+here. A closed posting is reported as the source saying so, not as CIP's own finding. The fit panel
+states plainly that no assessment exists yet rather than showing a score.
+
+Dedupe runs against both prior imports and anything the weekly search already found, so one posting
+does not become two records with separate statuses. A matching link or requisition is definitive and
+is declined; a matching title and employer is likely but not certain, so it asks and lets the user
+confirm with "Add it anyway".
+
+Found and fixed while building: `normalizeUrl` kept the whole query string, so the same posting
+shared with a tracking tag was a different posting identity - a status saved on one did not follow to
+the other, and carry-forward dedupe across runs would miss it. It now drops a narrow list of known
+tracking parameters (utm_*, gclid, fbclid and similar) and sorts the rest. Functional parameters are
+deliberately kept: a job id or iCIMS' in_iframe decides which posting the page shows, and merging two
+postings into one identity is far worse than keeping two copies of one. Note for the hosted database:
+existing `posting_dispositions.normalized_url` values written before this change retain their
+tracking parameters, so a status saved on a tagged link may need re-setting; the employer+requisition
+secondary match in `matchDisposition` already covers most of that case.
+
+Security: same-origin guarded, authenticates before storing, Zod validated with length caps, body
+capped at 60 KB, and non-http(s) schemes refused so `javascript:` or `data:` can never be stored as a
+link. Importing performs no outbound fetch at all in this slice.
+
+Verification: typecheck clean, 699 tests passing (25 unit, 11 endpoint boundary), SSR build passed,
+and every card state was printed through the real functions to check what it claims.
+
+Not in this slice, and still required before section 7 is complete: fetching the link to check it
+against the employer's own source (the machinery exists - `verifyPosting`, `judgeVerification`,
+`fetchSafe` - and is reused rather than rebuilt), employer attribution and red-flag observations, the
+fit assessment with its apply / talk first / research / hold / skip recommendation and user
+correction, and surfacing imports in the Workbench alongside searched postings.
