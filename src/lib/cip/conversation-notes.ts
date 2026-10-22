@@ -120,7 +120,7 @@ function skipNote(fileName: string, kind: ConversationNoteKind, detail: string):
   return { fileName, kind, status: "skipped", detail, text: "" };
 }
 
-function extractDocxText(bytes: Buffer) {
+export function extractDocxText(bytes: Buffer) {
   const entries = readZipEntries(bytes, /^word\/document\.xml$/i);
   const xml = entries[0]?.text;
   if (!xml) return "";
@@ -134,11 +134,16 @@ function extractDocxText(bytes: Buffer) {
   );
 }
 
-function extractRtfText(rtf: string) {
+export function extractRtfText(rtf: string) {
   if (!rtf.startsWith("{\\rtf")) return "";
 
   return decodeRtfEscapes(
     rtf
+      // Braces the user actually typed are escaped in RTF. Park them before the
+      // structural braces are stripped, or "{like this}" in someone's notes
+      // comes out as stray backslashes.
+      .replace(/\\{/g, "\u0001")
+      .replace(/\\}/g, "\u0002")
       // Drop destination groups (font tables, color tables, metadata, images).
       .replace(/\{\\\*[^{}]*\}/g, "")
       .replace(/\{\\(fonttbl|colortbl|stylesheet|info|pict)[^{}]*(\{[^{}]*\})*[^{}]*\}/g, "")
@@ -147,7 +152,9 @@ function extractRtfText(rtf: string) {
       .replace(/\\line\b/g, "\n")
       // Remove remaining control words, keep their following text.
       .replace(/\\[a-zA-Z]+-?\d* ?/g, "")
-      .replace(/[{}]/g, ""),
+      .replace(/[{}]/g, "")
+      .replace(//g, "{")
+      .replace(//g, "}"),
   );
 }
 
@@ -157,7 +164,7 @@ function decodeRtfEscapes(text: string) {
     .replace(/\\([\\{}])/g, "$1");
 }
 
-function extractJsonText(raw: string) {
+export function extractJsonText(raw: string) {
   try {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
@@ -165,7 +172,7 @@ function extractJsonText(raw: string) {
   }
 }
 
-function extractDocText(bytes: Buffer) {
+export function extractDocText(bytes: Buffer) {
   // Binary Word files start with the OLE compound-file signature.
   if (bytes.length >= 4 && bytes.readUInt32LE(0) === 0xe011cfd0) return "";
 

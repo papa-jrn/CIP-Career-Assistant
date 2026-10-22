@@ -401,7 +401,7 @@ async function parseNetworkFile(file: File) {
   };
 }
 
-function parseCsvContacts(text: string, source: string): NetworkContact[] {
+export function parseCsvContacts(text: string, source: string): NetworkContact[] {
   const rows = parseCsv(text);
   if (rows.length < 2) return [];
 
@@ -427,7 +427,7 @@ function parseCsvContacts(text: string, source: string): NetworkContact[] {
   }).filter(isUsefulContact);
 }
 
-function parseContactText(text: string, source: string): NetworkContact[] {
+export function parseContactText(text: string, source: string): NetworkContact[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -469,7 +469,7 @@ function parseStructuredWarmConnectionText(text: string): NetworkContact[] {
     .filter((contact) => isUsefulContact(contact) && isSpecificPerson(contact));
 }
 
-function parseXlsxContacts(bytes: Buffer, source: string): { contacts: NetworkContact[]; rowCount: number } {
+export function parseXlsxContacts(bytes: Buffer, source: string): { contacts: NetworkContact[]; rowCount: number } {
   const entries = readZipEntries(bytes, /\.(xml)$/i);
   if (!entries.length) return { contacts: [], rowCount: 0 };
 
@@ -913,7 +913,7 @@ function buildContextPools(contacts: NetworkContact[], matches: NetworkContactMa
     {
       label: "Alumni networks",
       type: "alumni" as const,
-      pattern: /\balumni\b|dartmouth|college|university|school/i,
+      pattern: /\balumni\b|\balumnae\b|college|university|school|class of/i,
       reason: "Warm-context pool for market reads and introductions, not automatic referral permission.",
     },
     {
@@ -960,8 +960,11 @@ function buildAdjacentSignals(matches: NetworkContactMatch[]) {
 }
 
 function buildRelationshipCoaching(matches: NetworkContactMatch[], contextPools: ContextPoolSignal[], idealWorkProfile?: IdealWorkProfile) {
-  const hasLocalAnchorCluster = matches.some((match) => /dartmouth|upper valley|hanover|lebanon/i.test([match.contact.company, match.contact.title, match.contact.notes].join(" ")))
-    || contextPools.some((pool) => /dartmouth|alumni/i.test([pool.label, pool.reason, pool.namedPeople.join(" ")].join(" ")));
+  // This used to look for one founder's employer and towns - dartmouth, upper
+  // valley, hanover, lebanon - so the clustering advice only ever fired for
+  // him, and named his institution back at whoever was reading. Find whatever
+  // the user's own list actually clusters around.
+  const anchorCluster = dominantEmployerCluster(matches);
   const hasIdealFilter = Boolean(
     idealWorkProfile?.targetRoles
     || idealWorkProfile?.compensationFloor
@@ -978,8 +981,8 @@ function buildRelationshipCoaching(matches: NetworkContactMatch[], contextPools:
     "Assign each person an intent before outreach: market read, reconnection, employer context, role translation, introduction later, referral later, or park.",
     "Group people into three buckets: use now for a low-pressure conversation, research later because the fit is unclear, and park because warmth exists but strategy does not.",
     "Limit each weekly batch to three to five people. Review relationship warmth, sensitivity, and the specific question before sending anything.",
-    hasLocalAnchorCluster
-      ? "If the list is Dartmouth-heavy, treat that as a real network-density signal, not a mandate. Use Dartmouth-affiliated contacts to learn about local hiring, compensation ceilings, and adjacent paths; prioritize Dartmouth roles only when pay, scope, and work model are credible."
+    anchorCluster
+      ? `Your list clusters around ${anchorCluster.label} (${anchorCluster.count} contacts). Treat that as real network density, not a mandate: use those contacts to learn about local hiring, compensation ceilings, and adjacent paths, and prioritize roles there only when pay, scope, and work model are credible.`
       : "If many contacts cluster around one familiar employer or community, use the cluster for labor-market intelligence but keep searching for better-fit remote, regional, or national paths.",
     "After each conversation, record what changed: confirmed lane, rejected lane, salary evidence, remote/hybrid evidence, new employer lead, suggested person, or asset gap.",
   ];
@@ -1252,7 +1255,7 @@ function findEndOfCentralDirectory(bytes: Buffer) {
   return -1;
 }
 
-function parseCsv(text: string) {
+export function parseCsv(text: string) {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -1338,7 +1341,7 @@ function csvEscape(value: string) {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function dedupeContacts(contacts: NetworkContact[]) {
+export function dedupeContacts(contacts: NetworkContact[]) {
   const seen = new Set<string>();
   const deduped: NetworkContact[] = [];
   for (const contact of contacts) {
@@ -1350,14 +1353,17 @@ function dedupeContacts(contacts: NetworkContact[]) {
   return deduped;
 }
 
-function isSpecificPerson(contact: NetworkContact) {
+export function isSpecificPerson(contact: NetworkContact) {
   const nameParts = contact.name.split(/\s+/).filter((part) => part.length > 1);
-  const genericNames = /^(bni|rotary|rotarians|dartmouth health|linkedin|connections|alumni|network|unknown)$/i;
-  const genericPattern = /\b(bni|business networking international|rotary|rotarians|club|chapter|network|connections|alumni)\b/i;
+  const genericNames = /^(bni|rotary|rotarians|linkedin|connections|alumni|network|unknown|n\/a|none)$/i;
+  // Organisation-shaped names rather than people. "dartmouth health" was listed
+  // here by name, which protected one founder's export and nobody else's; these
+  // are the suffixes and group words any organisation row might carry.
+  const genericPattern = /\b(bni|business networking international|rotary|rotarians|club|chapter|network|connections|alumni|chamber|association|society|foundation|institute|hospital|health system|university|college|school district|inc|llc|ltd|corp|corporation|company|group|partners|holdings)\b/i;
   return nameParts.length >= 2 && !genericNames.test(contact.name.trim()) && !genericPattern.test(contact.name);
 }
 
-function isExcludedByFeedback(contact: NetworkContact, feedback: NetworkFeedback[]) {
+export function isExcludedByFeedback(contact: NetworkContact, feedback: NetworkFeedback[]) {
   const contactName = normalizeText(contact.name);
   const contactCompany = normalizeText(contact.company);
   return feedback.some((item) => {
@@ -1510,4 +1516,33 @@ function matchMembershipGroup(notes: string): string | null {
     if (pattern.test(notes)) return label;
   }
   return null;
+}
+
+/**
+ * The employer the user's own list clusters around, if any.
+ *
+ * Network density around one organisation is a real signal, but which
+ * organisation differs per user. Previously one founder's employer and towns
+ * were matched by name, so the advice fired only for him and named his
+ * institution back at anyone else who somehow triggered it.
+ */
+export function dominantEmployerCluster(
+  matches: Array<{ contact: { company?: string } }>,
+  minimumContacts = 3,
+): { label: string; count: number } | null {
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const match of matches) {
+    const company = (match.contact.company ?? "").trim();
+    if (!company) continue;
+    const key = normalizeText(company);
+    if (!key) continue;
+    const entry = counts.get(key) ?? { label: company, count: 0 };
+    entry.count += 1;
+    counts.set(key, entry);
+  }
+  let best: { label: string; count: number } | null = null;
+  for (const entry of counts.values()) {
+    if (!best || entry.count > best.count) best = entry;
+  }
+  return best && best.count >= minimumContacts ? best : null;
 }
