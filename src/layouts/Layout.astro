@@ -71,6 +71,23 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     <a class="career-skip" href="#main-content">Skip to content</a>
     {signedInEmail && !publicPage ? <WorkspaceNav signedInEmail={signedInEmail} /> : <TopNav signedInEmail={signedInEmail} />}
     <div id="main-content" class="career-content" tabindex="-1"><slot /></div>
+    <script is:inline>
+      // Confirmations after an action arrive on a fresh page load, not as a
+      // live-region update, so a screen reader would never announce them: a
+      // live region only speaks content that changes after it exists. Move
+      // focus to the message instead, which announces it and puts the user at
+      // the right place in the document. Focus is only taken when the page was
+      // reached by completing an action, never on an ordinary visit.
+      (function () {
+        var message = document.querySelector("[data-announce]");
+        if (!message) return;
+        try {
+          message.focus({ preventScroll: false });
+        } catch (error) {
+          message.focus();
+        }
+      })();
+    </script>
     <div class="cip-route-loader" data-asset-route-loader hidden role="status" aria-live="polite" aria-label="Preparing career assets">
       <div class="cip-route-loader-panel">
         <div class="cip-thinking-orbit" aria-hidden="true">

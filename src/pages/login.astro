@@ -6,6 +6,7 @@ const reason = Astro.url.searchParams.get("reason");
 ---
 
 <Layout title="Sign in - Career Intelligence Platform">
+  <main>
   <div
     class="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-16"
   >
@@ -50,28 +51,28 @@ const reason = Astro.url.searchParams.get("reason");
         <button
           id="password-submit"
           type="submit"
-          class="flex w-full justify-center rounded-lg bg-foreground px-3 py-2 text-sm font-medium text-background transition hover:opacity-90 htmx-request:opacity-50"
+          class="cip-action w-full"
         >
           Sign in
         </button>
         <button
           id="signup-submit"
           type="button"
-          class="flex w-full justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-foreground transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+          class="cip-action w-full"
         >
           Create password account
         </button>
         <button
           id="reset-password-submit"
           type="button"
-          class="flex w-full justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-foreground transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+          class="cip-action w-full"
         >
           Set or reset password
         </button>
         <button
           id="magic-link-submit"
           type="button"
-          class="flex w-full justify-center rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 underline-offset-4 transition hover:text-foreground hover:underline dark:text-zinc-400"
+          class="cip-action w-full"
         >
           Email me a magic link
         </button>
@@ -86,6 +87,7 @@ const reason = Astro.url.searchParams.get("reason");
       </p>
     </div>
   </div>
+  </main>
 </Layout>
 
 <script>

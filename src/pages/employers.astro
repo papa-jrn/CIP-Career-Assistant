@@ -352,7 +352,7 @@ function normalizeEmployerName(name: string) {
         <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr_0.8fr]">
           <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <span class="text-sm font-semibold">Geography</span>
-            <input name="custom_geography" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="New York, NY; Boston, MA; San Francisco, CA; Toronto, ON..." />
+            <input name="custom_geography" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="New York, NY; Boston, MA; San Francisco, CA; Toronto, ON..." />
             <span class="text-xs text-[var(--muted)]">Start here. The search uses the exact place you enter; fixture/preset employers are not returned as normal search results.</span>
             {signedIn && (sources.length > 0 || candidates.length > 0) ? (
             <details class="mt-3">
@@ -384,13 +384,13 @@ function normalizeEmployerName(name: string) {
 
           <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <span class="text-sm font-semibold">Minimum employer size</span>
-            <select name="minimum_size" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+            <select name="minimum_size" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm">
               <option value="100" selected>100+ or likely 100+</option>
               <option value="500">500+ or large regional anchor</option>
               <option value="any">Any strategic size</option>
             </select>
             <span class="text-sm font-semibold">Search radius</span>
-            <select name="radius_miles" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+            <select name="radius_miles" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm">
               <option value="25">25 miles</option>
               <option value="50" selected>50 miles</option>
               <option value="100">100 miles</option>

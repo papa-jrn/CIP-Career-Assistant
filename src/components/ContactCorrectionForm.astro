@@ -29,7 +29,7 @@ const { targetId, contactName, contactOrganization = "", unknown, returnTo = "/n
         maxlength="80"
         value={unknown ? "" : contactName}
         placeholder="Full name"
-        class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+        class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
       />
     </label>
     <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
@@ -38,10 +38,10 @@ const { targetId, contactName, contactOrganization = "", unknown, returnTo = "/n
         name="contactOrganization"
         maxlength="120"
         value={contactOrganization}
-        class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+        class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
       />
     </label>
-    <button type="submit" class="justify-self-start rounded-md bg-[var(--accent-strong)] px-3 py-2 text-xs font-semibold text-white">
+    <button type="submit" class="cip-action cip-action-primary justify-self-start">
       Save contact
     </button>
     <p class="text-xs leading-5 text-[var(--muted)]">

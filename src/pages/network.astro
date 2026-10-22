@@ -296,7 +296,7 @@ const idealWorkQuestions = [
   {
     id: "ideal_geography_scope",
     label: "Geography scope",
-    placeholder: "Example: remote/national first, New England hybrid second, Upper Valley only if pay and scope are real",
+    placeholder: "Example: remote/national first, regional hybrid second, local only if pay and scope are real",
     type: "textarea",
   },
   {
@@ -320,7 +320,7 @@ const idealWorkQuestions = [
   {
     id: "ideal_local_anchor_notes",
     label: "Local anchor notes",
-    placeholder: "Example: Dartmouth College is useful for market reads but should not be prioritized unless compensation and senior scope are proven.",
+    placeholder: "Example: the large local employer is useful for market reads but should not be prioritized unless compensation and senior scope are proven.",
     type: "textarea",
   },
 ];
@@ -515,13 +515,13 @@ const networkSummary = hasNetwork
       >
         <label class="grid gap-2">
           <span class="text-sm font-semibold">Upload notes files (.txt, .md, .docx, .rtf, .json)</span>
-          <input name="note_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />
+          <input name="note_files" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" type="file" accept=".txt,.md,.docx,.rtf,.json,.doc" multiple />
         </label>
         <label class="grid gap-2">
           <span class="text-sm font-semibold">Or paste conversation notes</span>
           <textarea
             name="conversation_notes"
-            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            class="min-h-36 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
             placeholder={`Useful things to capture:\nWho you talked to, their company/role, and the date.\nWhat they confirmed or weakened about a career lane, employer, or pay band.\nNew employers, teams, titles, or people they mentioned.\nAnything that changes your targets: geography, remote/hybrid, compensation floor, dealbreakers.`}
           ></textarea>
         </label>
@@ -539,47 +539,47 @@ const networkSummary = hasNetwork
           <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Contact / source</span>
-              <input name="conversation_contact_name" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Who you talked to" />
+              <input name="conversation_contact_name" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm" placeholder="Who you talked to" />
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation date</span>
-              <input name="conversation_date" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" type="date" />
+              <input name="conversation_date" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm" type="date" />
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related lane</span>
-              <input name="related_lane" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. Upper Valley nonprofits" />
+              <input name="related_lane" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm" placeholder="e.g. regional nonprofits" />
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Related employer / org</span>
-              <input name="related_employer" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
+              <input name="related_employer" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm" placeholder="Specific org, employer type, or target" />
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal direction</span>
-              <select name="signal_direction" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+              <select name="signal_direction" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm">
                 {signalDirections.map((option) => <option value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Signal type</span>
-              <select name="signal_type" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+              <select name="signal_type" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm">
                 {signalTypes.map((option) => <option value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label class="grid gap-1">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Confidence</span>
-              <select name="signal_confidence" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm">
+              <select name="signal_confidence" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm">
                 {signalConfidences.map((option) => <option value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label class="grid gap-1 md:col-span-2">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Next action this creates</span>
-              <input name="next_action" class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
+              <input name="next_action" class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm" placeholder="What should CIP help you do after this?" />
             </label>
             <label class="grid gap-1 lg:col-span-3">
               <span class="text-xs font-semibold uppercase text-[var(--muted)]">Summary / what changed</span>
               <textarea
                 name="structured_summary"
-                class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-sm"
+                class="min-h-28 rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-2 text-sm"
                 placeholder="Short version is enough: what did this source confirm, weaken, redirect, or add?"
               ></textarea>
             </label>
@@ -642,10 +642,10 @@ const networkSummary = hasNetwork
                       name="reason"
                       maxlength="300"
                       placeholder="e.g. duplicate of another record"
-                      class="rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+                      class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
                     />
                   </label>
-                  <button type="submit" class="justify-self-start rounded-md border border-[var(--line)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10">
+                  <button type="submit" class="cip-action justify-self-start">
                     Remove from my conversations
                   </button>
                   <p class="text-xs leading-5 text-[var(--muted)]">
@@ -695,7 +695,7 @@ const networkSummary = hasNetwork
                 <input type="hidden" name="targetId" value={id} />
                 <input type="hidden" name="removed" value="false" />
                 <input type="hidden" name="returnTo" value="/network" />
-                <button type="submit" class="rounded-md border border-[var(--line)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/10">
+                <button type="submit" class="cip-action">
                   Put this back
                 </button>
               </form>
@@ -750,17 +750,17 @@ const networkSummary = hasNetwork
           <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <h3 class="text-sm font-semibold">Recent conversation signals</h3>
             {Astro.url.searchParams.get("conversation") === "removed" ? (
-              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" role="status">
+              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" data-announce tabindex="-1" role="status">
                 Conversation removed. It is still in your records, under Removed conversations.
               </p>
             ) : null}
             {Astro.url.searchParams.get("conversation") === "restored" ? (
-              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" role="status">
+              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" data-announce tabindex="-1" role="status">
                 Conversation put back. It counts again.
               </p>
             ) : null}
             {Astro.url.searchParams.get("corrected") === "contact" ? (
-              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" role="status">
+              <p class="mt-2 rounded-md border border-[var(--line)] bg-[var(--panel)] p-2 text-xs leading-5 text-[var(--muted)]" data-announce tabindex="-1" role="status">
                 Contact saved. This conversation now appears on that person's follow-up card.
               </p>
             ) : null}
@@ -903,13 +903,13 @@ const networkSummary = hasNetwork
                   {question.type === "textarea" ? (
                     <textarea
                       name={question.id}
-                      class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm"
+                      class="min-h-24 rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-3 text-sm"
                       placeholder={question.placeholder}
                     ></textarea>
                   ) : (
                     <input
                       name={question.id}
-                      class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm"
+                      class="rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-3 text-sm"
                       type="text"
                       placeholder={question.placeholder}
                     />
@@ -920,7 +920,7 @@ const networkSummary = hasNetwork
           </fieldset>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">LinkedIn archive, connections CSV, Excel sheet, or profile PDF</span>
-            <input name="network_files" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.xlsx,.pdf,.txt" multiple />
+            <input name="network_files" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" type="file" accept=".zip,.csv,.xlsx,.pdf,.txt" multiple />
           </label>
           <fieldset class="grid gap-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
             <div class="flex flex-wrap items-start justify-between gap-3">
@@ -932,7 +932,7 @@ const networkSummary = hasNetwork
               </div>
               <button
                 id="add-warm-connection"
-                class="rounded-md border border-[var(--line)] px-3 py-2 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+                class="cip-action"
                 type="button"
               >
                 Add warm connection
@@ -943,34 +943,34 @@ const networkSummary = hasNetwork
                 <div class="grid gap-3 md:grid-cols-2">
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Name</span>
-                    <input class="warm-name rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Person's name" />
+                    <input class="warm-name rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Person's name" />
                   </label>
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Company or role</span>
-                    <input class="warm-company rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Company, role, or helpful context" />
+                    <input class="warm-company rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Company, role, or helpful context" />
                   </label>
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Title</span>
-                    <input class="warm-title rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Title if known" />
+                    <input class="warm-title rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Title if known" />
                   </label>
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Link</span>
-                    <input class="warm-link rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="url" placeholder="LinkedIn, GitHub, or personal website" />
+                    <input class="warm-link rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm" type="url" placeholder="LinkedIn, GitHub, or personal website" />
                   </label>
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Market research angle</span>
-                    <input class="warm-angle rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Titles, pay reality, employer context, lane validation" />
+                    <input class="warm-angle rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm" type="text" placeholder="Titles, pay reality, employer context, lane validation" />
                   </label>
                   <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Conversation status</span>
-                    <select class="warm-status rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm">
+                    <select class="warm-status rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm">
                       {conversationStatuses.map((status) => <option value={status}>{status}</option>)}
                     </select>
                   </label>
                   <label class="grid gap-1 md:col-span-2">
                     <span class="text-xs font-semibold uppercase text-[var(--muted)]">Relationship context and notes</span>
                     <textarea
-                      class="warm-notes min-h-20 rounded-md border border-[var(--line)] bg-[var(--background)] p-2 text-sm"
+                      class="warm-notes min-h-20 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm"
                       placeholder="How you know them, why they may respond, notes from prior discussion, and who they suggested next"
                     ></textarea>
                   </label>
@@ -983,16 +983,16 @@ const networkSummary = hasNetwork
             <span class="text-sm font-semibold">Paste contacts, alumni lists, or relationship notes</span>
             <textarea
               name="relationship_notes"
-              class="min-h-44 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
-              placeholder={`Example:\nName | Company | Title | LinkedIn URL | School/source | Relationship notes\nMorgan Lee | Dartmouth Health | Director of Product | https://linkedin.com/in/... | Dartmouth alumni portal | Former coworker, warm relationship`}
+              class="min-h-44 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
+              placeholder={`Example:\nName | Company | Title | LinkedIn URL | School/source | Relationship notes\nMorgan Lee | Riverside Health | Director of Product | https://linkedin.com/in/... | University alumni group | Former coworker, warm relationship`}
             ></textarea>
           </label>
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Recommendation feedback or exclusions</span>
             <textarea
               name="network_feedback"
-              class="min-h-28 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
-              placeholder={`Examples:\nRemove Christof Daetwyler - deceased / sensitive.\nRotary - Claremont Sugar River is my current club; do not treat it as a reconnection.\nExclude BNI as a Dartmouth Health path unless tied to a named person.`}
+              class="min-h-28 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
+              placeholder={`Examples:\nRemove Alex Mercer - deceased / sensitive.\nMy current service club is context, not a reconnection target.\nExclude a networking group as an employer path unless tied to a named person.`}
             ></textarea>
           </label>
           <button class="cip-fancy-button" type="submit" disabled={!signedIn}>

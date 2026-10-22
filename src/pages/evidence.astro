@@ -448,14 +448,14 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
           <textarea
             name="answer"
             required
-            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            class="min-h-36 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
             placeholder={`Examples:\n- GitHub repo links and what each project proves.\n- CCTV: currently supervise 4 people; one is shifting to occasional mentoring after leaving for college.\n- CCTV: worked with Board Chair to secure a $10K NH Charitable Foundation grant.\n- Annual report numbers or income/expense context that should strengthen leadership scope.`}
           ></textarea>
         </label>
         <div class="grid gap-4 md:grid-cols-3">
           <label class="grid gap-2">
             <span class="text-sm font-semibold">Confidence</span>
-            <select name="confidence" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+            <select name="confidence" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm">
               <option value="known">I know this</option>
               <option value="needs_metric">Need exact metric</option>
               <option value="needs_source">Need source</option>
@@ -466,14 +466,14 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
             <span class="text-sm font-semibold">Links or source names</span>
             <textarea
               name="proof_url"
-              class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+              class="min-h-24 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
               placeholder="GitHub repo URLs, annual report URL/file name, grant announcement, board chair/private verifier, or document name"
             ></textarea>
           </label>
         </div>
         <label class="grid gap-2">
           <span class="text-sm font-semibold">Use carefully</span>
-          <input name="source_note" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private source; okay for strategy but not public resume copy until verified." />
+          <input name="source_note" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="Example: private source; okay for strategy but not public resume copy until verified." />
         </label>
         <div class="flex flex-wrap items-center gap-3">
           <button class="cip-fancy-button" type="submit" disabled={sourceCounts.intake === 0}>
@@ -536,7 +536,7 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
           <textarea
             name="strategic_questions"
             required
-            class="min-h-36 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm"
+            class="min-h-36 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm"
             placeholder={`One question per line.\nExample: What roles should I stop considering?\nExample: What is the strongest $120K+ positioning angle?\nExample: What part of my story still lacks proof?`}
           ></textarea>
         </label>

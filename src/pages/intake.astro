@@ -142,11 +142,11 @@ function fieldValue(name: keyof IntakeForm) {
             <div class="grid gap-5 md:grid-cols-2">
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">Target title or direction</span>
-                <input name="target_title" value={fieldValue("target_title")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
+                <input name="target_title" value={fieldValue("target_title")} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="AI operations, product enablement, program manager..." />
               </label>
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">Salary target</span>
-                <input name="salary_target" value={fieldValue("salary_target")} type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
+                <input name="salary_target" value={fieldValue("salary_target")} type="number" min="1" max="1000000" step="1000" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="120000" />
               </label>
             </div>
 
@@ -166,7 +166,7 @@ function fieldValue(name: keyof IntakeForm) {
               {intakeQuestionFields.map((field) => (
                 <label class="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
                   <span class="text-sm font-semibold">{field.label}</span>
-                  <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}>{fieldValue(field.name)}</textarea>
+                  <textarea name={field.name} class="min-h-24 rounded-md border border-[var(--field-border)] bg-[var(--panel)] p-3 text-sm" placeholder={field.placeholder}>{fieldValue(field.name)}</textarea>
                 </label>
               ))}
             </div>
@@ -191,29 +191,29 @@ function fieldValue(name: keyof IntakeForm) {
 
             <label class="grid gap-2">
               <span class="text-sm font-semibold">Resume or work history</span>
-              <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Paste a resume, a few bullets about past roles, or a quick note about what you've done. Keep it honest — the analysis will tell apart proven facts from guesses.">{fieldValue("resume_text")}</textarea>
+              <textarea name="resume_text" required class="min-h-48 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="Paste a resume, a few bullets about past roles, or a quick note about what you've done. Keep it honest — the analysis will tell apart proven facts from guesses.">{fieldValue("resume_text")}</textarea>
               <span class="text-xs text-[var(--muted)]">Minimum ~40 characters. A few sentences about your most recent role is enough to start.</span>
             </label>
 
             <div class="grid gap-5 md:grid-cols-2">
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">Full name</span>
-                <input name="full_name" value={fieldValue("full_name")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
+                <input name="full_name" value={fieldValue("full_name")} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
               </label>
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">Email</span>
-                <input name="email" type="email" value={fieldValue("email") || signedInEmail} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
+                <input name="email" type="email" value={fieldValue("email") || signedInEmail} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="Optional" />
               </label>
             </div>
 
             <div class="grid gap-5 md:grid-cols-2">
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">LinkedIn URL</span>
-                <input name="linkedin_url" value={fieldValue("linkedin_url")} class="rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
+                <input name="linkedin_url" value={fieldValue("linkedin_url")} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="https://linkedin.com/in/..." />
               </label>
               <label class="grid gap-2">
                 <span class="text-sm font-semibold">Portfolio, GitHub, or public links</span>
-                <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine.">{fieldValue("portfolio_urls")}</textarea>
+                <textarea name="portfolio_urls" class="min-h-24 rounded-md border border-[var(--field-border)] bg-[var(--background)] p-3 text-sm" placeholder="One link per line is fine.">{fieldValue("portfolio_urls")}</textarea>
               </label>
             </div>
 

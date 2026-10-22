@@ -15,6 +15,9 @@
   --muted: #6b7268; /* warm gray text */
   --panel: #ffffff; /* card surface */
   --line: #e6dfcf; /* warm hairline */
+  /* Form controls need a boundary at 3:1 to be identifiable (WCAG 1.4.11).
+     --line is a decorative hairline at ~1.3:1 and must not be used on inputs. */
+  --field-border: #6f6a5c;
   --surface-wash: #f4efe3; /* warm page wash */
 
   /* Sage (primary accent / CTAs) */
@@ -61,6 +64,7 @@
     --muted: #b0a99c;
     --panel: #1e241f;
     --line: #333a33;
+    --field-border: #8d9789;
     --surface-wash: #131613;
 
     --accent: #6fae9b; /* lighter sage for dark bg contrast */
@@ -787,5 +791,141 @@ button:disabled,
     opacity: 1;
     transform: none;
     animation: none;
+  }
+}
+
+/* ============================================================
+   Shared action-button behaviour
+   One hover treatment across the app: a lift, and a light sweep
+   across the face. Previously only .cip-fancy-button had it, so
+   the Workbench and every inline Tailwind button felt dead by
+   comparison. The sweep sits at z-index -1 inside an isolated
+   stacking context, so it works for buttons whose label is a bare
+   text node rather than a wrapped <span>.
+   ============================================================ */
+
+.cip-fancy-button,
+.cip-action,
+.wb-button,
+.landing-primary,
+.public-nav-action {
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+}
+
+.cip-action::before,
+.wb-button::before,
+.landing-primary::before,
+.public-nav-action::before {
+  background: linear-gradient(120deg, transparent 0%, var(--button-shine, rgba(255, 255, 255, 0.28)) 45%, transparent 70%);
+  content: "";
+  height: 160%;
+  left: -75%;
+  position: absolute;
+  top: -30%;
+  transform: rotate(14deg);
+  transition: left 360ms ease;
+  width: 45%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.cip-action:hover::before,
+.wb-button:hover::before,
+.landing-primary:hover::before,
+.public-nav-action:hover::before {
+  left: 130%;
+}
+
+.cip-action:hover,
+.wb-button:hover,
+.landing-primary:hover,
+.public-nav-action:hover {
+  box-shadow: var(--shadow-card);
+  transform: translateY(-0.06rem);
+}
+
+.cip-action:active,
+.wb-button:active,
+.landing-primary:active,
+.public-nav-action:active {
+  transform: translateY(0.12rem);
+}
+
+/* The compact action button used inside cards and forms. Minimum 32px tall so
+   it clears the WCAG 2.2 24px target floor with room to spare. */
+.cip-action {
+  --button-shine: color-mix(in srgb, var(--accent) 16%, transparent);
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--body-font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  gap: 0.4rem;
+  justify-content: center;
+  line-height: 1.3;
+  min-height: 2rem;
+  padding: 0.45rem 0.8rem;
+  text-decoration: none;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  white-space: nowrap;
+}
+
+/* Primary variant: the action the user most likely wants. */
+.cip-action-primary {
+  --button-shine: rgba(255, 255, 255, 0.3);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+.cip-action:hover {
+  background: var(--accent-soft);
+}
+
+.cip-action-primary:hover {
+  background: var(--accent);
+}
+
+.cip-action:disabled,
+.cip-action[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  opacity: 0.6;
+  transform: none;
+}
+
+.cip-action:disabled:hover::before,
+.wb-button:disabled:hover::before {
+  left: -75%;
+}
+
+/* Honour a reduced-motion preference: keep the colour change, drop the sweep. */
+@media (prefers-reduced-motion: reduce) {
+  .cip-fancy-button,
+  .cip-fancy-button::before,
+  .cip-action,
+  .cip-action::before,
+  .wb-button,
+  .wb-button::before,
+  .landing-primary,
+  .landing-primary::before,
+  .public-nav-action,
+  .public-nav-action::before {
+    transition: none;
+  }
+
+  .cip-fancy-button:hover,
+  .cip-action:hover,
+  .wb-button:hover,
+  .landing-primary:hover,
+  .public-nav-action:hover {
+    transform: none;
   }
 }
