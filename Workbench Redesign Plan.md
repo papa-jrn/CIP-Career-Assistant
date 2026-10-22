@@ -846,3 +846,35 @@ deferral uses a timeout rather than an animation frame because frames do not fir
 hidden, which would have left the same bug in a less obvious place. Verified by running the page's
 own inline script against an injected panel: the panel opens on click and the Job title field holds
 focus.
+
+## Implemented 2026-10-22: imported-job fit assessment (section 7, slice 3)
+
+Fit is produced independently of whether the listing is real, and shown beside it, so neither
+conclusion launders the other. The app's reading is labelled as its reading, with a confidence, and
+the user can overrule it.
+
+Everything compared comes from what the user supplied: their stated salary floor, work models and
+exclusions, their saved career lanes, and the posting text they pasted. Nothing infers a salary,
+credential, eligibility or experience level that is not written down. Where the posting is silent the
+finding is "unknown", which is reported as a real finding rather than filled in - a posting that does
+not state pay yields "pay not stated, nothing is assumed about it", never "pay too low". Every
+finding names its source so the reader can check it.
+
+The recommendation reuses the existing vocabulary (talk_first, check_funding, apply, monitor, skip)
+and explains a next action in words rather than a score; no percentage is produced anywhere. The
+deterministic path never recommends applying - nothing it can see from a pasted posting justifies
+telling someone to apply - but the user can set "Apply" themselves, and that is recorded as theirs.
+
+Corrections are additive: the app's reading and the user's conclusion are both kept, so the
+difference between them can inform later analysis rather than only the final answer surviving.
+
+Caught by simulating the panel rather than by reasoning: two summaries contradicted their own
+findings. A job with pay below the floor and the wrong work model said "worth keeping an eye on"
+while leaving both conflicts unmentioned, and an off-lane job said "this lines up with what you want"
+when the lane overlap was unknown. The summary now names every conflict and distinguishes "matches
+your constraints" from "matches a direction you are pursuing". Both are pinned by test.
+
+Still open in section 7: an AI-assisted assessment with the deterministic path as its fallback (the
+hook is designed in; the deterministic path stands alone and is honest without it), employer
+attribution and red-flag observations, and surfacing imported jobs in the Workbench alongside
+searched postings.

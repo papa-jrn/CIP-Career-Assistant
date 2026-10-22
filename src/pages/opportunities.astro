@@ -18,6 +18,13 @@ import {
   type ImportedJobCheck,
 } from "../lib/cip/imported-job-checks";
 import {
+  IMPORTED_JOB_FIT_SOURCE_TYPE,
+  latestFitFor,
+  parseImportedJobFit,
+  readableRecommendation,
+  type FitAssessment,
+} from "../lib/cip/imported-job-fit";
+import {
   IMPORTED_JOB_SOURCE_TYPE,
   describeFit,
   describeProvenance,
@@ -44,6 +51,8 @@ let preferencesError = "";
 let importedJobs: ImportedJob[] = [];
 // Every listing check, kept so a posting that changed can say so.
 let importedJobChecks: ImportedJobCheck[] = [];
+// Fit assessments, including the user's own corrections of them.
+let importedJobFits: FitAssessment[] = [];
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -81,6 +90,17 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       importedJobChecks = (checkRows ?? [])
         .map((row) => parseImportedJobCheck(row.extracted_text, row.created_at))
         .filter(Boolean) as ImportedJobCheck[];
+
+      const { data: fitRows } = await supabase
+        .from("career_sources")
+        .select("extracted_text, created_at")
+        .eq("user_id", user.id)
+        .eq("source_type", IMPORTED_JOB_FIT_SOURCE_TYPE)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      importedJobFits = (fitRows ?? [])
+        .map((row) => parseImportedJobFit(row.extracted_text, row.created_at))
+        .filter(Boolean) as FitAssessment[];
 
       importedJobs = ((importedRows ?? [])
         .map((row) => parseImportedJob(row.extracted_text))
@@ -214,6 +234,13 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         watching the employer, or contact anyone - those stay separate and deliberate.
       </p>
 
+      {Astro.url.searchParams.get("assessed") ? (
+        <p data-announce tabindex="-1" role="status" class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
+          {Astro.url.searchParams.get("assessed") === "user"
+            ? "Your conclusion is saved. CIP's earlier reading is kept beside it."
+            : "Fit assessed from what you saved and what you have told CIP you want. Whether the listing is real is a separate question."}
+        </p>
+      ) : null}
       {Astro.url.searchParams.get("checked") === "1" ? (
         <p data-announce tabindex="-1" role="status" class="mt-4 rounded-md border border-[var(--line)] bg-[var(--background)] p-3 text-sm">
           Listing checked. The result is on the job below, with what it does and does not establish.
@@ -325,7 +352,36 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                   </div>
                   <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                     <dt class="text-xs font-semibold uppercase text-[var(--muted)]">Does it suit you?</dt>
-                    <dd class="mt-1 text-[var(--muted)]">{describeFit(job)}</dd>
+                    {latestFitFor(job.importId, importedJobFits) ? (
+                      <dd class="mt-1">
+                        <p class="font-semibold text-[var(--foreground)]">
+                          {readableRecommendation(latestFitFor(job.importId, importedJobFits)!.recommendation)}
+                        </p>
+                        <p class="mt-1 text-[var(--muted)]">{latestFitFor(job.importId, importedJobFits)!.nextAction}</p>
+                        <p class="mt-2 text-xs text-[var(--muted)]">
+                          {latestFitFor(job.importId, importedJobFits)!.basis === "user"
+                            ? "Your own conclusion."
+                            : "CIP's reading of what you saved, at " +
+                              latestFitFor(job.importId, importedJobFits)!.confidence +
+                              " confidence. It can be wrong; correct it below."}
+                        </p>
+                        {latestFitFor(job.importId, importedJobFits)!.findings.length ? (
+                          <ul class="mt-2 grid gap-1">
+                            {latestFitFor(job.importId, importedJobFits)!.findings.map((finding) => (
+                              <li class="text-xs leading-5 text-[var(--muted)]">
+                                <span class="font-semibold text-[var(--foreground)]">
+                                  {finding.kind === "match" ? "Matches" : finding.kind === "mismatch" ? "Conflicts" : "Unknown"}
+                                </span>
+                                {" \u2014 " + finding.label + ": " + finding.detail}
+                                <span class="block text-[var(--muted)]">From {finding.source}.</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </dd>
+                    ) : (
+                      <dd class="mt-1 text-[var(--muted)]">{describeFit(job)}</dd>
+                    )}
                   </div>
                 </dl>
                 <p class="mt-3 text-xs text-[var(--muted)]">
@@ -346,7 +402,46 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                       </button>
                     </form>
                   ) : null}
+                  {signedIn ? (
+                    <form method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import">
+                      <input type="hidden" name="importId" value={job.importId} />
+                      <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
+                      <button class="cip-action" type="submit">
+                        {latestFitFor(job.importId, importedJobFits) ? "Assess fit again" : "Assess the fit"}
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
+
+                {signedIn ? (
+                  <details class="mt-3">
+                    <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
+                      Set your own conclusion
+                    </summary>
+                    <form class="mt-2 grid gap-2" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import">
+                      <input type="hidden" name="importId" value={job.importId} />
+                      <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
+                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+                        What you have decided
+                        <select name="recommendation" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]">
+                          <option value="apply">Apply</option>
+                          <option value="talk_first">Talk to someone first</option>
+                          <option value="check_funding">Research before investing effort</option>
+                          <option value="monitor">Hold and watch</option>
+                          <option value="skip">Skip</option>
+                        </select>
+                      </label>
+                      <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+                        Why (optional)
+                        <input name="note" maxlength="1000" placeholder="What does CIP not know about this?" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
+                      </label>
+                      <button class="cip-action justify-self-start" type="submit">Save my conclusion</button>
+                      <p class="text-xs leading-5 text-[var(--muted)]">
+                        Yours replaces CIP's on this card. Both are kept, so the difference can inform later analysis.
+                      </p>
+                    </form>
+                  </details>
+                ) : null}
                 {checksForJob(job.importId, importedJobChecks).length ? (
                   <details class="mt-3">
                     <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
