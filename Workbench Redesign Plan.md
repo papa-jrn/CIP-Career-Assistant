@@ -825,3 +825,24 @@ against the employer's own source (the machinery exists - `verifyPosting`, `judg
 `fetchSafe` - and is reused rather than rebuilt), employer attribution and red-flag observations, the
 fit assessment with its apply / talk first / research / hold / skip recommendation and user
 correction, and surfacing imports in the Workbench alongside searched postings.
+
+### Import promoted to the top of Opportunities - 2026-10-22
+
+Founder feedback: bringing in a job meant scrolling the whole page to reach it. That is the wrong
+weighting for an action CIP expects to be frequent - the founder's point is that CIP will be used
+alongside other job trackers and searchers rather than replacing them, so importing is routine, not
+occasional.
+
+"Bring a job you found" now sits in the top action row beside Search preferences and Employers, as
+the primary (filled) action of the three. The form itself became a disclosure, so the section stays a
+short landing target rather than a wall of fields: clicking the button opens it, scrolls to it, and
+puts the cursor in the Job title field. A direct `?bring=1` link opens it server-side, so a bookmark
+or the back button works without relying on script.
+
+Two things the browser check caught that reasoning alone would not have. The anchor's own hash
+navigation resets focus to the document after the click handler runs, so the first `focus()` call was
+silently discarded - the panel opened but the cursor never arrived. Deferring it fixes that, and the
+deferral uses a timeout rather than an animation frame because frames do not fire while a tab is
+hidden, which would have left the same bug in a less obvious place. Verified by running the page's
+own inline script against an injected panel: the panel opens on click and the Job title field holds
+focus.

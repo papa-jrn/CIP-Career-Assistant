@@ -99,6 +99,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         Roles that are far away, past their deadline, or on your exclusion list are kept and shown separately, not hidden.
       </p>
       <div class="mt-4 flex flex-wrap gap-3">
+        <a class="cip-fancy-button" href="#imported-jobs" data-open-import><span>Bring a job you found</span></a>
         <a class="cip-fancy-button cip-fancy-button-secondary" href="/preferences"><span>Search preferences</span></a>
         <a class="cip-fancy-button cip-fancy-button-secondary" href="/employers"><span>Employers</span></a>
       </div>
@@ -193,8 +194,16 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
       ) : null}
 
       {signedIn ? (
+        <details
+          id="bring-a-job"
+          class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4"
+          open={Astro.url.searchParams.get("bring") === "1" || Astro.url.searchParams.get("imported") === "1"}
+        >
+          <summary class="cursor-pointer text-sm font-semibold text-[var(--accent-strong)]">
+            Add a job you found
+          </summary>
         <form
-          class="mt-5 grid gap-3"
+          class="mt-4 grid gap-3"
           method="post"
           action="/api/jobs/import"
           hx-post="/api/jobs/import"
@@ -242,6 +251,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
           </div>
           <div id="import-job-result" class="text-sm" aria-live="polite"></div>
         </form>
+        </details>
       ) : (
         <p class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4 text-sm">
           <a class="font-semibold underline" href="/login">Sign in</a> to bring in a job you found.
@@ -296,4 +306,37 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
       ) : null}
     </section>
   </main>
+  <script is:inline>
+    // The import form is reached from the top of the page, so opening it must
+    // not cost a reload or a scroll hunt. Also handles landing on the anchor
+    // directly, e.g. from a bookmark or the back button.
+    (function () {
+      var panel = document.getElementById("bring-a-job");
+      if (!panel) return;
+
+      function openPanel(focusFirst) {
+        panel.open = true;
+        if (!focusFirst) return;
+        // The anchor's own hash navigation resets focus to the document after
+        // this handler runs, so claim it just afterwards - otherwise the cursor
+        // never reaches the first field. A timeout rather than an animation
+        // frame, because frames do not fire while a tab is hidden.
+        window.setTimeout(function () {
+          var field = panel.querySelector("input[name=title]");
+          if (field) field.focus({ preventScroll: true });
+        }, 0);
+      }
+
+      document.querySelectorAll("[data-open-import]").forEach(function (trigger) {
+        trigger.addEventListener("click", function () {
+          openPanel(true);
+        });
+      });
+
+      if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(false);
+      window.addEventListener("hashchange", function () {
+        if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(true);
+      });
+    })();
+  </script>
 </Layout>
