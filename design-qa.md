@@ -113,3 +113,20 @@ confirming the rules exist and match rather than by watching it animate - the fo
 it feels right. Signed-in pages were audited from source only, since this session cannot authenticate.
 **Real screen-reader testing with NVDA or VoiceOver still has not happened** and this audit does not
 substitute for it; that acceptance item stays open.
+
+### Button consistency follow-up - 2026-10-22
+
+Founder found one action still missing the sweep: "Open your Workbench" on the intro page. Probed
+each action class in the browser - `.public-nav-action`, `.landing-primary` and `.cip-action` all had
+it; `.landing-text-link` did not, and that is the class behind both "Open your Workbench" and
+"See how CIP works".
+
+It was a bare text link, so there was no surface for a sweep to travel across. Rather than animate
+nothing, it now carries the app's secondary-action treatment - white surface, lavender border,
+40px minimum height - and joins the shared hover rule with a purple tint, since a white sweep is
+invisible on a white surface. An older `display:block` rule stretched the closing one to full width;
+corrected to size to its content.
+
+The public page now reads as a primary/secondary button pair in both the hero and the closing call to
+action. Verified on the rebuilt app: all six actions carry the sweep, heights 42-51px, nothing under
+24px. The only button-like element deliberately left plain is the skip link.

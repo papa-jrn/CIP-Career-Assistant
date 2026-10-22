@@ -808,7 +808,8 @@ button:disabled,
 .cip-action,
 .wb-button,
 .landing-primary,
-.public-nav-action {
+.public-nav-action,
+.landing-text-link {
   isolation: isolate;
   overflow: hidden;
   position: relative;
@@ -817,7 +818,8 @@ button:disabled,
 .cip-action::before,
 .wb-button::before,
 .landing-primary::before,
-.public-nav-action::before {
+.public-nav-action::before,
+.landing-text-link::before {
   background: linear-gradient(120deg, transparent 0%, var(--button-shine, rgba(255, 255, 255, 0.28)) 45%, transparent 70%);
   content: "";
   height: 160%;
@@ -834,14 +836,16 @@ button:disabled,
 .cip-action:hover::before,
 .wb-button:hover::before,
 .landing-primary:hover::before,
-.public-nav-action:hover::before {
+.public-nav-action:hover::before,
+.landing-text-link:hover::before {
   left: 130%;
 }
 
 .cip-action:hover,
 .wb-button:hover,
 .landing-primary:hover,
-.public-nav-action:hover {
+.public-nav-action:hover,
+.landing-text-link:hover {
   box-shadow: var(--shadow-card);
   transform: translateY(-0.06rem);
 }
@@ -849,7 +853,8 @@ button:disabled,
 .cip-action:active,
 .wb-button:active,
 .landing-primary:active,
-.public-nav-action:active {
+.public-nav-action:active,
+.landing-text-link:active {
   transform: translateY(0.12rem);
 }
 
@@ -917,7 +922,9 @@ button:disabled,
   .landing-primary,
   .landing-primary::before,
   .public-nav-action,
-  .public-nav-action::before {
+  .public-nav-action::before,
+  .landing-text-link,
+  .landing-text-link::before {
     transition: none;
   }
 
@@ -925,7 +932,15 @@ button:disabled,
   .cip-action:hover,
   .wb-button:hover,
   .landing-primary:hover,
-  .public-nav-action:hover {
+  .public-nav-action:hover,
+  .landing-text-link:hover {
     transform: none;
   }
+}
+
+/* Secondary public actions sit on white, so the sweep needs a purple tint
+   rather than the white one used on filled buttons. */
+.landing-text-link,
+.public-nav-action {
+  --button-shine: color-mix(in srgb, #6840e8 16%, transparent);
 }
