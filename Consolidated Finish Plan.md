@@ -219,16 +219,38 @@ here would be the thing Phase 7 exists to prevent.
 Both were unreachable from tests, which is how the founder-specific heuristics inside them survived
 this long.
 
-### C. Phase 6 — state-layer tests (beta-blocking, partial)
+### C. Phase 6 — state-layer tests ~~(beta-blocking, partial)~~ **the named gaps are closed, 2026-10-22**
 
-499 tests across 30 files exist, but they cover the newer intelligence work. The parsers that will
-meet strangers' messy data first are untested. **Untested modules:** `advisor`, `network-intelligence`,
-`source-analysis`, `resume-assets`, `evidence-sufficiency`, `evidence-builder`, `career-report`,
-`conversation-notes`, `intake`, `profile`, `job-verifier`, `ats-reader`, `business-search-engine`,
-`geography-engine`, `job-search-engine`, `job-search-view`, `job-search-config`, `watched-employers`,
-`brief-loader`, `analysis-review`, `resume-asset-context`, `goal-synthesis-view`, `server-env`,
-`us-states`, `data`. Named in the plan and still missing: CSV/XLSX/ZIP contact parsing, docx/rtf note
-extraction, contact dedupe, network-feedback exclusions, evidence-sufficiency math, report assembly.
+Every item the plan named is now covered: CSV, XLSX and ZIP contact parsing, docx/RTF/JSON note
+extraction, contact dedupe, network-feedback exclusions, evidence-sufficiency maths, and report
+assembly. 663 tests across 40 files, up from 499. The parsers were exported so they could be reached
+at all; being unreachable from tests is why none of them had one.
+
+Security behaviours now pinned: a 40 MB zip bomb is refused *during* inflation rather than after, the
+ZIP entry ceiling stops an endless archive, and one corrupt entry does not abort an import.
+
+The Autumn 2026 loop failure has an explicit regression test: analysis-round counts must not move the
+sufficiency phase, a high round count must not declare a thin profile complete, and an empty profile
+stays in "building" however many passes have run.
+
+Three real defects were found by writing these:
+- RTF extraction stripped structural braces before decoding escapes, so braces a user typed in their
+  notes came out as stray backslashes.
+- Evidence sufficiency counted a link-bearing answer twice when resubmitted - once for the link, then
+  again for its text - so resubmitting one piece of evidence inflated the score.
+- Two more founder-specific heuristics the de-founder pass missed: `isSpecificPerson` blocklisted
+  "dartmouth health" by name, and the relationship coaching detected a "local anchor cluster" by
+  matching the founder's employer and towns, then named his institution back at the reader. Both now
+  work from the user's own data.
+
+Still untested, and not named in the plan's list: `advisor` (the model call paths), `job-search-engine`,
+`job-verifier`, `ats-reader`, `business-search-engine`, `geography-engine`, `brief-loader`,
+`analysis-review`, `profile`, `server-env`, `us-states`. These are either thin, or exercised
+indirectly, or need network fixtures; none of them is a parser meeting a stranger's upload. The
+founder's position, recorded 2026-10-22: the import path has worked across 11 real imports, and the
+remaining validation that matters is beta users' data rather than more unit tests. These tests exist
+to stop what works from breaking silently - the de-founder pass had already changed three of these
+files with no way to tell.
 
 ### D. Redesign slices not yet delivered
 
@@ -295,10 +317,9 @@ integrity rules, not polish, and everything downstream inherits them.
 all in the same shape: a vocabulary of the founder's own employers, phrases or hometown deciding a
 score or an inference. Lane role families remain founder-shaped and are deferred to Phase 7.
 
-**Step 3 — Test the parsers that meet strangers first.** (C)
-CSV/XLSX/ZIP, docx/rtf, dedupe, feedback exclusions, evidence-sufficiency, report assembly — written
-against fixtures, not live AI. `Next Steps.md` is explicit that skipping this is how a beta burns its
-first users, and steps 1 and 2 will have just touched this code.
+**Step 3 — Test the parsers that meet strangers first.** (C) **Done 2026-10-22.** All named targets
+covered against fixtures, no live AI. Three defects found and fixed in the writing, including two
+founder-specific heuristics that survived Step 2.
 
 **Step 4 — Finish the redesign.** (D)
 The imported-job slice first, since the plan makes it a precondition for calling the redesign done,

@@ -79,12 +79,18 @@ function countUsefulEvidence(evidenceResponses: AdvisorEvidenceResponse[]) {
       return true;
     });
 
+    const key = normalizeEvidenceKey(text);
+
     if (newUrls.length) {
+      // Record the text as seen too. Without this the same answer submitted
+      // twice counted twice - once for its link, then again for its text,
+      // because the link branch returned before the text was ever recorded -
+      // so resubmitting one piece of evidence inflated the score.
+      seen.add(key);
       count += newUrls.length * weight;
       continue;
     }
 
-    const key = normalizeEvidenceKey(text);
     if (seen.has(key)) continue;
     seen.add(key);
 
