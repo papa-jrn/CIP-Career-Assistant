@@ -93,7 +93,7 @@ describe("importing a job: boundary", () => {
   });
 
   it("caps an oversized paste instead of storing it", async () => {
-    const huge = await request({ ...JOB, originalMaterial: "x".repeat(70_000) });
+    const huge = await request({ ...JOB, originalMaterial: "x".repeat(110_000) });
     expect(huge.status).toBe(413);
     expect(state.saved).toEqual([]);
   });

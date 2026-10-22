@@ -254,9 +254,21 @@ files with no way to tell.
 
 ### D. Redesign slices not yet delivered
 
-- **Imported-job slice** (Workbench §10 step 4) — import a job found elsewhere, dedupe, verify the
-  source, evaluate personal fit *separately*, save a correctable recommendation. The plan states this
-  must land before the redesign can be called complete.
+- ~~**Imported-job slice** (Workbench §10 step 4)~~ **IMPLEMENTED 2026-10-22; live acceptance remains.**
+  Import, dedupe, source check, separate fit evaluation and correction, direct Workbench fit action,
+  Workbench surfacing, and
+  cautious employer-domain / red-flag observations are implemented. Workbench job actions are now
+  stacked below their summary at usable sizes; imported records support additive edits with two
+  separately labeled source links and separately preserved posting text. Assessments compare both
+  supplied texts. The optional Responses API call is capped at 15 seconds and falls back to CIP's
+  deterministic assessment; the browser reports a 30-second fit request timeout. Listing checks
+  use no AI, with an 8-second fetch and 10-second end-to-end deadline, and store timeout as
+  “verification unavailable.” **Section 7 is not fully
+  closed:** document attachments, independent employer identity corroboration/off-domain redirect
+  checks, fetched-page red-flag scans, independently checking every source link, and deeper fit
+  comparisons (duties, qualifications, scope, geography, evidence and proof gaps) remain. See the
+  limits recorded in `Workbench Redesign Plan.md`. Needs founder live acceptance with a real imported
+  job and an OpenAI failure/retry pass; signed-in browser click-through was not available in this pass.
 - **People consolidation proper** — Connections and Follow Up still exist as two routes under the
   People nav rather than one surface.
 - **Import component extraction** — so first use can truly lead with import rather than it sitting
@@ -322,8 +334,8 @@ covered against fixtures, no live AI. Three defects found and fixed in the writi
 founder-specific heuristics that survived Step 2.
 
 **Step 4 — Finish the redesign.** (D)
-The imported-job slice first, since the plan makes it a precondition for calling the redesign done,
-then People consolidation and the remaining small bugs (A3, A6, A7).
+The imported-job slice is implemented as of 2026-10-22. People consolidation and the remaining small
+bugs (A3, A6, A7) remain before the redesign is complete.
 
 **Step 5 — Acceptance.** (E)
 Two live passes, first use on an empty account, induced failure and retry, screen-reader. These need

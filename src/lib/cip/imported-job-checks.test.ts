@@ -8,6 +8,7 @@ import {
   importedJobCheckPayload,
   isCheckStale,
   parseImportedJobCheck,
+  observeImportedListing,
   readableState,
   type ImportedJobCheck,
 } from "./imported-job-checks";
@@ -37,6 +38,20 @@ function check(over: Partial<ImportedJobCheck> = {}): ImportedJobCheck {
 }
 
 describe("storing a check", () => {
+  it("records cautious employer-domain and explicit red-flag observations without calling them proof", () => {
+    const observations = observeImportedListing("Riverside Health", "https://careers.riverside.org/jobs/1", "Applicants must pay an application fee and provide your bank account.");
+    expect(observations.map(item => item.kind)).toEqual(["employer_name_in_domain", "payment_request", "sensitive_data_request"]);
+    expect(observations[0].detail).toMatch(/not proof/i);
+    expect(observations[1].detail).toMatch(/verify independently/i);
+  });
+
+  it("does not call a hosted ATS domain a mismatch or claim fraud", () => {
+    const observations = observeImportedListing("Riverside Health", "https://jobs.example-ats.com/123", "A job description.");
+    expect(observations[0].kind).toBe("employer_name_not_in_domain");
+    expect(observations[0].detail).toMatch(/does not mean the page is false/i);
+    expect(observations.some(item => /fake|scam|fraud/i.test(item.detail))).toBe(false);
+  });
+
   it("reads back what was stored", () => {
     const stored = JSON.stringify(importedJobCheckPayload(check()));
     expect(parseImportedJobCheck(stored, "now")).toMatchObject({ importId: "imp-1", state: "verified_open" });

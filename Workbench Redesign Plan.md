@@ -820,11 +820,9 @@ link. Importing performs no outbound fetch at all in this slice.
 Verification: typecheck clean, 699 tests passing (25 unit, 11 endpoint boundary), SSR build passed,
 and every card state was printed through the real functions to check what it claims.
 
-Not in this slice, and still required before section 7 is complete: fetching the link to check it
-against the employer's own source (the machinery exists - `verifyPosting`, `judgeVerification`,
-`fetchSafe` - and is reused rather than rebuilt), employer attribution and red-flag observations, the
-fit assessment with its apply / talk first / research / hold / skip recommendation and user
-correction, and surfacing imports in the Workbench alongside searched postings.
+The initial implementation surfaced the actions on Opportunities. The later completion pass adds
+the remaining Workbench visibility and attribution observations; see the dated section 7 entries
+below for the implementation state and limits.
 
 ### Import promoted to the top of Opportunities - 2026-10-22
 
@@ -874,7 +872,51 @@ while leaving both conflicts unmentioned, and an off-lane job said "this lines u
 when the lane overlap was unknown. The summary now names every conflict and distinguishes "matches
 your constraints" from "matches a direction you are pursuing". Both are pinned by test.
 
-Still open in section 7: an AI-assisted assessment with the deterministic path as its fallback (the
-hook is designed in; the deterministic path stands alone and is honest without it), employer
-attribution and red-flag observations, and surfacing imported jobs in the Workbench alongside
-searched postings.
+### Completed 2026-10-22: Workbench handoff, AI assistance, and source observations
+
+Imported jobs now appear in the Workbench's Jobs to review panel alongside the latest search
+summary. Each imported item shows its current check state and the latest fit recommendation, with a
+direct fit-assessment action in Workbench. Opportunities remains the full detail, verification, and
+editing surface.
+
+The assessment action uses a standard POST/redirect so a successful save reliably reloads the new
+assessment and its visible confirmation. The prior htmx form returned an empty body and depended on
+an HX redirect being processed, leaving no obvious result when that did not happen. The current
+check and assessment actions show the shared progress panel, disable the clicked button, surface
+server errors, and stop waiting in the browser after their request deadline. Listing verification
+makes a guarded page request and matches the title/requisition; it uses no AI. The HTTP request is
+capped at 8 seconds and a 10-second outer deadline also covers DNS and body reading. A timeout is
+saved as “verification unavailable,” never fake or closed. The browser stops waiting after 20
+seconds. The optional fit AI request has a 15-second abort deadline and returns the deterministic
+CIP assessment on timeout, provider error, or invalid output. Live acceptance still needs to confirm
+this behavior on the signed-in app.
+
+When an OpenAI key is configured, a strict-schema Responses API call may refine the recommendation
+and next-action wording from deterministic findings and curated CIP context. It cannot add findings,
+recommend Apply or Skip, or contradict a deterministic mismatch. Valid evidence references are
+shown explicitly on the card. Missing keys, malformed output, provider failures, timeouts, or unsafe
+contradictions return the deterministic assessment.
+The card labels AI-assisted versus deterministic readings, and both remain explicitly CIP's
+interpretation rather than fact. The user's correction remains a separate additive record.
+
+Each check now stores cautious observations: whether a distinctive employer word appears in the
+supplied source hostname, and whether the supplied posting text explicitly mentions an application
+fee/payment or sensitive identity/financial data request. These are review prompts only. A domain
+clue does not prove employer identity, a hosted ATS domain is not treated as suspicious by itself,
+and a text match does not establish fraud or safety. Observations display with the check history.
+
+Imported jobs can now be edited through an additive revision. Each revision retains two source URLs
+and its own pasted text for each site; the UI shows the captures separately and the fit assessment
+receives both with source labels. Editing invalidates the current check and fit result until the user
+runs them again. Workbench job actions now sit below the summary at tappable sizes instead of being
+compressed into the same row. The imported-job summary keeps its action row directly under the
+title and status to avoid the large empty vertical gap visible in the 2026-10-22 screenshot.
+
+**Acceptance limits still open:** this still does not complete every aspiration in the original
+section 7 contract. Imports accept two links and pasted text, not document attachments. The listing
+check currently checks only the first link. Attribution remains a hostname clue plus the existing
+title/requisition check; it does not independently corroborate employer identity or detect an
+off-domain application redirect. Red-flag phrases are matched only against user-pasted text, not
+fetched page contents. Fit does not yet compare duties, qualifications, scope, geography, or
+transferable evidence and proof gaps in a posting-specific way. Founder live acceptance must confirm
+the layout, fit result, timeout fallback, and edited two-source flow before section 7 is called closed.

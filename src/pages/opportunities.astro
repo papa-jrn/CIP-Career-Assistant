@@ -19,7 +19,7 @@ import {
 } from "../lib/cip/imported-job-checks";
 import {
   IMPORTED_JOB_FIT_SOURCE_TYPE,
-  latestFitFor,
+  latestCurrentFitFor,
   parseImportedJobFit,
   readableRecommendation,
   type FitAssessment,
@@ -28,6 +28,7 @@ import {
   IMPORTED_JOB_SOURCE_TYPE,
   describeFit,
   describeProvenance,
+  latestImportedJobs,
   parseImportedJob,
   type ImportedJob,
 } from "../lib/cip/imported-jobs";
@@ -53,6 +54,7 @@ let importedJobs: ImportedJob[] = [];
 let importedJobChecks: ImportedJobCheck[] = [];
 // Fit assessments, including the user's own corrections of them.
 let importedJobFits: FitAssessment[] = [];
+const fitForJob = (job: ImportedJob) => latestCurrentFitFor(job, importedJobFits);
 
 if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
   try {
@@ -102,9 +104,9 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         .map((row) => parseImportedJobFit(row.extracted_text, row.created_at))
         .filter(Boolean) as FitAssessment[];
 
-      importedJobs = ((importedRows ?? [])
+      importedJobs = latestImportedJobs(((importedRows ?? [])
         .map((row) => parseImportedJob(row.extracted_text))
-        .filter(Boolean) as ImportedJob[])
+        .filter(Boolean) as ImportedJob[]))
         // The stored capture is never edited; the latest check is layered on
         // at read time so the original stays intact.
         .map((job) => applyLatestCheck(job, importedJobChecks));
@@ -280,13 +282,18 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
             </label>
           </div>
           <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">
-            Link to the posting (optional if you paste the text)
-            <input name="sourceUrl" type="url" maxlength="2000" placeholder="https://" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
+            First source link (optional if you paste the text)
+            <input name="sourceUrl" type="url" maxlength="2000" placeholder="Employer career page or LinkedIn link" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
           </label>
           <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">
-            The posting text (optional if you give a link)
+            Text from the first source (optional)
             <textarea name="originalMaterial" rows="6" maxlength="40000" placeholder="Paste the posting as you found it. It is kept as your own material, not treated as a verified listing." class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal leading-6 text-[var(--foreground)]"></textarea>
           </label>
+          <details class="mt-3 rounded-md border border-[var(--field-border)] p-3">
+            <summary class="cursor-pointer text-sm font-semibold">Add another source and its version of the posting</summary>
+            <label class="mt-3 grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Second source link<input name="secondarySourceUrl" type="url" maxlength="2000" placeholder="A LinkedIn, employer, or other link" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" /></label>
+            <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Text from the second source<textarea name="secondaryMaterial" rows="5" maxlength="40000" placeholder="Paste this site's version separately so CIP can see the differences." class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal leading-6 text-[var(--foreground)]"></textarea></label>
+          </details>
           <div class="grid gap-3 md:grid-cols-2">
             <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">
               Requisition or job ID (optional)
@@ -339,6 +346,8 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                 {job.userNote ? (
                   <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{job.userNote}</p>
                 ) : null}
+                {job.sourceLinks?.length ? <div class="mt-3 flex flex-wrap gap-2">{job.sourceLinks.map((source) => <a class="cip-action" href={source.url} target="_blank" rel="noreferrer noopener">Open {source.label}</a>)}</div> : null}
+                {job.originalMaterial || job.sourceLinks?.some((source) => source.material) ? <details class="mt-3 rounded-md border border-[var(--line)] p-3"><summary class="cursor-pointer text-sm font-semibold">View captured text from each source</summary>{(job.sourceLinks?.length ? job.sourceLinks : [{ label: "Pasted text", url: "", material: job.originalMaterial }]).filter((source) => source.material).map((source) => <section class="mt-3"><h4 class="text-xs font-semibold uppercase text-[var(--muted)]">{source.label}</h4><p class="mt-1 break-words whitespace-pre-wrap text-sm leading-6 text-[var(--foreground)]">{source.material}</p>{source.url ? <a class="text-xs" href={source.url} target="_blank" rel="noreferrer noopener">Open this source</a> : null}</section>)}</details> : null}
                 <dl class="mt-3 grid gap-2 text-sm leading-6 md:grid-cols-2">
                   <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                     <dt class="text-xs font-semibold uppercase text-[var(--muted)]">Is the listing real and live?</dt>
@@ -352,22 +361,22 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                   </div>
                   <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                     <dt class="text-xs font-semibold uppercase text-[var(--muted)]">Does it suit you?</dt>
-                    {latestFitFor(job.importId, importedJobFits) ? (
+                    {fitForJob(job) ? (
                       <dd class="mt-1">
                         <p class="font-semibold text-[var(--foreground)]">
-                          {readableRecommendation(latestFitFor(job.importId, importedJobFits)!.recommendation)}
+                          {readableRecommendation(fitForJob(job)!.recommendation)}
                         </p>
-                        <p class="mt-1 text-[var(--muted)]">{latestFitFor(job.importId, importedJobFits)!.nextAction}</p>
+                        <p class="mt-1 text-[var(--muted)]">{fitForJob(job)!.nextAction}</p>
                         <p class="mt-2 text-xs text-[var(--muted)]">
-                          {latestFitFor(job.importId, importedJobFits)!.basis === "user"
+                          {fitForJob(job)!.basis === "user"
                             ? "Your own conclusion."
-                            : "CIP's reading of what you saved, at " +
-                              latestFitFor(job.importId, importedJobFits)!.confidence +
+                            : (fitForJob(job)!.basis === "ai_assisted" ? "AI-assisted reading" : "Deterministic reading") + " of what you saved, at " +
+                              fitForJob(job)!.confidence +
                               " confidence. It can be wrong; correct it below."}
                         </p>
-                        {latestFitFor(job.importId, importedJobFits)!.findings.length ? (
+                        {fitForJob(job)!.findings.length ? (
                           <ul class="mt-2 grid gap-1">
-                            {latestFitFor(job.importId, importedJobFits)!.findings.map((finding) => (
+                            {fitForJob(job)!.findings.map((finding) => (
                               <li class="text-xs leading-5 text-[var(--muted)]">
                                 <span class="font-semibold text-[var(--foreground)]">
                                   {finding.kind === "match" ? "Matches" : finding.kind === "mismatch" ? "Conflicts" : "Unknown"}
@@ -388,37 +397,58 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                   {job.capturedAt ? "Saved " + new Date(job.capturedAt).toLocaleString() + "." : "Saved at an unrecorded time."}
                 </p>
                 <div class="mt-3 flex flex-wrap gap-2">
-                  {job.sourceUrl ? (
-                    <a class="cip-action" href={job.sourceUrl} target="_blank" rel="noreferrer noopener">
-                      Open the posting
-                    </a>
-                  ) : null}
+                  {job.sourceUrl ? <span class="self-center text-xs text-[var(--muted)]">Listing check uses the first link.</span> : null}
                   {job.sourceUrl && signedIn ? (
-                    <form method="post" action="/api/jobs/verify-import" hx-post="/api/jobs/verify-import">
+                    <form data-job-action="check" data-timeout-seconds="20" method="post" action="/api/jobs/verify-import" hx-post="/api/jobs/verify-import" hx-request='{"timeout":20000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-check-progress-${job.importId}`} hx-disabled-elt="find button">
                       <input type="hidden" name="importId" value={job.importId} />
                       <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
                       <button class={isCheckStale(job) ? "cip-action cip-action-primary" : "cip-action"} type="submit">
                         {job.verification ? "Check it again" : "Check this listing"}
                       </button>
+                      <div id={`job-check-progress-${job.importId}`} class="htmx-indicator cip-thinking-panel mt-3" role="status" aria-live="polite">
+                        <div class="cip-thinking-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+                        <div class="min-w-0 flex-1"><p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Checking the listing source (no AI)</p><div class="cip-thinking-lines" aria-hidden="true"><span>Opening the supplied page...</span><span>Matching its title and job ID...</span><span>Saving the source's current status...</span></div><p class="sr-only">Fetching the supplied page and checking its title and requisition ID. This check does not use AI and stops after ten seconds.</p><div class="cip-thinking-bar" aria-hidden="true"><span></span></div></div>
+                      </div>
                     </form>
                   ) : null}
                   {signedIn ? (
-                    <form method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import">
+                    <form data-job-action="assess" data-timeout-seconds="30" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import" hx-request='{"timeout":30000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-fit-progress-${job.importId}`} hx-disabled-elt="find button">
                       <input type="hidden" name="importId" value={job.importId} />
                       <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
                       <button class="cip-action" type="submit">
-                        {latestFitFor(job.importId, importedJobFits) ? "Assess fit again" : "Assess the fit"}
+                        {fitForJob(job) ? "Assess fit again" : "Assess the fit"}
                       </button>
+                      <div id={`job-fit-progress-${job.importId}`} class="htmx-indicator cip-thinking-panel mt-3" role="status" aria-live="polite">
+                        <div class="cip-thinking-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+                        <div class="min-w-0 flex-1"><p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Assessing fit using your CIP context</p><div class="cip-thinking-lines" aria-hidden="true"><span>Comparing this posting with your saved preferences and exclusions...</span><span>Reviewing your active career directions and saved evidence...</span><span>Keeping unknowns visible and saving the assessment...</span></div><p class="sr-only">Comparing this job with your saved career context. The assessment is separate from listing verification.</p><div class="cip-thinking-bar" aria-hidden="true"><span></span></div></div>
+                      </div>
                     </form>
                   ) : null}
                 </div>
+                <div id={`job-action-result-${job.importId}`} class="mt-3 text-sm" aria-live="polite"></div>
+
+                {signedIn ? <details class="mt-3 rounded-md border border-[var(--line)] p-3">
+                  <summary class="cursor-pointer text-sm font-semibold text-[var(--accent-strong)]">Edit job details and source text</summary>
+                  <form class="mt-3 grid gap-3" method="post" action="/api/jobs/update-import">
+                    <input type="hidden" name="importId" value={job.importId} />
+                    <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
+                    <div class="grid gap-3 md:grid-cols-2"><label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Job title<input name="title" required maxlength="200" value={job.title} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label><label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Employer<input name="employer" required maxlength="200" value={job.employer} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label></div>
+                    <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">First source link<input name="sourceUrl" type="url" maxlength="2000" value={job.sourceLinks?.[0]?.url || job.sourceUrl} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label>
+                    <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Text from the first source<textarea name="originalMaterial" rows="5" maxlength="40000" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case leading-6 text-[var(--foreground)]">{job.sourceLinks?.[0]?.material || job.originalMaterial}</textarea></label>
+                    <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Second source link<input name="secondarySourceUrl" type="url" maxlength="2000" value={job.sourceLinks?.[1]?.url || ""} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label>
+                    <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Text from the second source<textarea name="secondaryMaterial" rows="5" maxlength="40000" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case leading-6 text-[var(--foreground)]">{job.sourceLinks?.[1]?.material || ""}</textarea></label>
+                    <div class="grid gap-3 md:grid-cols-2"><label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Requisition or job ID<input name="requisitionId" maxlength="80" value={job.requisitionId || ""} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label><label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">Location<input name="worksiteText" maxlength="200" value={job.worksiteText || ""} class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal normal-case text-[var(--foreground)]" /></label></div>
+                    <button class="cip-action cip-action-primary justify-self-start" type="submit">Save revised job</button>
+                    <p class="text-xs leading-5 text-[var(--muted)]">Edits are saved as a new version. Earlier text and assessments stay in your history; listing checks and fit assessments need to be repeated after edits.</p>
+                  </form>
+                </details> : null}
 
                 {signedIn ? (
                   <details class="mt-3">
                     <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
                       Set your own conclusion
                     </summary>
-                    <form class="mt-2 grid gap-2" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import">
+                    <form class="mt-2 grid gap-2" method="post" action="/api/jobs/assess-import">
                       <input type="hidden" name="importId" value={job.importId} />
                       <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
                       <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
@@ -455,6 +485,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                           </span>
                           {" \u2014 " + readableState(entry.state)}
                           {entry.note ? <p class="mt-1">{entry.note}</p> : null}
+                          {entry.observations?.map((observation) => <p class="mt-1">Observation: {observation.detail}</p>)}
                         </li>
                       ))}
                     </ol>
@@ -500,6 +531,31 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
       if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(false);
       window.addEventListener("hashchange", function () {
         if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(true);
+      });
+
+      document.body.addEventListener("htmx:beforeSwap", function (event) {
+        var detail = event.detail;
+        var target = detail && detail.target;
+        if (target && target.id && target.id.indexOf("job-action-result-") === 0 && detail.xhr && detail.xhr.status >= 400) {
+          // htmx otherwise suppresses error response bodies, which made a
+          // failed check or assessment look exactly like a dead button.
+          detail.shouldSwap = true;
+          detail.isError = false;
+        }
+      });
+      document.body.addEventListener("htmx:sendError", function (event) {
+        var source = event.detail && event.detail.elt ? event.detail.elt : event.target;
+        var form = source && source.closest && source.closest("[data-job-action]");
+        if (!form) return;
+        var result = document.querySelector(form.getAttribute("hx-target"));
+        if (result) result.textContent = "The connection failed. Nothing was saved; please try again.";
+      });
+      document.body.addEventListener("htmx:timeout", function (event) {
+        var source = event.detail && event.detail.elt ? event.detail.elt : event.target;
+        var form = source && source.closest && source.closest("[data-job-action]");
+        if (!form) return;
+        var result = document.querySelector(form.getAttribute("hx-target"));
+        if (result) result.textContent = "This request exceeded " + (form.getAttribute("data-timeout-seconds") || "30") + " seconds. The page stopped waiting; please retry.";
       });
     })();
   </script>

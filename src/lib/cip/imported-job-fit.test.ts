@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildImportedJob, importedJobInput } from "./imported-jobs";
 import {
   assessImportedJobFit,
+  assessImportedJobFitWithAi,
   importedJobFitPayload,
   latestFitFor,
   parseImportedJobFit,
@@ -79,6 +80,42 @@ describe("the assessment never invents what the posting does not say", () => {
     for (const finding of fit.findings) {
       expect(["your preferences", "your career lanes", "the posting text", "the posting link"]).toContain(finding.source);
     }
+  });
+});
+
+describe("AI-assisted fit uses broader CIP context with deterministic guardrails", () => {
+  it("cites only supplied CIP evidence and keeps the assessment label explicit", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      const evidence = JSON.parse(body.input[1].content).careerEvidence;
+      expect(evidence).toContainEqual({ refId: "conversation-1", detail: "A prior market conversation said this team hires through a long internal process." });
+      return new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify({
+        recommendation: "monitor", confidence: "medium", nextAction: "Compare the posting duties with the market-read evidence before investing time.", evidenceRefs: ["conversation-1"],
+      }) }] }] }), { status: 200 });
+    }) as typeof fetch);
+    const fit = await assessImportedJobFitWithAi(job(), context({ careerEvidence: [
+      { refId: "conversation-1", detail: "A prior market conversation said this team hires through a long internal process." },
+    ] }), AT);
+    expect(fit.basis).toBe("ai_assisted");
+    expect(fit.findings.at(-1)).toMatchObject({
+      label: "CIP context considered",
+      detail: "A prior market conversation said this team hires through a long internal process.",
+      source: "CIP analysis and saved evidence",
+    });
+  });
+
+  it("keeps a concrete deterministic mismatch and recommendation when AI disagrees", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify({
+      recommendation: "talk_first", confidence: "high", nextAction: "This is a perfect match; apply today.", evidenceRefs: [],
+    }) }] }] }), { status: 200 })) as typeof fetch);
+    const constrained = context({ salaryFloorUsd: 120_000, workModes: ["remote"], laneRoles: [] });
+    const input = job({ originalMaterial: "On-site role paying $75,000 per year." });
+    const expected = assessImportedJobFit(input, constrained, AT);
+    const fit = await assessImportedJobFitWithAi(input, constrained, AT);
+    expect(fit).toEqual(expected);
+    expect(fit.findings.some((item) => item.kind === "mismatch")).toBe(true);
   });
 });
 

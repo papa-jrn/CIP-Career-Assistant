@@ -6,7 +6,9 @@ import {
   findDuplicate,
   importedJobInput,
   importedJobPayload,
+  importedJobAnalysisText,
   isHttpUrl,
+  latestImportedJobs,
   parseImportedJob,
   type ImportedJob,
 } from "./imported-jobs";
@@ -55,6 +57,27 @@ describe("what the form accepts", () => {
     expect(isHttpUrl("https://careers.example.org/jobs/1")).toBe(true);
     expect(isHttpUrl("http://careers.example.org/jobs/1")).toBe(true);
   });
+
+  it("accepts two separate links and does not merge their pasted versions", () => {
+    const parsed = input({
+      originalMaterial: "Employer version: salary is listed.",
+      secondarySourceUrl: "https://linkedin.com/jobs/view/123",
+      secondaryMaterial: "LinkedIn version: salary omitted.",
+    });
+    const job = buildImportedJob(parsed, ctx);
+    expect(job.sourceLinks).toEqual([
+      { label: "careers.riverside.org", url: job.sourceUrl, material: "Employer version: salary is listed." },
+      { label: "linkedin.com", url: "https://linkedin.com/jobs/view/123", material: "LinkedIn version: salary omitted." },
+    ]);
+    expect(importedJobAnalysisText(job)).toContain("--- careers.riverside.org");
+    expect(importedJobAnalysisText(job)).toContain("--- linkedin.com");
+    expect(importedJobAnalysisText(job)).not.toContain("salary is listed.\\nLinkedIn");
+  });
+
+  it("rejects invalid or duplicated second links", () => {
+    expect(importedJobInput.safeParse({ title: "Director", employer: "Riverside", sourceUrl: "https://careers.example/jobs/1", secondarySourceUrl: "file:///bad" }).success).toBe(false);
+    expect(importedJobInput.safeParse({ title: "Director", employer: "Riverside", sourceUrl: "https://careers.example/jobs/1", secondarySourceUrl: "https://careers.example/jobs/1" }).success).toBe(false);
+  });
 });
 
 describe("building the record", () => {
@@ -87,6 +110,17 @@ describe("building the record", () => {
     const job = buildImportedJob(input({ originalMaterial: "Posting text." }), ctx);
     const read = parseImportedJob(JSON.stringify(importedJobPayload(job)));
     expect(read).toMatchObject({ title: job.title, employer: job.employer, sourceUrl: job.sourceUrl, material: "url_and_pasted" });
+  });
+
+  it("reads older records without a sourceLinks array", () => {
+    const old = { importedJob: { ...buildImportedJob(input({ originalMaterial: "Old pasted text." }), ctx), sourceLinks: undefined } };
+    expect(parseImportedJob(JSON.stringify(old))?.sourceLinks).toEqual([{ label: "Primary source", url: old.importedJob.sourceUrl, material: "Old pasted text." }]);
+  });
+
+  it("shows only the newest additive revision for each import", () => {
+    const older = buildImportedJob(input(), ctx);
+    const newer = { ...older, title: "Updated title" };
+    expect(latestImportedJobs([newer, older])).toEqual([newer]);
   });
 
   it("returns null for a record it cannot read, rather than a half-built job", () => {

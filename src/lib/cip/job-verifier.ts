@@ -38,6 +38,7 @@ export interface PostingToVerify {
 export interface FetchedPage {
   status: number;
   text: string;
+  timedOut?: boolean;
 }
 
 /** `null` means the fetch was blocked by the safety rules or failed at the network level. */
@@ -138,6 +139,9 @@ export function judgeVerification(
 ): VerificationResult {
   const result = (state: VerificationState, note: string): VerificationResult => ({ state, note, checkedAt });
 
+  if (page?.timedOut) {
+    return result("verification_unavailable", "The posting page did not respond within 10 seconds, so this check stopped. It was not marked fake or closed.");
+  }
   if (!page) {
     return result("verification_unavailable", "The page could not be fetched (blocked, unreachable, or refused).");
   }
@@ -184,15 +188,26 @@ export function judgeVerification(
 
 /** Fetches through the shared SSRF guard (private ranges blocked, size capped, redirects re-validated). */
 export const safePageFetcher: PageFetcher = async (url) => {
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
-    const response = await fetchSafe(url, 15_000, {
-      userAgent: "Career Intelligence Platform posting verifier",
-      accept: "text/html,application/xhtml+xml",
-    });
-    if (!response) return null;
-    return { status: response.status, text: await response.text() };
-  } catch {
+    // fetchSafe bounds the HTTP request itself. This outer deadline also covers
+    // DNS resolution and consuming a slow streaming response body.
+    return await Promise.race([
+      (async () => {
+        const response = await fetchSafe(url, 8_000, {
+          userAgent: "Career Intelligence Platform posting verifier",
+          accept: "text/html,application/xhtml+xml",
+        });
+        if (!response) return null;
+        return { status: response.status, text: await response.text() };
+      })(),
+      new Promise<FetchedPage>((resolve) => { deadline = setTimeout(() => resolve({ status: 0, text: "", timedOut: true }), 10_000); }),
+    ]);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") return { status: 0, text: "", timedOut: true };
     return null;
+  } finally {
+    if (deadline) clearTimeout(deadline);
   }
 };
 

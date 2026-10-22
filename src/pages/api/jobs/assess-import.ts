@@ -2,14 +2,15 @@ import type { APIRoute } from "astro";
 import { z } from "zod";
 import {
   IMPORTED_JOB_FIT_SOURCE_TYPE,
-  assessImportedJobFit,
+  assessImportedJobFitWithAi,
   importedJobFitPayload,
   type FitAssessment,
 } from "@/lib/cip/imported-job-fit";
 import { IMPORTED_JOB_SOURCE_TYPE, parseImportedJob } from "@/lib/cip/imported-jobs";
 import { escapeHtml } from "@/lib/cip/job-search-view";
 import { loadStoredSearchPreferences } from "@/lib/cip/search-preferences";
-import { buildTargetLanes, parseAnalysisAdvisor, parseIntakeSource } from "@/lib/cip/resume-asset-context";
+import { parseAnalysisAdvisor, parseIntakeSource } from "@/lib/cip/resume-asset-context";
+import { parseConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import { isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
@@ -63,6 +64,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .select("extracted_text")
       .eq("user_id", user.id)
       .eq("source_type", IMPORTED_JOB_SOURCE_TYPE)
+      .order("created_at", { ascending: false })
       .limit(200);
     const job = ((rows ?? []) as Array<{ extracted_text: string | null }>)
       .map((row) => parseImportedJob(row.extracted_text))
@@ -104,15 +106,72 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
       const latestSource = parseIntakeSource((intakeRow ?? [])[0]?.extracted_text ?? null);
       const advisor = parseAnalysisAdvisor((analysisRow ?? [])[0]?.extracted_text ?? null) ?? latestSource?.advisor ?? null;
-      const laneRoles = buildTargetLanes(latestSource ?? null, advisor).map((lane) => lane.role);
+      // Do not let buildTargetLanes' UI-oriented empty-state examples become
+      // the user's actual target lanes in a fit decision.
+      const laneRoles = advisor?.roleBriefs?.map((lane) => lane.role).filter(Boolean)
+        ?? latestSource?.draft?.possibleRoles?.filter(Boolean)
+        ?? [];
+      const careerEvidence: Array<{ refId: string; detail: string }> = [];
+      const addEvidence = (refId: string, detail: unknown) => {
+        if (typeof detail !== "string") return;
+        const clean = detail.replace(/\s+/g, " ").trim().slice(0, 700);
+        if (!clean || careerEvidence.some((item) => item.detail === clean)) return;
+        careerEvidence.push({ refId, detail: clean });
+      };
+      if (latestSource?.draft?.strengths) latestSource.draft.strengths.slice(0, 4).forEach((item, index) => addEvidence(`intake-strength-${index + 1}`, item));
+      if (advisor?.summary) addEvidence("strategy-summary", advisor.summary);
+      advisor?.roleBriefs?.slice(0, 4).forEach((lane, index) => {
+        addEvidence(`career-lane-${index + 1}`, `${lane.role}: ${lane.whyItFits} Evidence still needed: ${lane.evidenceNeeded}`);
+      });
+      advisor?.evidenceLedger?.slice(0, 8).forEach((item, index) => {
+        addEvidence(`proof-${index + 1}`, `${item.claim} [${item.status}]. Evidence: ${item.evidence}. Why it matters: ${item.whyItMatters}. Next validation: ${item.nextValidationStep}`);
+      });
+      advisor?.goalReviews?.slice(0, 5).forEach((goal, index) => {
+        addEvidence(`goal-${index + 1}`, `User direction: ${goal.direction}. CIP interpretation: ${goal.understanding}. Context: ${goal.contextAssessment}. Uncertainties: ${goal.uncertainties.join("; ")}`);
+      });
 
-      assessment = assessImportedJobFit(
+      // Conversation outcomes are a core CIP signal: market reads, work-model
+      // information and warnings can materially change the value of a posting.
+      // Keep contact names and raw note excerpts out of the fit prompt.
+      try {
+        const { data: conversationRows } = await db.from("career_sources")
+          .select("extracted_text")
+          .eq("user_id", user.id)
+          .eq("source_type", "conversation_outcome")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        const employerWords = job.employer.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 4);
+        const relevant = (conversationRows ?? []).map((row: { extracted_text: string | null }) => {
+          try { return parseConversationOutcome(JSON.parse(row.extracted_text || "null")); } catch { return null; }
+        }).filter(Boolean).filter((outcome) => {
+          const laneRelevant = laneRoles.some((lane) => outcome!.relatedLane && lane.toLowerCase().includes(outcome!.relatedLane.toLowerCase()));
+          const employer = outcome!.relatedEmployer.toLowerCase();
+          const employerRelevant = employer && (employer.includes(job.employer.toLowerCase()) || employerWords.some((word) => employer.includes(word)));
+          return laneRelevant || employerRelevant || ["compensation", "work model", "culture", "hiring", "dealbreaker"].some((term) =>
+            [outcome!.signalType, outcome!.compensationSignal, outcome!.workModelSignal, outcome!.cultureSignal, outcome!.hiringSignal, outcome!.warnings].join(" ").toLowerCase().includes(term),
+          );
+        }).slice(0, 6);
+        relevant.forEach((outcome, index) => addEvidence(`conversation-${index + 1}`, [
+          `Conversation signal (${outcome!.signalDirection}, ${outcome!.signalType})`,
+          outcome!.relatedLane && `direction ${outcome!.relatedLane}`,
+          outcome!.relatedEmployer && `employer ${outcome!.relatedEmployer}`,
+          outcome!.compensationSignal && `compensation: ${outcome!.compensationSignal}`,
+          outcome!.workModelSignal && `work model: ${outcome!.workModelSignal}`,
+          outcome!.cultureSignal && `culture: ${outcome!.cultureSignal}`,
+          outcome!.hiringSignal && `hiring process: ${outcome!.hiringSignal}`,
+          outcome!.marketSignal && `market read: ${outcome!.marketSignal}`,
+          outcome!.warnings && `warning: ${outcome!.warnings}`,
+        ].filter(Boolean).join(". ")));
+      } catch { /* A missing conversation store leaves other saved CIP context usable. */ }
+
+      assessment = await assessImportedJobFitWithAi(
         job,
         {
           salaryFloorUsd: preferences?.salaryFloorUsd,
           workModes: preferences?.workModes ?? [],
           exclusions: preferences?.exclusions ?? { industries: [], roles: [], employers: [] },
           laneRoles,
+          careerEvidence: careerEvidence.slice(0, 20),
         },
         assessedAt,
       );

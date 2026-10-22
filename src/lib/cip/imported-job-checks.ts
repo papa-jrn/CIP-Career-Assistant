@@ -25,6 +25,34 @@ export interface ImportedJobCheck {
   checkedAt: string;
   /** The address actually fetched, which can differ from the one shown. */
   fetchedUrl: string;
+  /** Observable clues only. None proves employer identity or safety. */
+  observations?: ListingObservation[];
+}
+
+export interface ListingObservation {
+  kind: "employer_name_in_domain" | "employer_name_not_in_domain" | "payment_request" | "sensitive_data_request";
+  detail: string;
+}
+
+/** Conservative textual observations from the URL and material the user supplied. */
+export function observeImportedListing(employer: string, sourceUrl: string, material: string): ListingObservation[] {
+  const observations: ListingObservation[] = [];
+  let host = "";
+  try { host = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, ""); } catch { /* user text only */ }
+  const tokens = employer.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(token => token.length >= 5 && !["health", "group", "system", "company", "incorporated", "university"].includes(token));
+  const matchingToken = tokens.find(token => host.includes(token));
+  observations.push(matchingToken
+    ? { kind: "employer_name_in_domain", detail: `The source hostname includes “${matchingToken}”. This is a clue to check, not proof that the page belongs to the employer.` }
+    : { kind: "employer_name_not_in_domain", detail: "The source hostname does not visibly include a distinctive word from the employer name. This alone does not mean the page is false; many employers use hosted job systems." });
+
+  const lower = material.toLowerCase();
+  if (/\b(application|recruitment|processing) fee\b|\bpay (?:a|the) fee to apply\b|\bsend money to (?:apply|secure|accept)\b/.test(lower)) {
+    observations.push({ kind: "payment_request", detail: "The supplied posting text mentions a fee or payment connected to applying. Verify independently before paying anything." });
+  }
+  if (/\b(send|provide|submit|text) (?:your )?(?:social security|ssn|bank account|credit card)\b|\bpayment details\b/.test(lower)) {
+    observations.push({ kind: "sensitive_data_request", detail: "The supplied posting text appears to request sensitive identity or financial information. Confirm the request directly with the employer before sharing it." });
+  }
+  return observations;
 }
 
 export function importedJobCheckPayload(check: ImportedJobCheck) {
@@ -46,6 +74,7 @@ export function parseImportedJobCheck(value: string | null, createdAt: string): 
       note: typeof check.note === "string" ? check.note : "",
       checkedAt: typeof check.checkedAt === "string" && check.checkedAt ? check.checkedAt : createdAt,
       fetchedUrl: typeof check.fetchedUrl === "string" ? check.fetchedUrl : "",
+      observations: Array.isArray(check.observations) ? check.observations.filter((item: ListingObservation) => item && typeof item.detail === "string" && ["employer_name_in_domain", "employer_name_not_in_domain", "payment_request", "sensitive_data_request"].includes(item.kind)) : [],
     };
   } catch {
     return null;
@@ -69,6 +98,7 @@ export function checksForJob(importId: string, checks: ImportedJobCheck[]): Impo
 export function applyLatestCheck(job: ImportedJob, checks: ImportedJobCheck[]): ImportedJob {
   const latest = checksForJob(job.importId, checks)[0];
   if (!latest) return job;
+  if (job.capturedAt && latest.checkedAt < job.capturedAt) return { ...job, verification: null };
   return { ...job, verification: { state: latest.state, note: latest.note, checkedAt: latest.checkedAt } };
 }
 

@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!user) return html("Sign in before bringing in a job.", 401);
 
     const body = await request.text();
-    if (body.length > 60_000) return html("That posting is too long to save. Paste the key sections instead.", 413);
+    if (body.length > 100_000) return html("That posting is too long to save. Paste the key sections instead.", 413);
     const parsed = importedJobInput.safeParse(Object.fromEntries(new URLSearchParams(body)));
     if (!parsed.success) return html(parsed.error.issues[0]?.message ?? "Check the details you entered.", 400);
 

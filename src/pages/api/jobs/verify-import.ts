@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   IMPORTED_JOB_CHECK_SOURCE_TYPE,
   importedJobCheckPayload,
+  observeImportedListing,
 } from "@/lib/cip/imported-job-checks";
 import { IMPORTED_JOB_SOURCE_TYPE, parseImportedJob } from "@/lib/cip/imported-jobs";
 import { escapeHtml } from "@/lib/cip/job-search-view";
@@ -59,6 +60,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .select("extracted_text")
       .eq("user_id", user.id)
       .eq("source_type", IMPORTED_JOB_SOURCE_TYPE)
+      .order("created_at", { ascending: false })
       .limit(200);
     const job = ((rows ?? []) as Array<{ extracted_text: string | null }>)
       .map((row) => parseImportedJob(row.extracted_text))
@@ -90,6 +92,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           note: result.note,
           checkedAt: result.checkedAt,
           fetchedUrl: verificationFetchUrl(job.sourceUrl),
+          observations: observeImportedListing(job.employer, job.sourceUrl, job.originalMaterial),
         }),
       ),
       trust_state: result.state === "verified_open" ? "verified" : "unverified",

@@ -39,6 +39,8 @@ export interface ImportedJob {
   title: string;
   employer: string;
   sourceUrl: string;
+  /** Additional source pages are kept with their own captured text. */
+  sourceLinks: Array<{ label: string; url: string; material: string }>;
   /** Stable identity for dedupe and for matching a saved disposition. */
   normalizedUrl: string;
   employerKey: string;
@@ -67,6 +69,8 @@ export const importedJobInput = z
     employer: z.string().trim().min(2, "Add the employer.").max(200),
     sourceUrl: z.string().trim().max(2000).optional().or(z.literal("")),
     originalMaterial: z.string().trim().max(MAX_MATERIAL).optional().or(z.literal("")),
+    secondarySourceUrl: z.string().trim().max(2000).optional().or(z.literal("")),
+    secondaryMaterial: z.string().trim().max(MAX_MATERIAL).optional().or(z.literal("")),
     requisitionId: z.string().trim().max(80).optional().or(z.literal("")),
     worksiteText: z.string().trim().max(200).optional().or(z.literal("")),
     userNote: z.string().trim().max(1000).optional().or(z.literal("")),
@@ -78,6 +82,22 @@ export const importedJobInput = z
   .refine((value) => !value.sourceUrl || isHttpUrl(value.sourceUrl), {
     message: "The web address must start with http:// or https://.",
     path: ["sourceUrl"],
+  })
+  .refine((value) => !value.secondarySourceUrl || isHttpUrl(value.secondarySourceUrl), {
+    message: "The second web address must start with http:// or https://.",
+    path: ["secondarySourceUrl"],
+  })
+  .refine((value) => !value.secondarySourceUrl || Boolean(value.sourceUrl), {
+    message: "Add the first link before adding a second source.",
+    path: ["sourceUrl"],
+  })
+  .refine((value) => !value.secondaryMaterial || Boolean(value.secondarySourceUrl), {
+    message: "Add the second source link to keep its text separate.",
+    path: ["secondarySourceUrl"],
+  })
+  .refine((value) => !value.secondarySourceUrl || value.secondarySourceUrl !== value.sourceUrl, {
+    message: "Add two different source links.",
+    path: ["secondarySourceUrl"],
   });
 
 export type ImportedJobInput = z.infer<typeof importedJobInput>;
@@ -98,7 +118,12 @@ export function buildImportedJob(
 ): ImportedJob {
   const sourceUrl = (input.sourceUrl ?? "").trim();
   const originalMaterial = (input.originalMaterial ?? "").trim();
-  const material: ImportedJobMaterial = sourceUrl && originalMaterial
+  const secondarySourceUrl = (input.secondarySourceUrl ?? "").trim();
+  const secondaryMaterial = (input.secondaryMaterial ?? "").trim();
+  const labelFor = (url: string, fallback: string) => {
+    try { return new URL(url).hostname.replace(/^www\./i, "") || fallback; } catch { return fallback; }
+  };
+  const material: ImportedJobMaterial = sourceUrl && (originalMaterial || secondaryMaterial)
     ? "url_and_pasted"
     : sourceUrl
       ? "url"
@@ -109,6 +134,10 @@ export function buildImportedJob(
     title: input.title.trim(),
     employer: input.employer.trim(),
     sourceUrl,
+    sourceLinks: [
+      ...(sourceUrl ? [{ label: labelFor(sourceUrl, "Primary source"), url: sourceUrl, material: originalMaterial.slice(0, MAX_MATERIAL) }] : []),
+      ...(secondarySourceUrl ? [{ label: labelFor(secondarySourceUrl, "Second source"), url: secondarySourceUrl, material: secondaryMaterial.slice(0, MAX_MATERIAL) }] : []),
+    ],
     normalizedUrl: sourceUrl ? normalizeUrl(sourceUrl) : "",
     employerKey: normOrg(input.employer),
     requisitionId: input.requisitionId?.trim() || undefined,
@@ -137,6 +166,13 @@ export function parseImportedJob(value: string | null): ImportedJob | null {
       title: job.title,
       employer: job.employer,
       sourceUrl: String(job.sourceUrl ?? ""),
+      sourceLinks: Array.isArray(job.sourceLinks)
+        ? job.sourceLinks.filter((item: any) => item && typeof item.url === "string" && isHttpUrl(item.url)).slice(0, 2).map((item: any, index: number) => ({
+          label: typeof item.label === "string" ? item.label.slice(0, 80) : index ? "Second source" : "Primary source",
+          url: item.url.slice(0, 2000),
+          material: typeof item.material === "string" ? item.material.slice(0, MAX_MATERIAL) : "",
+        }))
+        : (typeof job.sourceUrl === "string" && job.sourceUrl ? [{ label: "Primary source", url: job.sourceUrl, material: String(job.originalMaterial ?? "") }] : []),
       normalizedUrl: String(job.normalizedUrl ?? ""),
       employerKey: String(job.employerKey ?? ""),
       requisitionId: job.requisitionId || undefined,
@@ -153,6 +189,25 @@ export function parseImportedJob(value: string | null): ImportedJob | null {
   } catch {
     return null;
   }
+}
+
+/** Keep each supplied version clearly attributed when the assessment compares them. */
+export function importedJobAnalysisText(job: ImportedJob): string {
+  const sources = job.sourceLinks?.length
+    ? job.sourceLinks
+    : (job.sourceUrl ? [{ label: "Primary source", url: job.sourceUrl, material: job.originalMaterial }] : []);
+  const material = sources.filter((source) => source.material.trim()).map((source) => `--- ${source.label} (${source.url}) ---\n${source.material.trim()}`);
+  return material.length ? material.join("\n\n") : job.originalMaterial;
+}
+
+/** Keep only the newest additive revision of each import. */
+export function latestImportedJobs(jobs: ImportedJob[]): ImportedJob[] {
+  const seen = new Set<string>();
+  return jobs.filter((job) => {
+    if (seen.has(job.importId)) return false;
+    seen.add(job.importId);
+    return true;
+  });
 }
 
 export interface DuplicateMatch {
