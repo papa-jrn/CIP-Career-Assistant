@@ -1,3 +1,5 @@
+import { renderFitProgress, renderFitClarification } from "./fit-action-view";
+import { renderFitAssessment } from "./fit-assessment-view";
 import type { ObservationRow, RunView, WeeklyDiff } from "@/lib/cip/job-search-run";
 import { countByState, isOutsideArea } from "@/lib/cip/job-search-run";
 import { describePay } from "@/lib/cip/pay";
@@ -61,7 +63,7 @@ const PILL = "inline-flex rounded-md px-2 py-1 text-xs font-semibold";
 const CHIP_META: Record<RecommendationCategory, { label: string; tone: string }> = {
   talk_first: { label: "Talk to someone first", tone: "bg-[var(--accent-soft)] text-[var(--accent-strong)]" },
   check_funding: { label: "Check the funding first", tone: "bg-yellow-50 text-yellow-900" },
-  apply: { label: "Apply now", tone: "bg-green-50 text-green-800" },
+  apply: { label: "Potential match", tone: "bg-green-50 text-green-800" },
   monitor: { label: "Monitor", tone: "bg-[var(--panel)] text-[var(--muted)]" },
   skip: { label: "Skip", tone: "bg-red-50 text-red-800" },
 };
@@ -171,7 +173,7 @@ function recommendationBlock(row: ObservationRow, annotations?: PostingAnnotatio
 
   return `
     <div class="mt-3 border-t border-[var(--line)] pt-3">
-      <div class="flex flex-wrap items-center gap-2">${shown}</div>
+      <p class="text-xs font-semibold">Preliminary search guidance — personal competitiveness requires Assess fit.</p><div class="flex flex-wrap items-center gap-2">${shown}</div>
       <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(rec.rationale)}</p>
       <details class="mt-1">
         <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Why / change</summary>
@@ -236,6 +238,16 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
       ${payLine ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pay: ${escapeHtml(payLine)}</p>` : ""}
       ${row.verification_note ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(row.verification_note)}${row.verification_checked_at ? ` (checked ${escapeHtml(formatDate(row.verification_checked_at))})` : ""}</p>` : ""}
       <p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(TIER_LABEL[row.source_tier] ?? "")}${row.source_tier === "general" && row.verification_state !== "verified_open" ? " (treat as a lead until verified)" : ""}${row.carried_forward ? " · carried forward from a prior search and re-checked" : ""}</p>
+      ${annotations ? `<button type="button" class="cip-action mt-3" hx-post="/api/jobs/disposition" hx-target="#job-search-panel" hx-swap="outerHTML" hx-disabled-elt="this" hx-vals='${escapeHtml(JSON.stringify({ source_url: row.source_url, employer: row.employer_text, requisition_id: row.requisition_id ?? "", status: "passed" }))}'>Not for me — archive</button>` : ""}
+      <div class="mt-3 border-t pt-3">
+        <div id="fit-assessment-${escapeHtml(row.id)}" tabindex="-1" class="scroll-mt-6" role="region" aria-label="Fit assessment">${annotations?.fits?.get(row.source_url) ? renderFitAssessment(annotations.fits.get(row.source_url)!, true) : '<p class="text-sm">Potential match — fit not assessed.</p>'}</div>
+        <form data-job-action="assess" data-timeout-seconds="90" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import" hx-request='{"timeout":90000}' hx-target="#fit-result-${escapeHtml(row.id)}" hx-indicator="#fit-progress-${escapeHtml(row.id)}" hx-disabled-elt="find button" class="mt-2">
+          <input type="hidden" name="inlineResult" value="yes" /><input type="hidden" name="observationId" value="${escapeHtml(row.id)}" />
+          <button class="cip-action" type="submit">${annotations?.fits?.has(row.source_url) ? "Assess fit again" : "Assess fit"}</button>
+          ${renderFitClarification()}
+          ${renderFitProgress("fit-progress-" + row.id)}
+        </form><div id="fit-result-${escapeHtml(row.id)}" role="status"></div>
+      </div>
       ${recommendationBlock(row, annotations)}
     </article>`;
 }
@@ -260,14 +272,14 @@ function chipCountStrip(actionableRows: ObservationRow[], annotations?: PostingA
     if (rec) counts[rec.category] += 1;
   }
   const order: Array<[RecommendationCategory, string]> = [
-    ["apply", "to apply"],
+    ["apply", "potential matches"],
     ["talk_first", "talk first"],
     ["check_funding", "funding check"],
     ["monitor", "monitor"],
   ];
   const parts = order.filter(([category]) => counts[category] > 0).map(([category, label]) => `${counts[category]} ${label}`);
   if (!parts.length) return "";
-  return `<p class="mt-3 text-xs text-[var(--muted)]">Suggested this week: ${escapeHtml(parts.join(" · "))}.</p>`;
+  return `<p class="mt-3 text-xs text-[var(--muted)]">Preliminary search guidance: ${escapeHtml(parts.join(" · "))}.</p>`;
 }
 
 // "What changed since your last search" (step 5). Counts are integers built into the markup; the
@@ -357,7 +369,10 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
     return `${open}${head}${runForm(context, label)}<p class="mt-4 text-sm text-[var(--muted)]">Nothing to show yet. Make sure your places and job sources are saved on <a class="underline" href="/preferences">Search preferences</a> first.</p></div>`;
   }
 
-  const { run, observations } = view;
+  const { run } = view;
+  const archived = annotations ? view.observations.filter(row => matchDisposition(row, annotations.dispositions)?.status === "passed") : [];
+  const lowerFit = view.observations.filter(row => !archived.includes(row) && annotations?.fits?.get(row.source_url)?.analysis?.rubricVersion === 3 && annotations.fits.get(row.source_url)!.analysis!.score != null && annotations.fits.get(row.source_url)!.analysis!.score! < 6);
+  const observations = view.observations.filter(row => !archived.includes(row) && !lowerFit.includes(row));
   const counts = countByState(observations);
   const brief = run.brief as { compensation?: { floorUsd?: number | null } };
   const floorUsd = typeof brief?.compensation?.floorUsd === "number" ? brief.compensation.floorUsd : null;
@@ -379,7 +394,7 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
     </div>`;
 
   const empty =
-    !observations.length && run.status === "succeeded"
+    !observations.length && !archived.length && !lowerFit.length && run.status === "succeeded"
       ? `<p class="mt-4 text-sm text-[var(--muted)]">Nothing matching was found in the places the search could read. That is different from a failed search. See "What was checked" below for what could and could not be read. Widening your places or roles is your call; the search will not do it on its own.</p>`
       : "";
 
@@ -387,9 +402,11 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
   return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${chipCountStrip([...verified, ...notVerified], annotations)}${empty}
     ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd, newUrls, annotations)}
     ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd, newUrls, annotations)}
-    ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd, newUrls)}
-    ${group("Closed or gone", "The source says closed, its application deadline has passed, or the page no longer exists.", gone, floorUsd)}
-    ${group("Excluded by your rules", "These match an exclusion you set and were not checked further.", excluded, floorUsd)}
+    ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd, newUrls, annotations)}
+    ${group("Closed or gone", "The source says closed, its application deadline has passed, or the page no longer exists.", gone, floorUsd, newUrls, annotations)}
+    ${group("Excluded by your rules", "These match an exclusion you set and were not checked further.", excluded, floorUsd, newUrls, annotations)}
+    ${archived.length ? `<details id="archived-search-jobs" class="mt-5 rounded-md border border-[var(--line)] p-3"><summary class="cursor-pointer font-semibold">Archived searched jobs (${archived.length})</summary><p class="mt-2 text-xs">Jobs you marked Not for me. Restore a job to return it to the active list.</p>${archived.map(row => `<article class="mt-3 border-t border-[var(--line)] pt-3"><a class="underline" href="${escapeHtml(safeHref(row.source_url) ?? "#")}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.title)}</a><p>${escapeHtml(row.employer_text)}</p><button class="cip-action mt-2" hx-post="/api/jobs/disposition" hx-target="#job-search-panel" hx-swap="outerHTML" hx-vals='${escapeHtml(JSON.stringify({ source_url: row.source_url, employer: row.employer_text, requisition_id: row.requisition_id ?? "", status: "clear" }))}'>Restore job</button></article>`).join("")}</details>` : ""}
+    ${lowerFit.length ? '<details class="mt-5 rounded-md border p-3"><summary class="cursor-pointer font-semibold">Lower-fit opportunities (' + lowerFit.length + ')</summary><p class="text-xs">Scored below 6 using the competitiveness rubric. Retained for review; Not for me archives a job.</p>' + lowerFit.map(row => postingCard(row, floorUsd, newUrls, annotations)).join('') + '</details>' : ''}
     ${coverageBlock(view)}${detailsBlock(view)}
     <p class="sr-only">${counts.verified} verified.</p>
   </div>`;

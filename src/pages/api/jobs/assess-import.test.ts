@@ -7,9 +7,11 @@ const state = vi.hoisted(() => ({
   rows: {} as Record<string, Array<Record<string, unknown>>>,
   saved: [] as Array<Record<string, unknown>>,
   fail: false,
+  archiveCalls: [] as Array<unknown[]>,
   filters: [] as Array<[string, unknown]>,
 }));
 
+vi.mock("@/lib/cip/job-archive", () => ({ setImportedArchive: async (...args: unknown[]) => { state.archiveCalls.push(args.slice(1)); } }));
 vi.mock("@/lib/supabase/server", () => ({ createServer: () => db }));
 vi.mock("@/lib/cip/search-preferences", () => ({
   loadStoredSearchPreferences: async () => ({
@@ -21,8 +23,8 @@ vi.mock("@/lib/cip/search-preferences", () => ({
 
 const db = {
   auth: { getUser: async () => ({ data: { user: state.user ? { id: state.user } : null } }) },
-  from: () => {
-    let sourceType = "";
+  from: (table: string) => {
+    let sourceType = table === "career_sources" ? "" : table;
     const filters: Array<(row: Record<string, unknown>) => boolean> = [];
     const query = {
       select: () => query,
@@ -46,6 +48,7 @@ const db = {
   },
 };
 
+vi.mock("@/lib/cip/job-verifier", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/cip/job-verifier")>(), safePageFetcher: vi.fn(async () => null) }));
 import { POST } from "./assess-import";
 
 const job = buildImportedJob(
@@ -80,6 +83,7 @@ beforeEach(() => {
     evidence_analysis: [],
   };
   state.saved = [];
+  state.archiveCalls = [];
   state.fail = false;
   state.filters = [];
 });
@@ -127,11 +131,12 @@ describe("assessing fit: the app's own reading", () => {
     expect(labels).toMatch(/Work model matches/i);
   });
 
-  it("explains a next action rather than producing a score", async () => {
+  it("explains the next action and leaves the score unknown without personal evidence", async () => {
     await request({ importId: "imp-1" });
     const fit = parseImportedJobFit(String(state.saved[0].extracted_text), "now");
     expect(fit?.nextAction.length).toBeGreaterThan(20);
-    expect(String(state.saved[0].extracted_text)).not.toMatch(/"score"|fitScore|matchPercent/);
+    expect(fit?.analysis?.score).toBeNull();
+    expect(fit?.analysis?.scoreReason).toMatch(/not enough/i);
   });
 
   it("leaves the import itself untouched", async () => {
@@ -148,6 +153,7 @@ describe("assessing fit: the user's correction", () => {
     const fit = parseImportedJobFit(String(state.saved[0].extracted_text), "now");
     expect(fit).toMatchObject({ recommendation: "skip", basis: "user", userNote: "The commute is impossible." });
     expect(state.saved[0].trust_state).toBe("user_supplied");
+    expect(state.archiveCalls).toEqual([["user-a", expect.objectContaining({ importId: "imp-1" }), true]]);
   });
 
   it("keeps the app's earlier reading rather than replacing it", async () => {
@@ -171,4 +177,69 @@ describe("assessing fit: failure", () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toMatch(/could not be saved/i);
   });
+});
+
+describe("assessment refresh and original profile context", () => {
+  it("forces a refresh with query parameters before the anchor", async () => {
+    const response = await request({ importId: "imp-1", returnTo: "/opportunities#imported-jobs" });
+    expect(response.headers.get("HX-Redirect")).toBe("/opportunities?assessed=deterministic#imported-jobs");
+    expect(response.headers.get("HX-Refresh")).toBe("true");
+  });
+  it("includes original resume evidence and each genuine lane in the saved fallback", async () => {
+    state.rows.resume_intake = [{ user_id: "user-a", source_type: "resume_intake", extracted_text: JSON.stringify({ intake: { resume_text: "Bachelor's degree. Led operations and built cross-functional software teams over a varied career." }, advisor: { roleBriefs: [{ role: "Operations leadership", whyItFits: "Leadership evidence", evidenceNeeded: "Scope" }, { role: "Technology leadership", whyItFits: "Software work", evidenceNeeded: "Scale" }, { role: "Founder", whyItFits: "Product work", evidenceNeeded: "Pilot" }] } }) }];
+    await request({ importId: "imp-1" });
+    const result = parseImportedJobFit(String(state.saved[0].extracted_text), "now");
+    expect(result?.analysis?.lanes.map(lane => lane.role)).toEqual(["Operations leadership", "Technology leadership", "Founder"]);
+    expect(result?.analysis?.contextRefs).toContain("intake-resume_text-0");
+    expect(state.filters).toContainEqual(["source_type", "evidence_response"]);
+    expect(state.filters).toContainEqual(["source_type", "source_analysis"]);
+  });
+});
+
+it("scopes searched assessments to the signed-in user and keeps unreadable descriptions unscored", async () => {
+  const id = "12345678-1234-4234-8234-123456789abc";
+  state.rows.job_search_observations = [{ id, user_id: "user-b", title: "Director", employer_text: "Employer", source_url: "https://example.org/job" }];
+  expect((await request({ observationId: id })).status).toBe(404);
+  state.rows.job_search_observations[0].user_id = "user-a";
+  const response = await request({ observationId: id });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("HX-Redirect")).toContain("#job-search-panel");
+  const fit = parseImportedJobFit(String(state.saved[0].extracted_text), "now");
+  expect(fit?.importId).toMatch(/^search-/);
+  expect(fit?.analysis?.score).toBeNull();
+  expect(state.filters).toContainEqual(["user_id", "user-a"]);
+});
+
+it("returns inline assessment updates without redirecting or regrouping the page", async () => {
+  const response = await request({ importId: "imp-1", inlineResult: "yes" });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("HX-Redirect")).toBeNull();
+  expect(response.headers.get("HX-Refresh")).toBeNull();
+  expect(JSON.parse(response.headers.get("HX-Trigger-After-Settle")!)).toEqual({ fitAssessmentReady: { targetId: "fit-assessment-imp-1" } });
+  const body = await response.text();
+  expect(body).toContain('id="fit-assessment-imp-1" hx-swap-oob="innerHTML"');
+  expect(body).toContain("Assessment needs attention");
+  expect(body).toContain("remains unscored");
+  expect(state.saved).toHaveLength(1);
+});
+it("keeps the existing assessment readable when an inline save fails", async () => {
+  state.fail = true;
+  const response = await request({ importId: "imp-1", inlineResult: "yes" });
+  expect(response.status).toBe(500);
+  expect(await response.text()).not.toContain("hx-swap-oob");
+  expect(response.headers.get("HX-Redirect")).toBeNull();
+});
+
+it("saves an experience clarification as user evidence and includes it in the assessment", async () => {
+  const clarification = "I have worked in organic SEO for 12+ years as a web developer. WordPress was my main focus until the last year. I have managed AdWords for some clients.";
+  const response = await request({ importId: "imp-1", inlineResult: "yes", clarification });
+  expect(response.status).toBe(200);
+  expect(state.saved).toHaveLength(2);
+  const evidence = state.saved.find(item => item.source_type === "evidence_response")!;
+  expect(evidence.user_id).toBe("user-a");
+  expect(evidence.trust_state).toBe("user_submitted");
+  expect(JSON.parse(String(evidence.extracted_text)).response).toMatchObject({ answer: clarification, confidence: "known" });
+  const assessment = state.saved.find(item => item.source_type === "imported_job_fit")!;
+  expect(parseImportedJobFit(String(assessment.extracted_text), "now")?.analysis?.contextRefs.some(ref => ref.startsWith("evidence_response-"))).toBe(true);
+  expect(await response.text()).toContain("clarification was saved");
 });

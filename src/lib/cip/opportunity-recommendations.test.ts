@@ -1,3 +1,4 @@
+import { searchedFitId } from "./searched-job-fit";
 import { describe, expect, it } from "vitest";
 import { createFakeSupabase } from "@/lib/cip/__fixtures__/fake-supabase";
 import type { ObservationRow, RunView } from "@/lib/cip/job-search-run";
@@ -130,7 +131,7 @@ describe("chip rendering in the panel", () => {
     expect(html).toContain("Reach out to Sarah Lin");
     expect(html).toContain("Why / change");
     expect(html).toContain("Keep an eye on for now");
-    expect(html).toContain("Suggested this week:");
+    expect(html).toContain("Preliminary search guidance:");
     expect(html).toContain("Save employer"); // the on-card employer fix control
   });
 
@@ -166,4 +167,13 @@ describe("recommendationForPosting with a resolved employer's 990 funding", () =
     );
     expect(rec.signals.join(" ")).not.toMatch(/IRS 990/);
   });
+});
+
+it("loads saved searched assessments into cards using stable URL identity and user isolation", async () => {
+  const row = drow();
+  const payload = { importedJobFit: { importId: searchedFitId(row.source_url), assessedAt: NOW, basis: "ai_assisted", recommendation: "talk_first", confidence: "low", nextAction: "Clarify scope", findings: [] } };
+  const { client } = createFakeSupabase({ career_sources: [{ user_id: USER, source_type: "imported_job_fit", created_at: NOW, extracted_text: JSON.stringify(payload) }, { user_id: "another-user", source_type: "imported_job_fit", created_at: NOW, extracted_text: JSON.stringify({ importedJobFit: { ...payload.importedJobFit, nextAction: "Private other user" } }) }] });
+  const view = { run: { id: "r", brief: {} }, observations: [row] } as unknown as RunView;
+  const annotations = await buildPostingAnnotations(client, USER, view);
+  expect(annotations.fits?.get(row.source_url)?.nextAction).toBe("Clarify scope");
 });

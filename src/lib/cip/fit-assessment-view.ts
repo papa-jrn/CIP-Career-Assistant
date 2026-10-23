@@ -1,0 +1,18 @@
+import { readableRecommendation } from "./imported-job-fit";
+import type { FitAssessment } from "./imported-job-fit";
+const e = (value: unknown) => String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const label = (value: string) => e(value.replaceAll("_", " "));
+export function renderFitAssessment(fit: FitAssessment, includeRecommendation = false): string {
+  const a = fit.analysis;
+  if (!a) return fit.basis === "user" ? '<p class="font-semibold">Your conclusion: ' + e(readableRecommendation(fit.recommendation)) + '</p><p>' + e(readableRecommendation(fit.recommendation)) + ': ' + e(fit.nextAction) + '</p>' : "<p>Fit has not been fully assessed.</p>";
+  if (a.rubricVersion !== 3) return '<p class="font-semibold">Earlier fit assessment — reassess using the stricter competitiveness rubric.</p>';
+  return '<p class="text-xs">Assessed ' + e(fit.assessedAt.slice(0, 10)) + ' · Competitiveness rubric 3</p><p class="font-semibold">' + (a.score == null ? "Not enough information to score" : "Competitive fit: " + a.score + "/10") + '</p><p class="mt-1">' + e(a.summary) + '</p><p class="mt-1 text-xs">' + e(a.scoreReason) + '</p>' +
+    (includeRecommendation ? '<p class="mt-2 font-semibold">' + (fit.basis === 'ai_assisted' ? 'AI-assisted assessment' : 'Incomplete assessment — basic checks only') + ' · ' + e(fit.confidence) + ' confidence</p><p>' + e(fit.nextAction) + '</p>' : '') +
+    ((a.clarificationQuestions ?? []).length ? '<div class="mt-3"><p class="font-semibold">Help CIP understand your experience</p><ul class="list-disc pl-4 text-sm">' + a.clarificationQuestions!.map(question => '<li>' + e(question) + '</li>').join('') + '</ul><p class="text-xs">Use Add missing experience below and reassess. Unknown does not mean you lack the skill.</p></div>' : '') +
+    (a.resumeReadiness ? '<p class="mt-2 font-semibold">Resume screening readiness: ' + label(a.resumeReadiness.status) + '</p><p class="text-xs">' + e(a.resumeReadiness.explanation) + '</p>' + (a.resumeReadiness.missingRequirements.length ? '<ul class="list-disc pl-4 text-xs">' + a.resumeReadiness.missingRequirements.map(item => '<li>' + e(item) + '</li>').join('') + '</ul>' : '') : '') +
+    '<details class="mt-2"><summary class="cursor-pointer font-semibold">Lane comparisons, requirements &amp; evidence</summary><div class="mt-3 grid gap-3">' +
+    (a.competitiveness ?? []).map(item => '<section><h4 class="font-semibold">' + label(item.dimension) + ' — ' + label(item.rating) + '</h4><p>' + e(item.explanation) + '</p><p class="text-xs">Evidence: ' + label(item.evidenceStrength) + '</p>' + item.evidenceRefs.map(ref => '<p class="text-xs">Your evidence (' + e(ref) + '): ' + e(a.sourceExcerpts?.[ref] ?? 'See cited career record') + '</p>').join('') + '</section>').join('') +
+    a.lanes.map(item => '<section><h4 class="font-semibold">' + e(item.role) + ' — ' + label(item.alignment) + '</h4><p>' + e(item.explanation) + '</p><blockquote class="border-l-2 pl-2">' + e(item.postingQuote) + '</blockquote></section>').join('') +
+    a.requirements.map(item => '<section class="border-t pt-2"><h4 class="font-semibold">' + e(item.requirement) + ' — ' + label(item.status) + '</h4><p class="text-xs">' + label(item.importance) + '</p><p>' + e(item.explanation) + '</p><blockquote class="border-l-2 pl-2">Job: ' + e(item.postingQuote) + '</blockquote>' + item.evidence.map(ref => '<p class="mt-1 text-xs">Your evidence (' + e(ref.refId) + '): ' + e(ref.quote) + '</p>').join('') + '</section>').join('') +
+    a.limitations.map(note => '<p class="text-xs">' + e(note) + '</p>').join('') + '</div></details>';
+}

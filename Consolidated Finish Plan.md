@@ -254,21 +254,18 @@ files with no way to tell.
 
 ### D. Redesign slices not yet delivered
 
-- ~~**Imported-job slice** (Workbench §10 step 4)~~ **IMPLEMENTED 2026-10-22; live acceptance remains.**
-  Import, dedupe, source check, separate fit evaluation and correction, direct Workbench fit action,
-  Workbench surfacing, and
-  cautious employer-domain / red-flag observations are implemented. Workbench job actions are now
-  stacked below their summary at usable sizes; imported records support additive edits with two
-  separately labeled source links and separately preserved posting text. Assessments compare both
-  supplied texts. The optional Responses API call is capped at 15 seconds and falls back to CIP's
-  deterministic assessment; the browser reports a 30-second fit request timeout. Listing checks
-  use no AI, with an 8-second fetch and 10-second end-to-end deadline, and store timeout as
-  “verification unavailable.” **Section 7 is not fully
-  closed:** document attachments, independent employer identity corroboration/off-domain redirect
-  checks, fetched-page red-flag scans, independently checking every source link, and deeper fit
-  comparisons (duties, qualifications, scope, geography, evidence and proof gaps) remain. See the
-  limits recorded in `Workbench Redesign Plan.md`. Needs founder live acceptance with a real imported
-  job and an OpenAI failure/retry pass; signed-in browser click-through was not available in this pass.
+- ~~**Imported-job slice** (Workbench §10 step 4)~~ **CORE FLOW IMPLEMENTED AND FOUNDER-REVIEWED 2026-10-23.**
+  Import/dedupe, separate source checks and personal fit, additive correction, Workbench actions,
+  source-grounded employer research, reversible archives/restores, and full fit assessment for searched
+  jobs are implemented. Founder tested the assessment and completion flow, exposed calibration and
+  evidence-recognition defects, and reviewed the improvements. The current rubric separates ability
+  from pay/preferences, preserves complete resume context, asks about unknowns, and reuses user-stated
+  experience corrections. Assessments show the familiar working animation and finish in place, with
+  an explicit notice before lower-fit grouping on a later visit. AI failures remain unscored.
+  Personal-fit provider calls have a 60-second limit; browser requests have a 90-second limit.
+  **Section 7 still has broader open scope:** document attachments, independent checks of every
+  supplied source, and further redirect/red-flag hardening. Founder review of this slice does not
+  close the full acceptance plan, screen-reader testing, or scoring calibration across other users.
 - **People consolidation proper** — Connections and Follow Up still exist as two routes under the
   People nav rather than one surface.
 - **Import component extraction** — so first use can truly lead with import rather than it sitting
@@ -334,8 +331,11 @@ covered against fixtures, no live AI. Three defects found and fixed in the writi
 founder-specific heuristics that survived Step 2.
 
 **Step 4 — Finish the redesign.** (D)
-The imported-job slice is implemented as of 2026-10-22. People consolidation and the remaining small
-bugs (A3, A6, A7) remain before the redesign is complete.
+The core jobs slice is implemented and founder-reviewed as of 2026-10-23, including searched-job
+assessments, evidence corrections and reversible archives. Step 4 remains in progress: People
+consolidation, import-first component extraction, contact-title import correction (A7), and target
+career-page URL persistence remain. Target workspace work beyond slice 1 stays explicitly deferred.
+The formal end-to-end acceptance passes belong to Step 5.
 
 **Step 5 — Acceptance.** (E)
 Two live passes, first use on an empty account, induced failure and retry, screen-reader. These need
@@ -381,3 +381,19 @@ A second repeat-click defect was also found: identical HX-Redirect destinations 
 Founder reviewed the repaired listing-check flow and approved the compact employer-research presentation, then requested commit/push. This checkpoint includes the Workbench job-button spacing fix, grounded employer research, repeat-check refresh and failure-state repairs, and expandable business reasoning/source excerpts. Validation: full typecheck/test suite passed with 795 tests; the final refresh-header change passed all 12 endpoint tests; the final presentation SSR build passed. No production deployment was requested.
 
 Resume next session with the Opportunities **Assess the fit** button. Review its current behavior on the genuine saved Vetcove job, the existing CIP career context and deterministic/AI paths, and the result/save/return experience. Keep personal suitability separate from employer corroboration and business consistency. Do not treat this checkpoint as founder acceptance of personal-fit results; that is the next work item.
+
+### October 23: personal fit and reversible archives
+
+Implemented structured comparison of imported job duties against all three saved lanes, the original resume/intake and selected broader CIP evidence. The optional 1–10 score is derived from grounded comparisons with explicit caps for exclusions, mandatory barriers, unresolved requirements and constraints. Missing evidence remains unknown; deterministic/provider-failure mode does not invent a score. Results retain recommendations, confidence, requirement distinctions, source quotations and correction controls.
+
+Existing Not for me decisions now archive searched jobs. Imports have Active/Archived views and restore, using the existing disposition identity for URL jobs and additive career_sources events for pasted-only jobs. AI Skip suggestions do not archive. Historical capture and analysis remain intact. Workbench hides archived imports and shows saved fit scores. See the Workbench plan's October 23 entry for the analysis contract, source limits and verification status. No migration or deployment was performed.
+
+
+### October 23: stricter personal competitiveness and searched jobs
+Rubric 2 adds weighted core work, scope/seniority, domain and results, distinguishing concrete direct evidence from transferable/general claims. Separate resume readiness highlights context-only evidence. Shared full assessment now available on searched postings after guarded description reads; unreadable pages remain unscored. Below-6 results are collapsed and retained. Earlier generous scores require reassessment. No migration or deployment. See Employers-Opportunities Rethink.md for scoring and persistence contract.
+
+October 23 follow-up: rubric 3 separates competitiveness from preference conflicts, distinguishes unknown evidence from confirmed barriers, and adds saved experience clarifications. Complete original resume context is sent alongside citation excerpts. Live SEO role correction used the founder's own stated SEO, WordPress, portfolio and Prouty/Luminate experience; the first revised assessment produced 8/10 while retaining below-floor salary advice. Full suite 846 passed; final version-display fix passed type checks and 46 focused tests.
+
+
+### October 23 morning checkpoint
+Founder reports the jobs functionality, completion UX and revised assessment now look substantially better and requested commit/push. This is acceptance of the reviewed jobs slice, not closure of all Step 4 redesign work or the separate Autumn Phase 4 weekly-diff briefing. Remaining work is listed in the Step 4 checkpoint above. No deployment or migrations were requested.

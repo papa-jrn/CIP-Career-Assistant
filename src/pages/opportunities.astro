@@ -1,4 +1,7 @@
 ---
+import { renderFitClarification } from "@/lib/cip/fit-action-view";
+import { renderFitAssessment } from "@/lib/cip/fit-assessment-view";
+import { loadArchiveContext, isImportedArchived } from "../lib/cip/job-archive";
 import Layout from "../layouts/Layout.astro";
 import { loadJobSearchConfig } from "../lib/cip/job-search-config";
 import { loadDueState, loadLatestRunView } from "../lib/cip/job-search-run";
@@ -43,6 +46,9 @@ type SavedEmployer = {
   careers_url: string | null;
 };
 
+const showingArchived = Astro.url.searchParams.get("jobs") === "archived";
+let archivedImports: ImportedJob[] = [];
+let activeImports: ImportedJob[] = [];
 let signedIn = false;
 let loadError = "";
 let panelHtml = "";
@@ -111,6 +117,11 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
         // The stored capture is never edited; the latest check is layered on
         // at read time so the original stays intact.
         .map((job) => applyLatestCheck(job, importedJobChecks));
+
+      const archive = await loadArchiveContext(supabase, user.id);
+      archivedImports = importedJobs.filter(job => isImportedArchived(job, importedJobFits, archive.dispositions, archive.events));
+      activeImports = importedJobs.filter(job => !archivedImports.includes(job));
+      importedJobs = showingArchived ? archivedImports : activeImports;
 
       if (employerResult.error) loadError = employerResult.error.message;
       else employers = (employerResult.data ?? []) as SavedEmployer[];
@@ -325,13 +336,15 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         </p>
       )}
 
+      <nav class="mt-6 flex flex-wrap gap-4" aria-label="Imported job views"><a class="underline" aria-current={!showingArchived ? "page" : undefined} href="/opportunities?jobs=active#imported-jobs">Active jobs ({activeImports.length})</a><a class="underline" aria-current={showingArchived ? "page" : undefined} href="/opportunities?jobs=archived#imported-jobs">Archived jobs ({archivedImports.length})</a></nav>
+      {!importedJobs.length && <p class="mt-3 text-sm">{showingArchived ? "No archived imported jobs." : "No active imported jobs. Archived jobs remain available above."}</p>}
       {importedJobs.length ? (
         <div class="mt-8">
           <h3 class="text-sm font-semibold uppercase text-[var(--muted)]">
             {importedJobs.length === 1 ? "1 job you brought in" : importedJobs.length + " jobs you brought in"}
           </h3>
           <div class="mt-3 grid gap-3">
-            {importedJobs.map((job) => (
+            {[{ label: "Jobs to review", jobs: importedJobs.filter(job => showingArchived || fitForJob(job)?.analysis?.rubricVersion !== 3 || fitForJob(job)?.analysis?.score == null || fitForJob(job)!.analysis!.score! >= 6), lower: false }, { label: "Lower-fit opportunities", jobs: showingArchived ? [] : importedJobs.filter(job => fitForJob(job)?.analysis?.rubricVersion === 3 && fitForJob(job)?.analysis?.score != null && fitForJob(job)!.analysis!.score! < 6), lower: true }].filter(group => group.jobs.length).map(group => <details open={!group.lower} class="rounded-md border border-[var(--line)] p-3"><summary class="cursor-pointer font-semibold">{group.label} ({group.jobs.length})</summary>{group.lower && <p class="mt-2 text-xs">Scored below 6. Kept for review; Not for me archives a job.</p>}<div class="mt-3 grid gap-3">{group.jobs.map((job) => (
               <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -362,36 +375,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                   </div>
                   <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
                     <dt class="text-xs font-semibold uppercase text-[var(--muted)]">Does it suit you?</dt>
-                    {fitForJob(job) ? (
-                      <dd class="mt-1">
-                        <p class="font-semibold text-[var(--foreground)]">
-                          {readableRecommendation(fitForJob(job)!.recommendation)}
-                        </p>
-                        <p class="mt-1 text-[var(--muted)]">{fitForJob(job)!.nextAction}</p>
-                        <p class="mt-2 text-xs text-[var(--muted)]">
-                          {fitForJob(job)!.basis === "user"
-                            ? "Your own conclusion."
-                            : (fitForJob(job)!.basis === "ai_assisted" ? "AI-assisted reading" : "Deterministic reading") + " of what you saved, at " +
-                              fitForJob(job)!.confidence +
-                              " confidence. It can be wrong; correct it below."}
-                        </p>
-                        {fitForJob(job)!.findings.length ? (
-                          <ul class="mt-2 grid gap-1">
-                            {fitForJob(job)!.findings.map((finding) => (
-                              <li class="text-xs leading-5 text-[var(--muted)]">
-                                <span class="font-semibold text-[var(--foreground)]">
-                                  {finding.kind === "match" ? "Matches" : finding.kind === "mismatch" ? "Conflicts" : "Unknown"}
-                                </span>
-                                {" \u2014 " + finding.label + ": " + finding.detail}
-                                <span class="block text-[var(--muted)]">From {finding.source}.</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </dd>
-                    ) : (
-                      <dd class="mt-1 text-[var(--muted)]">{describeFit(job)}</dd>
-                    )}
+                    <dd id={`fit-assessment-${job.importId}`} tabindex="-1" class="mt-2 scroll-mt-6 rounded-md border border-[var(--line)] p-3" role="region" aria-label="Fit assessment" set:html={fitForJob(job) ? renderFitAssessment(fitForJob(job)!, true) : "<p>Fit not assessed yet.</p>"} />
                   </div>
                 </dl>
                 {employerResearchForJob(job, importedJobChecks).research && (() => {
@@ -417,6 +401,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                 <p class="mt-3 text-xs text-[var(--muted)]">
                   {job.capturedAt ? "Saved " + new Date(job.capturedAt).toLocaleString() + "." : "Saved at an unrecorded time."}
                 </p>
+                <form class="mt-3" method="post" action="/api/jobs/archive-import"><input type="hidden" name="importId" value={job.importId}/><input type="hidden" name="action" value={showingArchived ? "restore" : "archive"}/><button class="cip-action" type="submit">{showingArchived ? "Restore job" : "Not for me — archive"}</button></form>
                 <div class="mt-3 flex flex-wrap gap-2">
                   {job.sourceUrl ? <span class="self-center text-xs text-[var(--muted)]">Checks the supplied listing and researches the named employer.</span> : null}
                   {job.sourceUrl && signedIn ? (
@@ -433,12 +418,14 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                     </form>
                   ) : null}
                   {signedIn ? (
-                    <form data-job-action="assess" data-timeout-seconds="30" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import" hx-request='{"timeout":30000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-fit-progress-${job.importId}`} hx-disabled-elt="find button">
+                    <form data-job-action="assess" data-timeout-seconds="90" method="post" action="/api/jobs/assess-import" hx-post="/api/jobs/assess-import" hx-request='{"timeout":90000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-fit-progress-${job.importId}`} hx-disabled-elt="find button">
+                      <input type="hidden" name="inlineResult" value="yes" />
                       <input type="hidden" name="importId" value={job.importId} />
                       <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
                       <button class="cip-action" type="submit">
                         {fitForJob(job) ? "Assess fit again" : "Assess the fit"}
                       </button>
+                      <div set:html={renderFitClarification()} />
                       <div id={`job-fit-progress-${job.importId}`} class="htmx-indicator cip-thinking-panel mt-3" role="status" aria-live="polite">
                         <div class="cip-thinking-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
                         <div class="min-w-0 flex-1"><p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Assessing fit using your CIP context</p><div class="cip-thinking-lines" aria-hidden="true"><span>Comparing this posting with your saved preferences and exclusions...</span><span>Reviewing your active career directions and saved evidence...</span><span>Keeping unknowns visible and saving the assessment...</span></div><p class="sr-only">Comparing this job with your saved career context. The assessment is separate from listing verification.</p><div class="cip-thinking-bar" aria-hidden="true"><span></span></div></div>
@@ -479,7 +466,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                           <option value="talk_first">Talk to someone first</option>
                           <option value="check_funding">Research before investing effort</option>
                           <option value="monitor">Hold and watch</option>
-                          <option value="skip">Skip</option>
+                          <option value="skip">Not for me — archive</option>
                         </select>
                       </label>
                       <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
@@ -517,7 +504,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                   </details>
                 ) : null}
               </article>
-            ))}
+            ))}</div></details>)}
           </div>
         </div>
       ) : null}
@@ -555,6 +542,16 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(true);
       });
 
+      document.body.addEventListener("fitAssessmentReady", function (event) {
+        var result = document.getElementById(event.detail && event.detail.targetId);
+        if (!result) return;
+        result.querySelectorAll("details").forEach(function (details) { details.open = false; });
+        var article = result.closest("article");
+        var button = article && article.querySelector('[data-job-action="assess"] > button[type="submit"]');
+        if (button) button.textContent = "Assess fit again";
+        result.focus({ preventScroll: true });
+        result.scrollIntoView({ block: "start", behavior: "auto" });
+      });
       var jobTimers = new WeakMap();
       function finishJobRequest(form) {
         clearTimeout(jobTimers.get(form));
@@ -580,7 +577,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
       document.body.addEventListener("htmx:beforeSwap", function (event) {
         var detail = event.detail;
         var target = detail && detail.target;
-        if (target && target.id && target.id.indexOf("job-action-result-") === 0 && detail.xhr && detail.xhr.status >= 400) {
+        if (target && target.id && (target.id.indexOf("job-action-result-") === 0 || target.id.indexOf("fit-result-") === 0) && detail.xhr && detail.xhr.status >= 400) {
           // htmx otherwise suppresses error response bodies, which made a
           // failed check or assessment look exactly like a dead button.
           detail.shouldSwap = true;

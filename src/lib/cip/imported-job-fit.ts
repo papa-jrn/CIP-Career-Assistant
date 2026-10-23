@@ -1,3 +1,4 @@
+import { assessDetailedFit, parseDetailedFit, type DetailedFit, type ProfileEvidence } from "./job-fit-analysis";
 import type { RecommendationCategory } from "@/lib/cip/recommendation";
 import { importedJobAnalysisText, type ImportedJob } from "@/lib/cip/imported-jobs";
 
@@ -30,6 +31,7 @@ export interface FitFinding {
 }
 
 export interface FitAssessment {
+  analysis?: DetailedFit;
   importId: string;
   recommendation: RecommendationCategory;
   confidence: "low" | "medium" | "high";
@@ -43,6 +45,8 @@ export interface FitAssessment {
 }
 
 export interface FitContext {
+  profileEvidence?: ProfileEvidence[];
+  lanes?: Array<{ role: string; rationale?: string; proofGaps?: string }>;
   salaryFloorUsd?: number;
   workModes: string[];
   exclusions: { industries: string[]; roles: string[]; employers: string[] };
@@ -185,7 +189,7 @@ export function assessImportedJobFit(
     });
   }
 
-  if (!job.originalMaterial) {
+  if (!importedJobAnalysisText(job).trim()) {
     findings.push({
       kind: "unknown",
       label: "No posting text saved",
@@ -253,6 +257,7 @@ export async function assessImportedJobFitWithAi(
   assessedAt: string,
 ): Promise<FitAssessment> {
   const fallback = assessImportedJobFit(job, context, assessedAt);
+  if (context.profileEvidence) return assessDetailedFit(job, context, fallback);
   const key = import.meta.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (!key) return fallback;
 
@@ -324,6 +329,7 @@ export function parseImportedJobFit(value: string | null, createdAt: string): Fi
     if (!importId || !categories.includes(fit?.recommendation)) return null;
     return {
       importId,
+      analysis: parseDetailedFit(fit.analysis),
       recommendation: fit.recommendation as RecommendationCategory,
       confidence: ["low", "medium", "high"].includes(fit?.confidence) ? fit.confidence : "low",
       nextAction: typeof fit.nextAction === "string" ? fit.nextAction : "",

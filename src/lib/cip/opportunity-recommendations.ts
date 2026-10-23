@@ -1,3 +1,5 @@
+import { searchedFitId } from "./searched-job-fit";
+import { parseImportedJobFit, IMPORTED_JOB_FIT_SOURCE_TYPE, type FitAssessment } from "./imported-job-fit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ObservationRow, RunView } from "@/lib/cip/job-search-run";
 import { loadStrategicState, type StrategicState } from "@/lib/cip/strategic-state";
@@ -193,6 +195,7 @@ export async function loadRecommendationInputs(
 }
 
 export interface PostingAnnotations {
+  fits?: Map<string, FitAssessment>;
   recommendations: Map<string, Recommendation>;
   dispositions: DispositionIndex;
   resolution: {
@@ -226,7 +229,17 @@ export async function buildPostingAnnotations(
     recommendations.set(row.source_url, recommendationForPosting(row, inputs));
     byUrl.set(row.source_url, resolvePostingEmployer(row, inputs));
   }
+  const fitRows = await supabase.from("career_sources").select("extracted_text,created_at").eq("user_id", userId).eq("source_type", IMPORTED_JOB_FIT_SOURCE_TYPE).order("created_at", { ascending: false }).limit(500);
+  if (fitRows.error) throw new Error("Saved fit assessments could not be loaded.");
+  const fits = new Map<string, FitAssessment>();
+  for (const row of fitRows.data ?? []) {
+    const fit = parseImportedJobFit(row.extracted_text, row.created_at);
+    if (fit && !fits.has(fit.importId)) fits.set(fit.importId, fit);
+  }
+  const byPostingUrl = new Map<string, FitAssessment>();
+  for (const row of view.observations) { const fit = fits.get(searchedFitId(row.source_url)); if (fit) byPostingUrl.set(row.source_url, fit); }
   return {
+    fits: byPostingUrl,
     recommendations,
     dispositions: indexDispositions(dispositionRows),
     resolution: { watchedNames: inputs.canon.map((c) => c.name), byUrl },

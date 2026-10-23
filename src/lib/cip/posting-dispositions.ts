@@ -61,11 +61,12 @@ const COLUMNS = "normalized_url,source_url,employer_key,requisition_id,status,no
 
 /** All of a user's saved statuses (bounded), for matching against the run's postings at render. */
 export async function loadDispositions(supabase: SupabaseClient, userId: string): Promise<PostingDisposition[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("posting_dispositions")
     .select(COLUMNS)
     .eq("user_id", userId)
     .limit(1000);
+  if (error) throw new Error("Saved job statuses could not be loaded.");
   return (data ?? []) as PostingDisposition[];
 }
 
@@ -116,23 +117,26 @@ export async function setDisposition(
     note: note.slice(0, 500),
     updated_at: now(),
   };
-  const { data: updated } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("posting_dispositions")
     .update(patch)
     .eq("user_id", userId)
     .eq("normalized_url", keys.normalizedUrl)
     .select("normalized_url");
+  if (updateError) throw new Error("Job status could not be saved.");
   if (updated && (updated as unknown[]).length) return;
-  await supabase.from("posting_dispositions").insert({
+  const { error: insertError } = await supabase.from("posting_dispositions").insert({
     user_id: userId,
     normalized_url: keys.normalizedUrl,
     created_at: now(),
     ...patch,
   });
+  if (insertError) throw new Error("Job status could not be saved.");
 }
 
 /** Clear the user's status on a posting (back to following the app's suggestion). */
 export async function clearDisposition(supabase: SupabaseClient, userId: string, posting: PostingIdentityLike): Promise<void> {
   const keys = dispositionKeys(posting);
-  await supabase.from("posting_dispositions").delete().eq("user_id", userId).eq("normalized_url", keys.normalizedUrl);
+  const { error } = await supabase.from("posting_dispositions").delete().eq("user_id", userId).eq("normalized_url", keys.normalizedUrl);
+  if (error) throw new Error("Job status could not be restored.");
 }
