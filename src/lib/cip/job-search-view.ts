@@ -231,7 +231,7 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
     .map((value) => escapeHtml(value))
     .join(" · ");
   return `
-    <details class="group rounded-md border border-[var(--line)] bg-[var(--background)]" data-job-row="${escapeHtml(row.source_url)}">
+    <details class="group rounded-md border border-[var(--line)] bg-[var(--background)]" data-job-card data-job-row="${escapeHtml(row.source_url)}" data-fit="${escapeHtml(fitKeyFor(row, annotations))}" data-verification="${escapeHtml(row.verification_state)}" data-new="${isNew ? "yes" : "no"}">
       <summary class="cursor-pointer list-none p-4">
         <span class="flex flex-wrap items-start justify-between gap-2">
           <span class="min-w-0">
@@ -264,6 +264,9 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
         </form><div id="fit-result-${escapeHtml(row.id)}" role="status"></div>
       </div>
       ${recommendationBlock(row, annotations)}
+      <p class="mt-3 border-t border-[var(--line)] pt-3">
+        <button type="button" data-close-job class="text-xs font-semibold text-[var(--accent-strong)] underline">Close this job</button>
+      </p>
       </div>
     </details>`;
 }
@@ -295,13 +298,61 @@ function summaryFitChip(row: ObservationRow, annotations?: PostingAnnotations): 
   return `<span class="${PILL} bg-[var(--panel)] text-[var(--muted)]">Fit not assessed</span>`;
 }
 
+/**
+ * How decision-ready a job is, for ordering.
+ *
+ * The user's own decision ranks first because it is the only conclusion they
+ * have actually committed to. Then the app's reading, most actionable first.
+ * An unassessed job sorts below anything assessed but above a skip: it might
+ * still be worth something, which a skip is not.
+ */
+const FIT_RANK: Record<string, number> = {
+  apply: 0,
+  talk_first: 1,
+  check_funding: 2,
+  monitor: 3,
+  unassessed: 4,
+  skip: 5,
+};
+
+function fitKeyFor(row: ObservationRow, annotations?: PostingAnnotations): string {
+  if (!annotations) return "unassessed";
+  const userStatus = matchDisposition(row, annotations.dispositions);
+  if (userStatus) return userStatus.status === "passed" ? "skip" : "apply";
+  const fit = annotations.fits?.get(row.source_url);
+  if (fit) return fit.recommendation;
+  const rec = annotations.recommendations.get(row.source_url);
+  return rec ? rec.category : "unassessed";
+}
+
+/** Most recently checked first; never checked sorts last. */
+function freshnessValue(row: ObservationRow): number {
+  const checked = row.verification_checked_at ? Date.parse(row.verification_checked_at) : Number.NaN;
+  return Number.isNaN(checked) ? 0 : checked;
+}
+
+/**
+ * Fit first, then verification freshness.
+ *
+ * Grouping already separates verified postings from leads, so this orders
+ * within a group: what is worth acting on, and among equals, what was checked
+ * most recently. A stale check is weaker evidence than a fresh one.
+ */
+export function sortJobsForTriage(rows: ObservationRow[], annotations?: PostingAnnotations): ObservationRow[] {
+  return rows.slice().sort((a, b) => {
+    const rank = (FIT_RANK[fitKeyFor(a, annotations)] ?? 4) - (FIT_RANK[fitKeyFor(b, annotations)] ?? 4);
+    if (rank !== 0) return rank;
+    return freshnessValue(b) - freshnessValue(a);
+  });
+}
+
 function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null, newUrls?: Set<string>, annotations?: PostingAnnotations) {
   if (!rows.length) return "";
   return `
     <section class="mt-5">
       <h3 class="text-sm font-semibold">${escapeHtml(title)} <span class="font-normal text-[var(--muted)]">(${rows.length})</span></h3>
       ${note ? `<p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(note)}</p>` : ""}
-      <div class="mt-2 grid gap-3">${rows.map((row) => postingCard(row, floorUsd, newUrls, annotations)).join("")}</div>
+      <div class="mt-2 grid gap-3">${sortJobsForTriage(rows, annotations).map((row) => postingCard(row, floorUsd, newUrls, annotations)).join("")}</div>
     </section>`;
 }
 
@@ -369,6 +420,31 @@ function detailsBlock(view: RunView) {
       <summary class="cursor-pointer font-semibold">Run details</summary>
       <p class="mt-2">Model ${escapeHtml(view.run.model)} · ${view.run.trace.length} of ${view.run.plan.length} steps · ${Number(usage.webSearchCalls ?? 0)} searches/page opens · ${Number(usage.inputTokens ?? 0).toLocaleString("en-US")} input and ${Number(usage.outputTokens ?? 0).toLocaleString("en-US")} output tokens · cost ${escapeHtml(cost)}</p>
     </details>`;
+}
+
+/**
+ * Filters for a long list.
+ *
+ * Applied in the browser so a filter never costs a round trip or re-renders
+ * the panel, which would close every open row. Each control hides rows rather
+ * than discarding them, and the count says how many are hidden, so nothing
+ * disappears without the reader being told.
+ */
+function filterBar(total: number): string {
+  if (total < 4) return "";
+  const box = (name: string, label: string) =>
+    `<label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" data-job-filter="${name}" class="h-4 w-4" />${escapeHtml(label)}</label>`;
+  return `
+    <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3" data-job-filters>
+      <p class="text-xs font-semibold">Narrow the list</p>
+      <div class="mt-2 flex flex-wrap items-center gap-4">
+        ${box("hideSkipped", "Hide skipped")}
+        ${box("hideUnassessed", "Hide not-yet-assessed")}
+        ${box("verifiedOnly", "Verified only")}
+        ${box("newOnly", "New since last search")}
+      </div>
+      <p class="mt-2 text-xs text-[var(--muted)]" data-job-filter-count role="status">Showing all ${total} jobs.</p>
+    </div>`;
 }
 
 export function renderJobSearchPanel(view: RunView | null, context: PanelContext, annotations?: PostingAnnotations): string {
@@ -442,7 +518,7 @@ export function renderJobSearchPanel(view: RunView | null, context: PanelContext
       : "";
 
   const newUrls = view.diff?.newSourceUrls;
-  return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${chipCountStrip([...verified, ...notVerified], annotations)}${empty}
+  return `${open}${head}${runForm(context, label)}${banner}${diffBanner(view.diff)}${chipCountStrip([...verified, ...notVerified], annotations)}${filterBar(observations.length)}${empty}
     ${group("Verified open", "Confirmed by fetching the posting's own page. Showing the title and, where reported, the requisition ID.", verified, floorUsd, newUrls, annotations)}
     ${group("Not verified yet", "Found by the search but the source page could not confirm them. Treat as leads; check the link before acting.", notVerified, floorUsd, newUrls, annotations)}
     ${group("Outside your places", "Real postings, but their worksite is beyond the distance you set (straight-line). Remote roles are not listed here.", outside, floorUsd, newUrls, annotations)}

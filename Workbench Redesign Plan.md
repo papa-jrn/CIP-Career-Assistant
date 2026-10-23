@@ -1004,3 +1004,35 @@ Worksite: Lebanon, NH". Typecheck clean, 848 tests passing, SSR build passed.
 Next, agreed with the founder: filtering and sorting, by fit first and then by verification freshness.
 Collapsing buys roughly a sixfold reduction in height; at 55-plus jobs that is necessary but probably
 not sufficient.
+
+## Implemented 2026-10-23: closing a job, plus sorting and filtering
+
+Founder follow-up to the collapse: an opened job could only be closed from its summary, which after
+reading a long card is far above the reader. Each open card now ends with "Close this job" beside the
+Why / change control; it collapses the card and scrolls the summary back into view, so the reader
+lands on the row they just closed rather than wherever the collapse left the viewport.
+
+Sorting, to the founder's rule of fit first then verification freshness. Grouping already separates
+verified postings from leads, so this orders within a group. The user's own decision outranks the
+app's suggestion, because it is the only conclusion they have actually committed to - a job they
+passed on sinks even when the app likes it. Then the app's reading, most actionable first, with an
+unassessed job below anything assessed but above a skip: it might still be worth something, which a
+skip is not. Ties break on when the posting was last checked, most recent first, because a stale
+check is weaker evidence than a fresh one.
+
+Filtering: hide skipped, hide not-yet-assessed, verified only, new since last search. It runs in the
+browser, deliberately - a round trip would re-render the panel and close every open row, which is the
+problem this whole pass exists to solve. Rows are hidden rather than discarded and the count says so
+("12 hidden by your filters, not removed"), so nothing vanishes without the reader being told. A
+group whose jobs are all hidden hides its heading too rather than leaving a stranded empty section.
+The bar only appears once there are four or more jobs.
+
+Caught by the suite rather than by reasoning: the page has a single inline script block, and the
+progress watchdog lives at the bottom of it. The new filter code was inserted at the top and threw on
+a page with no search panel, which stopped the watchdog from ever being defined - two existing tests
+failed immediately. Every lookup in the new code is now guarded, which it should have been anyway:
+this block runs on pages and states where no panel exists.
+
+Verified: typecheck clean, 855 tests passing including seven new ones pinning the sort order, SSR
+build passed. The founder pass on a populated list remains - sorting and filtering are most
+informative against a real 55-job run.

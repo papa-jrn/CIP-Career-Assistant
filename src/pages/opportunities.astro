@@ -525,6 +525,78 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
     </section>
   </main>
   <script is:inline>
+    // Closing a job from the bottom of its own card. After reading a long card
+    // the summary is far above, so without this the only way to collapse it is
+    // to scroll back up and find the row again.
+    (function () {
+      if (!document.body || !document.body.addEventListener) return;
+      document.body.addEventListener("click", function (event) {
+        var trigger = event.target && event.target.closest ? event.target.closest("[data-close-job]") : null;
+        if (!trigger) return;
+        var card = trigger.closest("details[data-job-card]");
+        if (!card) return;
+        card.open = false;
+        // Put the reader back on the row they just closed, not wherever the
+        // collapse happened to leave the viewport.
+        var summary = card.querySelector("summary");
+        if (summary && summary.scrollIntoView) summary.scrollIntoView({ block: "nearest" });
+      });
+    })();
+
+    // Filtering happens in the browser: a round trip would re-render the panel
+    // and close every open row, and the whole point is to keep the reader's
+    // place while they narrow a long list.
+    (function () {
+      function apply() {
+        // This block also runs on pages and states with no search panel, so
+        // every lookup is guarded rather than assumed.
+        if (!document.querySelector || !document.querySelectorAll) return;
+        var bar = document.querySelector("[data-job-filters]");
+        if (!bar || typeof bar.querySelectorAll !== "function") return;
+        var on = {};
+        [].slice.call(bar.querySelectorAll("[data-job-filter]")).forEach(function (input) {
+          on[input.getAttribute("data-job-filter")] = input.checked;
+        });
+
+        var rows = [].slice.call(document.querySelectorAll("details[data-job-row]"));
+        var hidden = 0;
+        rows.forEach(function (row) {
+          var fit = row.getAttribute("data-fit") || "unassessed";
+          var verification = row.getAttribute("data-verification") || "";
+          var isNew = row.getAttribute("data-new") === "yes";
+          var hide =
+            (on.hideSkipped && fit === "skip") ||
+            (on.hideUnassessed && fit === "unassessed") ||
+            (on.verifiedOnly && verification !== "verified_open") ||
+            (on.newOnly && !isNew);
+          row.hidden = hide;
+          if (hide) hidden += 1;
+        });
+
+        // A group whose jobs are all hidden should not leave a stranded heading.
+        [].slice.call(document.querySelectorAll("#job-search-panel section")).forEach(function (section) {
+          var inSection = [].slice.call(section.querySelectorAll("details[data-job-row]"));
+          if (!inSection.length) return;
+          section.hidden = inSection.every(function (row) { return row.hidden; });
+        });
+
+        var count = document.querySelector("[data-job-filter-count]");
+        if (!count) return;
+        var shown = rows.length - hidden;
+        count.textContent = hidden
+          ? "Showing " + shown + " of " + rows.length + " jobs. " + hidden + " hidden by your filters, not removed."
+          : "Showing all " + rows.length + " jobs.";
+      }
+
+      if (!document.body || !document.body.addEventListener) return;
+      document.body.addEventListener("change", function (event) {
+        if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-job-filter")) apply();
+      });
+      // The panel is re-rendered by htmx on archive, which resets the controls.
+      document.body.addEventListener("htmx:afterSwap", apply);
+      apply();
+    })();
+
     // Archiving a job re-renders the whole search panel, which would snap every
     // open job row shut and lose the reader's place in a long list. Remember
     // which rows were open across the swap and restore them.
