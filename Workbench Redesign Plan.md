@@ -1066,3 +1066,37 @@ ranks above every flavour of skip.
 Verified in a browser against the page's own script: all four toggles filter correctly and the count
 reads "Showing 1 of 3 jobs. 2 hidden by your filters, not removed." Typecheck clean, 857 tests
 passing including nine pinning the ladder, SSR build passed.
+
+## Fixed 2026-10-23: inline page scripts were blocked by the Content Security Policy
+
+The filters still did nothing after the semantic fix, and the cause was neither the logic nor the
+markup. `src/middleware.ts` sets `script-src 'self'` outside dev, with no nonce and no hash, so the
+browser refused to execute any inline script at all. The console was full of
+"Executing inline script violates the following Content Security Policy directive". `npm run dev`
+serves a production build, so this is the founder's everyday environment, not a deploy-only concern.
+
+Dead as a result, not only the new filters: the close control, the open-row preservation across an
+archive, the import-form opener added on 2026-10-22, and the accessibility fix from 2026-10-22 that
+moves focus to a confirmation message so a screen reader announces it. Every one of those was
+verified at the time and none of them has ever run.
+
+The verification was the real failure. Each was checked by reading the page's script source and
+evaluating it by hand in the browser console - which bypasses CSP entirely. The code was correct in
+isolation every time and never executed on the page. A test that runs the code a different way from
+the way the page runs it proves only that the code can work, not that it does. The check that caught
+this was asking the page whether a function the script defines exists; it did not.
+
+Fix: `middleware.ts` already states the intended convention - "all page scripts are Astro-processed
+external modules, so production needs no inline-script allowance". Two files broke it, both from
+recent work. Changing `<script is:inline>` to `<script>` in `opportunities.astro` and `Layout.astro`
+lets Astro bundle them to `/_astro/*.js`, which `script-src 'self'` permits. The policy is unchanged;
+nothing was loosened to make this work.
+
+Verified by loading the page and asking it what ran, then exercising the filters through the
+listeners the page itself attached: all four toggles filter correctly, the count updates, and the
+close button collapses its card. Typecheck clean, 857 tests passing, SSR build passed. The
+progress-watchdog test reads the page's script by tag and was updated to match.
+
+Worth noting for later: this page has one script block, so a single throw silences every handler in
+it. Splitting it, or moving the logic into a module under `src/scripts`, would make the next failure
+local rather than total.

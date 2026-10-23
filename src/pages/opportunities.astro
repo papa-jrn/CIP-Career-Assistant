@@ -524,13 +524,13 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
       ) : null}
     </section>
   </main>
-  <script is:inline>
+  <script>
     // Closing a job from the bottom of its own card. After reading a long card
     // the summary is far above, so without this the only way to collapse it is
     // to scroll back up and find the row again.
     (function () {
-      if (!document.body || !document.body.addEventListener) return;
-      document.body.addEventListener("click", function (event) {
+      if (typeof document.addEventListener !== "function") return;
+      document.addEventListener("click", function (event) {
         var trigger = event.target && event.target.closest ? event.target.closest("[data-close-job]") : null;
         if (!trigger) return;
         var card = trigger.closest("details[data-job-card]");
@@ -588,13 +588,29 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
           : "Showing all " + rows.length + " jobs.";
       }
 
-      if (!document.body || !document.body.addEventListener) return;
-      document.body.addEventListener("change", function (event) {
+      if (typeof document.addEventListener !== "function") return;
+      document.addEventListener("change", function (event) {
         if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-job-filter")) apply();
       });
       // The panel is re-rendered by htmx on archive, which resets the controls.
-      document.body.addEventListener("htmx:afterSwap", apply);
-      apply();
+      document.addEventListener("htmx:afterSwap", apply);
+      // The panel may not be parsed yet depending on where this runs.
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+      else apply();
+
+      // A way to see what the filters can see, for when they appear inert.
+      window.cipFilterDebug = function () {
+        var rows = [].slice.call(document.querySelectorAll("details[data-job-row]"));
+        return {
+          scriptRunning: true,
+          filterBarFound: Boolean(document.querySelector("[data-job-filters]")),
+          rowsFound: rows.length,
+          rowsWithFitAttribute: rows.filter(function (r) { return r.hasAttribute("data-fit"); }).length,
+          firstRow: rows[0]
+            ? { fit: rows[0].getAttribute("data-fit"), verification: rows[0].getAttribute("data-verification") }
+            : null,
+        };
+      };
     })();
 
     // Archiving a job re-renders the whole search panel, which would snap every
@@ -602,14 +618,15 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
     // which rows were open across the swap and restore them.
     (function () {
       var openRows = [];
-      document.body.addEventListener("htmx:beforeSwap", function (event) {
+      if (typeof document.addEventListener !== "function") return;
+      document.addEventListener("htmx:beforeSwap", function (event) {
         var target = event.target;
         if (!target || target.id !== "job-search-panel") return;
         openRows = [].slice
           .call(target.querySelectorAll("details[data-job-row][open]"))
           .map(function (row) { return row.getAttribute("data-job-row"); });
       });
-      document.body.addEventListener("htmx:afterSwap", function (event) {
+      document.addEventListener("htmx:afterSwap", function (event) {
         var target = event.target && event.target.id === "job-search-panel"
           ? event.target
           : document.getElementById("job-search-panel");

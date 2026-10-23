@@ -71,7 +71,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
     <a class="career-skip" href="#main-content">Skip to content</a>
     {signedInEmail && !publicPage ? <WorkspaceNav signedInEmail={signedInEmail} /> : <TopNav signedInEmail={signedInEmail} />}
     <div id="main-content" class="career-content" tabindex="-1"><slot /></div>
-    <script is:inline>
+    <script>
       // Confirmations after an action arrive on a fresh page load, not as a
       // live-region update, so a screen reader would never announce them: a
       // live region only speaks content that changes after it exists. Move

@@ -3,7 +3,7 @@ import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const page = readFileSync(new URL("./opportunities.astro", import.meta.url), "utf8");
-const script = page.match(/<script is:inline>([\s\S]*?)<\/script>/)![1];
+const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
 function browser() {
   const handlers = new Map<string, (event: unknown) => void>();
   const button = { disabled: true };
