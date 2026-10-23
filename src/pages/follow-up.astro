@@ -19,6 +19,7 @@ import {
   partitionRemovedConversations,
 } from "../lib/cip/conversation-removals";
 import { actionBucket, needsNudge, outcomeHasLoggedConversation } from "../lib/cip/follow-up-buckets";
+import { personSearchText, summarizePersonRow } from "../lib/cip/follow-up-row";
 import { loadFollowUpResolutions } from "../lib/cip/follow-up-resolutions";
 import { buildFollowUpObligations, type StrategicFollowUpObligation } from "../lib/cip/strategic-state";
 import type { NetworkAnalysis, NetworkContact, NetworkContactMatch } from "../lib/cip/network-intelligence";
@@ -824,6 +825,25 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
 
         <div class="mt-8 flex items-center justify-between gap-3">
           <h3 class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Active connections</h3>
+          {queue.length > 5 ? (
+            <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3" data-person-filters>
+              <label class="grid gap-1 text-xs font-semibold uppercase text-[var(--muted)]">
+                Find a person
+                <input
+                  type="search"
+                  data-person-search-input
+                  placeholder="Name, employer, title, or something in your notes"
+                  class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]"
+                />
+              </label>
+              <div class="mt-2 flex flex-wrap items-center gap-4">
+                <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" data-person-filter="urgentOnly" class="h-4 w-4" />Needs attention now</label>
+                <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" data-person-filter="owedOnly" class="h-4 w-4" />I owe them something</label>
+                <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" data-person-filter="notContacted" class="h-4 w-4" />Not contacted yet</label>
+              </div>
+              <p class="mt-2 text-xs text-[var(--muted)]" data-person-filter-count role="status">Showing all {queue.length} people.</p>
+            </div>
+          ) : null}
           <span class="text-xs text-[var(--muted)]">Each person appears once with status, decision, and notes together.</span>
         </div>
 
@@ -832,13 +852,27 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
             const id = slug(person.contact.name);
             const saved = person.latestFeedback;
             const loggedConversations = (person.conversationOutcomes ?? []).filter(outcomeHasLoggedConversation);
+            const rowSummary = summarizePersonRow(person, openObligations, TODAY);
             return (
-              <article id={`follow-up-${id}`} class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+              <article
+                id={`follow-up-${id}`}
+                class="scroll-mt-24 rounded-md border border-[var(--line)] bg-[var(--background)] p-4"
+                data-person-row
+                data-person-search={personSearchText(person)}
+                data-person-urgent={rowSummary.urgent ? "yes" : "no"}
+                data-person-owed={rowSummary.nextAction ? "yes" : "no"}
+                data-person-contacted={rowSummary.status === "Not contacted yet" ? "no" : "yes"}
+              >
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold">{person.contact.name}</h3>
                     <p class="mt-1 text-sm leading-6 text-[var(--muted)]">
                       {[person.contact.title, person.contact.company].filter(Boolean).join(" at ") || "Company/title needs review"}
+                    </p>
+                    <p class="mt-1 text-sm leading-6 text-[var(--foreground)]">
+                      <span class={rowSummary.urgent ? "font-semibold text-[var(--warning)]" : "font-semibold"}>{rowSummary.status}</span>
+                      {rowSummary.nextAction ? <span class="text-[var(--muted)]"> · Next: {rowSummary.nextAction}</span> : null}
+                      {rowSummary.dueDate ? <span class="text-[var(--muted)]"> · Due {rowSummary.dueDate}</span> : null}
                     </p>
                     <div class="mt-2 flex flex-wrap gap-2">
                       {person.match ? (
@@ -848,16 +882,6 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
                       ) : null}
                       {person.contact.source ? (
                         <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">{person.contact.source}</span>
-                      ) : null}
-                      {saved ? (
-                        <span class="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                          Last saved: {saved.feedbackType.replace("_", " ")}
-                        </span>
-                      ) : null}
-                      {nudgeDue(saved) ? (
-                        <span class="rounded-md bg-[var(--warning)] px-2 py-1 text-xs font-semibold text-white">
-                          Nudge due since {saved?.followUpDate}
-                        </span>
                       ) : null}
                       {loggedConversations.length ? (
                         <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
@@ -1081,5 +1105,56 @@ const worklistCount = worklistBuckets.reduce((total, bucket) => total + bucket.i
     }
     window.addEventListener("hashchange", openTargetCard);
     openTargetCard();
+  </script>
+<script>
+    // Finding one person in a long queue. Runs in the browser so a search never
+    // costs a round trip; rows are hidden rather than removed and the count
+    // says how many, so nothing disappears silently.
+    (function () {
+      if (typeof document.addEventListener !== "function") return;
+
+      function apply() {
+        var bar = document.querySelector("[data-person-filters]");
+        if (!bar || typeof bar.querySelectorAll !== "function") return;
+
+        var term = "";
+        var input = bar.querySelector("[data-person-search-input]");
+        if (input && input.value) term = input.value.trim().toLowerCase();
+
+        var on = {};
+        [].slice.call(bar.querySelectorAll("[data-person-filter]")).forEach(function (box) {
+          on[box.getAttribute("data-person-filter")] = box.checked;
+        });
+
+        var rows = [].slice.call(document.querySelectorAll("[data-person-row]"));
+        var hidden = 0;
+        rows.forEach(function (row) {
+          var haystack = row.getAttribute("data-person-search") || "";
+          var hide =
+            (term && haystack.indexOf(term) === -1) ||
+            (on.urgentOnly && row.getAttribute("data-person-urgent") !== "yes") ||
+            (on.owedOnly && row.getAttribute("data-person-owed") !== "yes") ||
+            (on.notContacted && row.getAttribute("data-person-contacted") !== "no");
+          row.hidden = hide;
+          if (hide) hidden += 1;
+        });
+
+        var count = bar.querySelector("[data-person-filter-count]");
+        if (!count) return;
+        var shown = rows.length - hidden;
+        count.textContent = hidden
+          ? "Showing " + shown + " of " + rows.length + " people. " + hidden + " hidden by your search or filters, not removed."
+          : "Showing all " + rows.length + " people.";
+      }
+
+      document.addEventListener("input", function (event) {
+        if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-person-search-input")) apply();
+      });
+      document.addEventListener("change", function (event) {
+        if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-person-filter")) apply();
+      });
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+      else apply();
+    })();
   </script>
 </Layout>

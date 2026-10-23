@@ -1100,3 +1100,37 @@ progress-watchdog test reads the page's script by tag and was updated to match.
 Worth noting for later: this page has one script block, so a single throw silences every handler in
 it. Splitting it, or moving the logic into a module under `src/scripts`, would make the next failure
 local rather than total.
+
+## Implemented 2026-10-23: truthful people rows, search and filters
+
+Section 12 asks the Follow-ups view for name, organization, a truthful status, the next action, and a
+due date when present. The row was showing "Last saved: use_now" - the internal name of a triage
+decision, which says nothing about where the relationship stands - and neither a next action nor a
+due date.
+
+Each row now leads with a status drawn from what is actually known: an overdue follow-up outranks
+everything; "Met, notes captured" and "Met, notes not captured yet" are deliberately distinct,
+because that difference is the point of the capture prompt and a status must never imply notes exist
+when they do not; a status the user set is shown as they set it; and a person nobody has contacted
+reads "Not contacted yet" rather than having a status inferred for them. The next action comes from an
+open obligation for that person, or from the feedback record, and is null rather than invented when
+neither has one. A triage reason alone still does not count as captured notes - the live record that
+taught us that is a test case.
+
+Search and filters, the same pattern that worked on the job list: find a person by name, employer,
+title or something in your notes, and narrow to who needs attention now, who you owe something, or
+who has not been contacted. It appears once there are more than five people. Rows are hidden rather
+than removed and the count says so.
+
+Both new behaviours ship as Astro-bundled module scripts, not inline, after this morning's finding
+that the production CSP blocks inline scripts outright. Verified by loading the page and driving the
+filters through the listeners the page attached itself, rather than by evaluating the source by hand.
+
+A conflict worth recording rather than silently resolving: section 12 says Connections should "lead
+with actual people and compact search/filter/add/import/analyze controls", but on 2026-10-21 the
+founder asked for Connections to lead with the conversation loop, and that is what it does. The
+people live on Follow-ups, which is where this search now is. The founder's later instruction stands;
+section 12's wording is the thing that is now out of date.
+
+Verified: typecheck clean, 872 tests passing including fifteen pinning the status and next-action
+rules, SSR build passed.
