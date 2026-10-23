@@ -1036,3 +1036,33 @@ this block runs on pages and states where no panel exists.
 Verified: typecheck clean, 855 tests passing including seven new ones pinning the sort order, SSR
 build passed. The founder pass on a populated list remains - sorting and filtering are most
 informative against a real 55-job run.
+
+## Fixed 2026-10-23: the filters did nothing, and why
+
+Founder reported that "Hide not-yet-assessed" changed nothing and suspected the other toggles were
+dead too. The mechanism was fine - running the page's own script against a synthetic panel in a
+browser hid the right row and updated the count correctly. The fault was semantic.
+
+`buildPostingAnnotations` writes a preliminary search-guidance recommendation for **every** posting
+it finds. The filter and the summary chip both treated that as a fit conclusion, so no posting was
+ever "unassessed" and the toggle correctly hid nothing. Worse than a dead filter: the collapsed row
+was presenting preliminary guidance as though it were an assessed conclusion, which is exactly the
+distinction the card body spells out - "Preliminary search guidance - personal competitiveness
+requires Assess fit".
+
+Only a decision the user made, or an assessment that actually ran, now counts as assessed. The
+summary chip for a posting with guidance but no assessment reads "Preliminary: Talk to someone first
+· fit not assessed". Dropping the guidance entirely would have made fifty jobs look identical, so it
+is kept and labelled rather than hidden.
+
+Rewriting the tests around that distinction exposed a second ordering fault: a job the user had
+personally passed on was ranking **above** a job with preliminary guidance, because both resolved to
+the same "skip" rank. Ordering is now an explicit ladder rather than arithmetic over one table:
+what the user is acting on, then real assessments most actionable first, then preliminary guidance in
+its own tier, then a posting nothing is known about, then an assessed skip, then a preliminary skip,
+and last the user's own pass. No information is not a decision to walk away, so an unknown posting
+ranks above every flavour of skip.
+
+Verified in a browser against the page's own script: all four toggles filter correctly and the count
+reads "Showing 1 of 3 jobs. 2 hidden by your filters, not removed." Typecheck clean, 857 tests
+passing including nine pinning the ladder, SSR build passed.

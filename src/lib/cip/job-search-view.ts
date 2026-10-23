@@ -290,10 +290,13 @@ function summaryFitChip(row: ObservationRow, annotations?: PostingAnnotations): 
     const chip = CHIP_META[fit.recommendation] ?? CHIP_META.monitor;
     return `<span class="${PILL} ${chip.tone}">${escapeHtml(chip.label)}</span>`;
   }
+  // Preliminary guidance is still useful for ordering a long list, but it is
+  // labelled so it cannot be mistaken for a fit the user has actually had
+  // assessed. Dropping it entirely would make fifty jobs look identical.
   const rec = annotations.recommendations.get(row.source_url);
   if (rec) {
     const chip = CHIP_META[rec.category] ?? CHIP_META.monitor;
-    return `<span class="${PILL} ${chip.tone}">${escapeHtml(chip.label)}</span>`;
+    return `<span class="${PILL} bg-[var(--panel)] text-[var(--muted)]">Preliminary: ${escapeHtml(chip.label)} · fit not assessed</span>`;
   }
   return `<span class="${PILL} bg-[var(--panel)] text-[var(--muted)]">Fit not assessed</span>`;
 }
@@ -311,18 +314,58 @@ const FIT_RANK: Record<string, number> = {
   talk_first: 1,
   check_funding: 2,
   monitor: 3,
-  unassessed: 4,
   skip: 5,
 };
 
+/**
+ * Whether this posting has a real fit conclusion, and what it is.
+ *
+ * The app writes a preliminary search-guidance chip for every posting it
+ * finds, which is NOT a fit assessment - the card says as much: "Preliminary
+ * search guidance - personal competitiveness requires Assess fit". Counting it
+ * here made every job look assessed, so "Hide not-yet-assessed" matched
+ * nothing and a preliminary chip read like a conclusion the user had earned.
+ * Only a decision the user made, or an assessment that was actually run,
+ * counts.
+ */
 function fitKeyFor(row: ObservationRow, annotations?: PostingAnnotations): string {
   if (!annotations) return "unassessed";
   const userStatus = matchDisposition(row, annotations.dispositions);
   if (userStatus) return userStatus.status === "passed" ? "skip" : "apply";
   const fit = annotations.fits?.get(row.source_url);
-  if (fit) return fit.recommendation;
-  const rec = annotations.recommendations.get(row.source_url);
-  return rec ? rec.category : "unassessed";
+  return fit ? fit.recommendation : "unassessed";
+}
+
+/**
+ * Where a posting sits in the reading order.
+ *
+ * An explicit ladder rather than arithmetic on a shared table, because the
+ * tiers mean different things and the edges matter: a job the user has
+ * committed to leads, a real assessment outranks preliminary guidance, and a
+ * job the user personally passed on sinks below every other kind of "not
+ * promising" - including below a posting nothing is known about, since no
+ * information is not the same as a decision to walk away.
+ */
+const PRELIMINARY_OFFSET = 10;
+const NO_INFORMATION = 15;
+const REAL_SKIP = 20;
+const PRELIMINARY_SKIP = 25;
+const USER_PASSED = 30;
+
+function triageRank(row: ObservationRow, annotations?: PostingAnnotations): number {
+  if (!annotations) return NO_INFORMATION;
+
+  const userStatus = matchDisposition(row, annotations.dispositions);
+  if (userStatus) return userStatus.status === "passed" ? USER_PASSED : 0;
+
+  const fit = annotations.fits?.get(row.source_url);
+  if (fit) return fit.recommendation === "skip" ? REAL_SKIP : 1 + (FIT_RANK[fit.recommendation] ?? 3);
+
+  const preliminary = annotations.recommendations.get(row.source_url);
+  if (preliminary) {
+    return preliminary.category === "skip" ? PRELIMINARY_SKIP : PRELIMINARY_OFFSET + (FIT_RANK[preliminary.category] ?? 3);
+  }
+  return NO_INFORMATION;
 }
 
 /** Most recently checked first; never checked sorts last. */
@@ -340,7 +383,7 @@ function freshnessValue(row: ObservationRow): number {
  */
 export function sortJobsForTriage(rows: ObservationRow[], annotations?: PostingAnnotations): ObservationRow[] {
   return rows.slice().sort((a, b) => {
-    const rank = (FIT_RANK[fitKeyFor(a, annotations)] ?? 4) - (FIT_RANK[fitKeyFor(b, annotations)] ?? 4);
+    const rank = triageRank(a, annotations) - triageRank(b, annotations);
     if (rank !== 0) return rank;
     return freshnessValue(b) - freshnessValue(a);
   });
