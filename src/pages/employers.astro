@@ -12,6 +12,17 @@ import { renderWorkspace } from "../lib/cip/target-workspace-view";
 import { loadStrategicState, type StrategicEmployerScore } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
 import {
+  currentTargetEvents,
+  excludedKeys,
+  excludedTargets,
+  loadTargetEvents,
+  partitionExcluded,
+  resolveTargetStatus,
+  TARGET_STATUSES,
+  type TargetEvent,
+} from "../lib/cip/employer-target-events";
+import { STATUS_LABEL } from "../lib/cip/target-dossier";
+import {
   currentCareersUrls,
   describeCareersUrl,
   loadCareersUrlCorrections,
@@ -124,6 +135,9 @@ let signedIn = false;
 let employers: EmployerRow[] = [];
 // The user's own answers about where each employer posts its jobs.
 let careersUrlRecords: CareersUrlCorrection[] = [];
+// The user's own decisions about each employer, including who they have
+// excluded. Append-only, so a decision can be reversed without being erased.
+let targetEventRecords: TargetEvent[] = [];
 let candidates: CandidateRow[] = [];
 let sources: SourceRow[] = [];
 let loadError = "";
@@ -154,6 +168,7 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
       else employers = (data ?? []) as EmployerRow[];
 
       careersUrlRecords = await loadCareersUrlCorrections(supabase, user.id);
+      targetEventRecords = await loadTargetEvents(supabase, user.id);
 
       const { data: candidateData } = await supabase
         .from("employer_candidates")
@@ -231,6 +246,38 @@ function extrasHtml(dossier: TargetDossier): string {
     careersHref ? `<a class="underline" href="${escapeHtml(careersHref)}" target="_blank" rel="noopener noreferrer">Careers page</a>` : "",
   ].filter(Boolean).join(" · ");
 
+  // What the user has decided about this employer, and a way to change it.
+  const shownStatus = resolveTargetStatus(employer.name, dossier.status, targetEvents);
+  const statusBlock = `
+    <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+      <p class="text-xs font-semibold uppercase text-[var(--muted)]">Your status for this employer</p>
+      <p class="mt-1 text-sm font-semibold text-[var(--foreground)]">${escapeHtml(STATUS_LABEL[shownStatus.status] ?? shownStatus.status)}</p>
+      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${
+        shownStatus.source === "set"
+          ? "You set this." + (shownStatus.note ? " " + escapeHtml(shownStatus.note) : "")
+          : "CIP's suggestion from what it can see. Set your own below and yours will be used instead."
+      }</p>
+      <details class="mt-2">
+        <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Set your status</summary>
+        <form class="mt-2 grid gap-2" method="post" action="/api/employers/target-status" hx-post="/api/employers/target-status">
+          <input type="hidden" name="employerName" value="${escapeHtml(employer.name)}" />
+          <input type="hidden" name="returnTo" value="/employers" />
+          <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+            Status
+            <select name="status" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]">
+              ${TARGET_STATUSES.map((value) => `<option value="${value}"${value === shownStatus.status ? " selected" : ""}>${escapeHtml(STATUS_LABEL[value] ?? value)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+            Why (optional)
+            <input name="note" maxlength="300" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
+          </label>
+          <button class="cip-action justify-self-start" type="submit">Save my status</button>
+          <p class="text-xs leading-5 text-[var(--muted)]">"Not interested" also stops discovery suggesting this organisation. It does not change your job-search exclusions, and you can undo it from the Excluded list.</p>
+        </form>
+      </details>
+    </div>`;
+
   // Where the search will look, said plainly, with a way to correct it.
   const careersBlock = `
     <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
@@ -265,6 +312,7 @@ function extrasHtml(dossier: TargetDossier): string {
     roles ? `<p class="mt-2 flex flex-wrap gap-2">${roles}</p>` : "",
     notes ? `<div class="mt-2 space-y-1 text-xs text-[var(--muted)]">${notes}</div>` : "",
     links ? `<p class="mt-2 text-xs">${links}</p>` : "",
+    statusBlock,
     careersBlock,
   ].join("");
   return body ? `<div class="mt-4"><h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Details</h4>${body}</div>` : "";
@@ -329,10 +377,19 @@ const staticMapUrl = mapCoordinates
 const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
 const geocodioEnabled = Boolean(import.meta.env.GEOCODIO_API_KEY);
 const savedEmployerNames = new Set(employers.map((employer) => normalizeEmployerName(employer.name)));
-const visibleCandidates = candidates.filter((candidate) => {
+const targetEvents = currentTargetEvents(targetEventRecords);
+const excluded = excludedKeys(targetEvents);
+const excludedList = excludedTargets(targetEvents);
+
+const candidatesBeforeExclusion = candidates.filter((candidate) => {
   const alreadySaved = savedEmployerNames.has(normalizeEmployerName(candidate.name));
   return candidate.review_state !== "promoted" && !alreadySaved;
 });
+// Organisations the user said they are not interested in are suppressed, never
+// silently: the count below says how many, and the Excluded list restores them.
+const candidateSplit = partitionExcluded(candidatesBeforeExclusion, excluded);
+const visibleCandidates = candidateSplit.kept;
+const suppressedCount = candidateSplit.excluded.length;
 
 function normalizeEmployerName(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
@@ -628,13 +685,27 @@ function normalizeEmployerName(name: string) {
           </div>
           <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{visibleCandidates.length} candidates</span>
         </div>
+        {suppressedCount ? (
+          <p class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--muted)]">
+            {suppressedCount === 1 ? "1 candidate is" : `${suppressedCount} candidates are`} hidden because you excluded
+            {suppressedCount === 1 ? " that organisation" : " those organisations"}. The Excluded list below puts
+            {suppressedCount === 1 ? " it" : " them"} back.
+          </p>
+        ) : null}
         <form id="candidate-queue-form" class="mt-4" hx-post="/api/employers/promote" hx-target="#candidate-promote-result" hx-swap="innerHTML">
           <div class="grid gap-3">
             {visibleCandidates.length ? visibleCandidates.map((candidate) => {
               const propagated = candidateScoresByName.get(normalizeEmployerName(candidate.name));
               return (
-                <label class="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4 md:grid-cols-[auto_1fr_auto]">
-                  <input class="mt-1 h-4 w-4 accent-[var(--accent)]" type="checkbox" name="candidate_ids" value={candidate.id} checked={candidate.review_state === "pending"} />
+                <div class="grid gap-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4 md:grid-cols-[auto_1fr_auto]">
+                  <input
+                    class="mt-1 h-4 w-4 accent-[var(--accent)]"
+                    type="checkbox"
+                    name="candidate_ids"
+                    value={candidate.id}
+                    checked={candidate.review_state === "pending"}
+                    aria-label={`Select ${candidate.name} to save or clear`}
+                  />
                   <div>
                     <div class="flex flex-wrap items-center gap-2">
                       <h3 class="font-semibold">{candidate.name}</h3>
@@ -670,8 +741,17 @@ function normalizeEmployerName(name: string) {
                     <span class="text-2xl font-semibold text-[var(--accent-strong)]">{propagated?.score ?? candidate.fit_score}%</span>
                     {propagated ? <span class="text-xs font-semibold text-[var(--muted)]">base {candidate.fit_score}%</span> : null}
                     <span class="cip-pill rounded-md px-2 py-1 text-xs font-semibold">{candidate.priority}</span>
+                    <button
+                      class="cip-action mt-1"
+                      type="button"
+                      data-not-interested
+                      data-employer-name={candidate.name}
+                      data-parent-organization={candidate.parent_organization ?? ""}
+                    >
+                      Not interested
+                    </button>
                   </div>
-                </label>
+                </div>
               );
             }) : (
               <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
@@ -702,6 +782,35 @@ function normalizeEmployerName(name: string) {
           ) : null}
           <div id="candidate-promote-result" class="mt-4"></div>
         </form>
+
+        <details class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4">
+          <summary class="cursor-pointer text-sm font-semibold text-[var(--accent-strong)]">
+            Excluded ({excludedList.length})
+          </summary>
+          {excludedList.length ? (
+            <ul class="mt-3 grid gap-2">
+              {excludedList.map((entry) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--background)] px-3 py-2">
+                  <div>
+                    <p class="text-sm font-semibold text-[var(--foreground)]">{entry.name}</p>
+                    <p class="text-xs text-[var(--muted)]">
+                      You excluded this{entry.createdAt ? ` on ${new Date(entry.createdAt).toLocaleDateString()}` : ""}.
+                      {entry.note ? ` ${entry.note}` : ""}
+                    </p>
+                  </div>
+                  <form method="post" action="/api/employers/target-status">
+                    <input type="hidden" name="employerName" value={entry.name} />
+                    <input type="hidden" name="status" value="new" />
+                    <input type="hidden" name="returnTo" value="/employers" />
+                    <button class="cip-action" type="submit">Put back in the queue</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="mt-3 text-sm text-[var(--muted)]">You have not excluded any organisations.</p>
+          )}
+        </details>
       </section>
 
       </details>
@@ -749,6 +858,44 @@ function normalizeEmployerName(name: string) {
     }
   </style>
   <script>
+    // "Not interested" from the queue. The row lives inside the promote form, so
+    // this posts on its own rather than nesting a second form inside that one.
+    document.addEventListener("click", async (event) => {
+      const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-not-interested]");
+      if (!button) return;
+
+      const result = document.getElementById("candidate-promote-result");
+      const payload = new FormData();
+      payload.set("employerName", button.getAttribute("data-employer-name") || "");
+      payload.set("status", "not_interested");
+      payload.set("returnTo", "/employers");
+      const parent = button.getAttribute("data-parent-organization");
+      if (parent) payload.set("parentOrganization", parent);
+
+      button.disabled = true;
+      button.setAttribute("aria-disabled", "true");
+      if (result) result.innerHTML = '<p class="text-sm font-semibold text-[var(--accent-strong)]">Recording that you are not interested...</p>';
+
+      try {
+        const response = await fetch("/api/employers/target-status", {
+          method: "POST",
+          body: payload,
+          credentials: "same-origin",
+          redirect: "manual",
+        });
+        if (response.ok || response.type === "opaqueredirect" || response.status === 303) {
+          window.location.reload();
+          return;
+        }
+        if (result) result.innerHTML = await response.text();
+      } catch {
+        if (result) result.innerHTML = '<p class="text-sm text-red-700">Could not record that. Nothing was changed; try again.</p>';
+      } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-disabled");
+      }
+    });
+
     document.addEventListener("click", async (event) => {
       const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-clear-candidates]");
       if (!button) return;

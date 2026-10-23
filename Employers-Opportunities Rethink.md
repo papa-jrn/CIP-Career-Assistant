@@ -1636,3 +1636,44 @@ and nothing known - and checking what the search targets and what the card claim
 clean, 886 tests passing including fourteen on the resolution rules, SSR build passed. A founder pass
 on live employers remains, and nothing here fetches the address to confirm it is really a careers
 page; that is a separate check.
+
+### 2026-10-23 — Part 6 target workspace (§14) slice 2: the user's own decision about an employer
+
+Slice 2 is built. Until now the status on an employer card was always CIP's inference, and there was
+no way to tell CIP you had ruled an organisation out — "Clear" deleted the candidate, so discovery
+re-suggested it, which §14 forbids.
+
+`employer_target_events` (migration `20261023120000_employer_target_events.sql`) is append-only and
+keyed on `employer_key = normOrg(name)` rather than a row id, so one decision covers a watched
+employer and a discovery candidate that was never promoted, and keeps holding when discovery
+re-suggests the same organisation under a slightly different name. A decision never overwrites the
+last one, which is what makes "not interested" reversible without pretending it was never decided.
+
+What the card shows is the user's decision when they made one, labelled "You set this", and
+otherwise CIP's suggestion, labelled as a suggestion. An `app`-written status never outranks a
+user's choice recorded at the same moment — mislabelling a user's choice as the app's would let it
+be silently overwritten.
+
+"Not interested" suppresses the organisation from discovery, and **never silently**: the queue says
+how many candidates are hidden and the **Excluded** list puts them back (itself a new event, not a
+deletion). A candidate whose **parent** is excluded is suppressed too, so excluding a parent does not
+leave its hospitals coming back one at a time.
+
+**Decided (the open question §14 left for this slice):** "not interested" does **not** touch the job
+search's employer exclusions, and the copy on the card says so. Widening a search exclusion from a
+workspace click would be a change the user did not ask for; §13 keeps that a separate, explicit
+preference change.
+
+Endpoint hardening as elsewhere: same-origin check, auth before any read, Zod with a closed status
+enum, a body cap, and the employer must already be in that user's workspace (watched or candidate) —
+matched on the normalized name so naming drift does not lose it. A missing table is reported as
+"apply the latest Supabase migrations" rather than failing blankly, and the page's loader treats a
+missing table as "no decisions recorded" so the feature degrades instead of breaking the page.
+
+Verified by driving the rendered page, not by reading source: the page's script is served from
+`/_astro/` (so `script-src 'self'` allows it), loads with no console errors, and a real click on a
+"Not interested" button posts exactly `employerName`, `status=not_interested`, `returnTo` and the
+parent organisation. Typecheck clean, 915 tests passing (19 on the event rules, 10 on the endpoint),
+SSR build passed. The signed-in card controls and the suppressed-count notice still need a founder
+pass on live data, and **the migration is not applied to the hosted database** — it joins the other
+unapplied migrations, so nothing persists there until it is.
