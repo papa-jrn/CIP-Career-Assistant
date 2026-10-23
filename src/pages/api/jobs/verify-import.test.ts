@@ -184,6 +184,15 @@ describe("checking an imported job: what it does", () => {
     expect(offSite.headers.get("HX-Redirect")).not.toContain("untrusted");
   });
 
+  it("puts the success query before the anchor and persists unavailable research honestly", async () => {
+    const result = await request({ importId: "imp-1", returnTo: "/opportunities#imported-jobs" });
+    expect(result.headers.get("HX-Redirect")).toBe("/opportunities?checked=1#imported-jobs");
+    // A second check redirects to this same address. Force a full reload rather
+    // than a fragment-only navigation that leaves htmx indicators on screen.
+    expect(result.headers.get("HX-Refresh")).toBe("true");
+    expect(parseImportedJobCheck(String(state.saved[0].extracted_text), "now")?.employerResearch).toMatchObject({ status: "unavailable", businessConsistency: "unknown" });
+  });
+
   it("says so when the check ran but could not be saved", async () => {
     state.fail = true;
     const response = await request({ importId: "imp-1" });

@@ -10,6 +10,7 @@ import {
   IMPORTED_JOB_CHECK_SOURCE_TYPE,
   applyLatestCheck,
   checksForJob,
+  employerResearchForJob,
   describeCheckAge,
   describeCheckChange,
   isCheckStale,
@@ -393,13 +394,33 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                     )}
                   </div>
                 </dl>
+                {employerResearchForJob(job, importedJobChecks).research && (() => {
+                  const shown = employerResearchForJob(job, importedJobChecks);
+                  const research = shown.research!;
+                  return <section class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 text-sm">
+                    <h4 class="font-semibold">Employer research</h4>
+                    {shown.showingEarlier && <p class="mt-2 rounded-md border border-[var(--line)] p-2" role="status">The latest check did not refresh the earlier supported employer assessment. {shown.latest?.employerResearch?.note} Showing findings from {shown.supported?.checkedAt ? new Date(shown.supported.checkedAt).toLocaleString() : "an earlier check"}; these were not revalidated by the latest attempt.</p>}
+                    <p class="mt-2 font-semibold">{research.businessConsistency === "consistent" ? "The role appears consistent with the company’s business." : research.businessConsistency === "potential_mismatch" ? "The role may conflict with the company’s business. Review the details." : "There isn’t enough information to assess the business match yet."}</p>
+                    <p class="mt-1 text-[var(--muted)]">{research.listingCorroborated ? "The careers page links to your saved listing." : "A careers-page link to your saved listing has not been confirmed."}{research.status === "completed" ? " AI-assisted assessment · " + research.confidence + " confidence." : " Employer research is incomplete."}</p>
+                    {research.matchingRoleUrl && <p class="mt-2"><a class="underline" href={research.matchingRoleUrl} target="_blank" rel="noreferrer noopener">View role on the careers site</a>{!research.listingCorroborated && " — same-title role; compare it with your saved job."}</p>}
+                    <details class="mt-3 border-t border-[var(--line)] pt-2">
+                      <summary class="cursor-pointer font-semibold text-[var(--accent-strong)]">{research.businessConsistency === "consistent" ? "Why this fits the business — explanation & sources" : "Research details & sources"}</summary>
+                      <div class="mt-3 space-y-3 break-words leading-6">
+                        <p class="whitespace-pre-wrap">{research.note}</p>
+                        <p class="text-xs text-[var(--muted)]">{research.status === "completed" ? "This is an AI-assisted interpretation, separate from your personal fit. It does not establish active hiring or guarantee safety. Correct the employer or job description below if needed." : "The direct listing check is shown separately above."}</p>
+                        {research.sources.length > 0 && <p class="text-xs text-[var(--muted)]">Selected excerpts from the checked pages, not the full source text. Open each source to read it in full.</p>}
+                        {research.sources.map(source => <blockquote class="border-l-2 border-[var(--line)] pl-3"><p class="whitespace-pre-wrap">{source.quote}</p><a class="underline" href={source.url} target="_blank" rel="noreferrer noopener">{source.purpose === "business" ? "Read business source" : "Read careers source"}</a></blockquote>)}
+                      </div>
+                    </details>
+                  </section>;
+                })()}
                 <p class="mt-3 text-xs text-[var(--muted)]">
                   {job.capturedAt ? "Saved " + new Date(job.capturedAt).toLocaleString() + "." : "Saved at an unrecorded time."}
                 </p>
                 <div class="mt-3 flex flex-wrap gap-2">
-                  {job.sourceUrl ? <span class="self-center text-xs text-[var(--muted)]">Listing check uses the first link.</span> : null}
+                  {job.sourceUrl ? <span class="self-center text-xs text-[var(--muted)]">Checks the supplied listing and researches the named employer.</span> : null}
                   {job.sourceUrl && signedIn ? (
-                    <form data-job-action="check" data-timeout-seconds="20" method="post" action="/api/jobs/verify-import" hx-post="/api/jobs/verify-import" hx-request='{"timeout":20000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-check-progress-${job.importId}`} hx-disabled-elt="find button">
+                    <form data-job-action="check" data-timeout-seconds="55" method="post" action="/api/jobs/verify-import" hx-post="/api/jobs/verify-import" hx-request='{"timeout":55000}' hx-target={`#job-action-result-${job.importId}`} hx-indicator={`#job-check-progress-${job.importId}`} hx-disabled-elt="find button">
                       <input type="hidden" name="importId" value={job.importId} />
                       <input type="hidden" name="returnTo" value="/opportunities#imported-jobs" />
                       <button class={isCheckStale(job) ? "cip-action cip-action-primary" : "cip-action"} type="submit">
@@ -407,7 +428,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                       </button>
                       <div id={`job-check-progress-${job.importId}`} class="htmx-indicator cip-thinking-panel mt-3" role="status" aria-live="polite">
                         <div class="cip-thinking-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
-                        <div class="min-w-0 flex-1"><p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Checking the listing source (no AI)</p><div class="cip-thinking-lines" aria-hidden="true"><span>Opening the supplied page...</span><span>Matching its title and job ID...</span><span>Saving the source's current status...</span></div><p class="sr-only">Fetching the supplied page and checking its title and requisition ID. This check does not use AI and stops after ten seconds.</p><div class="cip-thinking-bar" aria-hidden="true"><span></span></div></div>
+                        <div class="min-w-0 flex-1"><p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Checking the listing and researching the employer</p><div class="cip-thinking-lines" aria-hidden="true"><span>Checking the supplied page...</span><span>Finding employer business and careers sources...</span><span>Checking attribution and business consistency...</span></div><p class="sr-only">The direct page check stops after ten seconds. Optional AI-assisted employer research has a separate deadline; the browser stops waiting after 55 seconds.</p><div class="cip-thinking-bar" aria-hidden="true"><span></span></div></div>
                       </div>
                     </form>
                   ) : null}
@@ -485,6 +506,7 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                           </span>
                           {" \u2014 " + readableState(entry.state)}
                           {entry.note ? <p class="mt-1">{entry.note}</p> : null}
+                          {entry.employerResearch && <p class="mt-1">Employer research: {entry.employerResearch.note}</p>}
                           {entry.observations?.map((observation) => <p class="mt-1">Observation: {observation.detail}</p>)}
                         </li>
                       ))}
@@ -533,6 +555,28 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         if (location.hash === "#imported-jobs" || location.hash === "#bring-a-job") openPanel(true);
       });
 
+      var jobTimers = new WeakMap();
+      function finishJobRequest(form) {
+        clearTimeout(jobTimers.get(form));
+        form.classList.remove("htmx-request");
+        form.querySelectorAll(".htmx-request").forEach(function (indicator) { indicator.classList.remove("htmx-request"); });
+        form.querySelectorAll("button").forEach(function (button) { button.disabled = false; });
+      }
+      document.body.addEventListener("htmx:beforeRequest", function (event) {
+        var form = event.detail && event.detail.elt && event.detail.elt.closest("[data-job-action]");
+        if (!form) return;
+        clearTimeout(jobTimers.get(form));
+        jobTimers.set(form, setTimeout(function () {
+          form.dispatchEvent(new Event("htmx:abort", { bubbles: true }));
+          finishJobRequest(form);
+          var result = document.querySelector(form.getAttribute("hx-target"));
+          if (result) result.textContent = "The page stopped waiting. The check may still finish saving; reload to see its status before retrying.";
+        }, Number(form.getAttribute("data-timeout-seconds") || "30") * 1000));
+      });
+      document.body.addEventListener("htmx:afterRequest", function (event) {
+        var form = event.detail && event.detail.elt && event.detail.elt.closest("[data-job-action]");
+        if (form) finishJobRequest(form);
+      });
       document.body.addEventListener("htmx:beforeSwap", function (event) {
         var detail = event.detail;
         var target = detail && detail.target;
@@ -548,14 +592,14 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
         var form = source && source.closest && source.closest("[data-job-action]");
         if (!form) return;
         var result = document.querySelector(form.getAttribute("hx-target"));
-        if (result) result.textContent = "The connection failed. Nothing was saved; please try again.";
+        if (result) result.textContent = "The connection failed. Reload to check whether a result was saved before retrying.";
       });
       document.body.addEventListener("htmx:timeout", function (event) {
         var source = event.detail && event.detail.elt ? event.detail.elt : event.target;
         var form = source && source.closest && source.closest("[data-job-action]");
         if (!form) return;
         var result = document.querySelector(form.getAttribute("hx-target"));
-        if (result) result.textContent = "This request exceeded " + (form.getAttribute("data-timeout-seconds") || "30") + " seconds. The page stopped waiting; please retry.";
+        if (result) result.textContent = "This request exceeded " + (form.getAttribute("data-timeout-seconds") || "30") + " seconds. The page stopped waiting. Reload to check whether a result was saved before retrying.";
       });
     })();
   </script>

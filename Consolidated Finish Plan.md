@@ -365,3 +365,19 @@ close them or finish those slices rather than leave them ambiguous.
 
 No estimate of effort is offered here. `Next Steps.md` already warns that this sequence is a few
 weekends per step when done properly, and nothing found on 2026-10-21 makes that warning less true.
+
+### October 22 follow-up: listing-check repair
+
+Check listing now includes bounded, source-grounded employer research and business-consistency inference, with readable citations and explicit fallback. Careers-page links can corroborate script-only ATS listings without changing the separate direct verification state. Corrected the success redirect's query/fragment ordering and added independent progress cleanup. See the Workbench plan's imported-job employer corroboration repair entry for limits and live Vetcove evidence. Signed-in browser acceptance remains open; this does not close the broader launch gates.
+
+### October 22: repeat-check reliability
+
+Founder testing exposed an overly strict provider-source URL allowlist. That gate is removed in favor of actual guarded page reads, matching employer names, and grounded quotes; web-search execution is still required. Source punctuation differences and one failing read are handled independently. A failed recheck keeps the previous supported assessment visible with its date and a not-revalidated notice. See the Workbench plan's repeat-check follow-up for diagnostics and signed-in verification; this supersedes the earlier exact metadata-membership requirement.
+
+A second repeat-click defect was also found: identical HX-Redirect destinations containing an anchor did not reload the page. Successful checks now include HX-Refresh: true. Full suite: 795 passed; final endpoint regression: 12 passed. The next founder button test is pending after the rebuild.
+
+### Session checkpoint — 2026-10-22 evening
+
+Founder reviewed the repaired listing-check flow and approved the compact employer-research presentation, then requested commit/push. This checkpoint includes the Workbench job-button spacing fix, grounded employer research, repeat-check refresh and failure-state repairs, and expandable business reasoning/source excerpts. Validation: full typecheck/test suite passed with 795 tests; the final refresh-header change passed all 12 endpoint tests; the final presentation SSR build passed. No production deployment was requested.
+
+Resume next session with the Opportunities **Assess the fit** button. Review its current behavior on the genuine saved Vetcove job, the existing CIP career context and deterministic/AI paths, and the result/save/return experience. Keep personal suitability separate from employer corroboration and business consistency. Do not treat this checkpoint as founder acceptance of personal-fit results; that is the next work item.

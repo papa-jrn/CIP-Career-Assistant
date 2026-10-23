@@ -6,6 +6,7 @@ import {
   observeImportedListing,
 } from "@/lib/cip/imported-job-checks";
 import { IMPORTED_JOB_SOURCE_TYPE, parseImportedJob } from "@/lib/cip/imported-jobs";
+import { researchImportedEmployer } from "@/lib/cip/imported-employer-research";
 import { escapeHtml } from "@/lib/cip/job-search-view";
 import { verificationFetchUrl, verifyPosting } from "@/lib/cip/job-verifier";
 import { isSameOriginRequest } from "@/lib/security";
@@ -31,7 +32,9 @@ const verifyInput = z.object({
  * earlier observations are kept, which is what lets the app say a posting has
  * changed rather than silently showing a different answer than last week.
  *
- * This checks one page. It does not establish that the employer is hiring, that
+ * The direct check reads the supplied page; bounded AI-assisted research also
+ * discovers employer business/careers sources and grounds quotes in guarded reads.
+ * Neither establishes that the employer is hiring, that
  * anyone will reply, or that a posting is legitimate, and a page it cannot read
  * is reported as unread rather than as fake.
  */
@@ -55,13 +58,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const input = parsed.data;
 
     // The job must be one of this user's own imports.
-    const { data: rows } = await db
+    const { data: rows, error: loadError } = await db
       .from("career_sources")
       .select("extracted_text")
       .eq("user_id", user.id)
       .eq("source_type", IMPORTED_JOB_SOURCE_TYPE)
       .order("created_at", { ascending: false })
       .limit(200);
+    if (loadError) return html("Your saved job could not be loaded. Please retry.", 503);
     const job = ((rows ?? []) as Array<{ extracted_text: string | null }>)
       .map((row) => parseImportedJob(row.extracted_text))
       .find((item) => item?.importId === input.importId);
@@ -74,11 +78,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       );
     }
 
-    const result = await verifyPosting({
+    const [result, employerResearch] = await Promise.all([verifyPosting({
       title: job.title,
       requisitionId: job.requisitionId ?? null,
       sourceUrl: job.sourceUrl,
-    });
+    }), researchImportedEmployer(job)]);
 
     const { error } = await db.from("career_sources").insert({
       user_id: user.id,
@@ -92,6 +96,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
           note: result.note,
           checkedAt: result.checkedAt,
           fetchedUrl: verificationFetchUrl(job.sourceUrl),
+          employerResearch,
           observations: observeImportedListing(job.employer, job.sourceUrl, job.originalMaterial),
         }),
       ),
@@ -102,9 +107,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const path = input.returnTo && /^\/[A-Za-z0-9/_\-?=&#.]*$/.test(input.returnTo)
       ? input.returnTo
       : "/opportunities#imported-jobs";
-    const destination = `${path}${path.includes("?") ? "&" : "?"}checked=1`;
+    const destinationUrl = new URL(path, "http://localhost");
+    destinationUrl.searchParams.set("checked", "1");
+    const destination = destinationUrl.pathname + destinationUrl.search + destinationUrl.hash;
     return request.headers.get("HX-Request") === "true"
-      ? new Response(null, { status: 200, headers: { "HX-Redirect": destination } })
+      ? new Response(null, { status: 200, headers: { "HX-Redirect": destination, "HX-Refresh": "true" } })
       : new Response(null, { status: 303, headers: { Location: destination } });
   } catch {
     return html("The check could not be completed. Nothing was changed; please retry.", 500);

@@ -3,6 +3,7 @@ import { buildImportedJob, describeProvenance, importedJobInput } from "./import
 import {
   applyLatestCheck,
   checksForJob,
+  employerResearchForJob,
   describeCheckAge,
   describeCheckChange,
   importedJobCheckPayload,
@@ -152,5 +153,35 @@ describe("what a check is allowed to mean", () => {
     expect(readableState("no_longer_visible")).toBe("no longer at that address");
     expect(readableState("verification_unavailable")).toBe("could not be read");
     expect(readableState("discovered_unverified")).toBe("not checked");
+  });
+});
+
+describe("stored employer research", () => {
+  it("keeps legacy checks readable and ignores malformed research", () => {
+    for (const employerResearch of [undefined, { status: "completed", sources: [] }, { status: "completed", note: "test", sources: [{ url: "javascript:alert(1)", quote: "test", purpose: "business" }], listingCorroborated: true, businessConsistency: "consistent", confidence: "medium" }]) {
+      const result = parseImportedJobCheck(JSON.stringify({ importedJobCheck: { importId: "test", state: "verification_unavailable", employerResearch } }), "2026-10-22");
+      expect(result?.state).toBe("verification_unavailable");
+      expect(result?.employerResearch).toBeUndefined();
+    }
+  });
+});
+
+describe("employer research across rechecks", () => {
+  const research = { status: "completed" as const, note: "Operations aligns with the researched business.", sources: [{ url: "https://riverside.org/about", quote: "Riverside Health provides health services.", purpose: "business" as const }], listingCorroborated: false, businessConsistency: "consistent" as const, confidence: "medium" as const };
+  it("keeps earlier supported information separate from a failed refresh", () => {
+    const good = check({ employerResearch: research, checkedAt: "2026-10-22T10:00:00.000Z" });
+    const failed = check({ employerResearch: { ...research, status: "unavailable", sources: [], businessConsistency: "unknown", note: "Could not refresh sources." } });
+    const shown = employerResearchForJob(job(), [good, failed]);
+    expect(shown.showingEarlier).toBe(true);
+    expect(shown.latest).toBe(failed);
+    expect(shown.supported).toBe(good);
+    expect(shown.research).toBe(research);
+    expect(failed.employerResearch?.status).toBe("unavailable");
+  });
+  it("uses fresh successful research and isolates other jobs and revised imports", () => {
+    const good = check({ employerResearch: research });
+    expect(employerResearchForJob(job(), [good]).showingEarlier).toBe(false);
+    expect(employerResearchForJob(job("another"), [good]).research).toBeUndefined();
+    expect(employerResearchForJob({ ...job(), capturedAt: "2026-10-23T00:00:00.000Z" }, [good]).research).toBeUndefined();
   });
 });

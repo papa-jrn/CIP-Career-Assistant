@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { EmployerResearch } from "./imported-employer-research";
 import type { VerificationResult } from "@/lib/cip/job-verifier";
 import type { ImportedJob } from "@/lib/cip/imported-jobs";
 
@@ -27,7 +29,16 @@ export interface ImportedJobCheck {
   fetchedUrl: string;
   /** Observable clues only. None proves employer identity or safety. */
   observations?: ListingObservation[];
+  employerResearch?: EmployerResearch;
 }
+
+const researchUrl = z.string().url().max(2000).refine(value => /^https?:\/\//i.test(value));
+const savedResearchSchema = z.object({
+  status: z.enum(["completed", "unavailable"]), note: z.string().max(2000),
+  sources: z.array(z.object({ url: researchUrl, quote: z.string().max(800), purpose: z.enum(["business", "careers"]) })).max(2),
+  listingCorroborated: z.boolean(), matchingRoleUrl: researchUrl.optional(),
+  businessConsistency: z.enum(["consistent", "potential_mismatch", "unknown"]), confidence: z.enum(["low", "medium"]),
+});
 
 export interface ListingObservation {
   kind: "employer_name_in_domain" | "employer_name_not_in_domain" | "payment_request" | "sensitive_data_request";
@@ -74,6 +85,7 @@ export function parseImportedJobCheck(value: string | null, createdAt: string): 
       note: typeof check.note === "string" ? check.note : "",
       checkedAt: typeof check.checkedAt === "string" && check.checkedAt ? check.checkedAt : createdAt,
       fetchedUrl: typeof check.fetchedUrl === "string" ? check.fetchedUrl : "",
+      employerResearch: savedResearchSchema.safeParse(check.employerResearch).data,
       observations: Array.isArray(check.observations) ? check.observations.filter((item: ListingObservation) => item && typeof item.detail === "string" && ["employer_name_in_domain", "employer_name_not_in_domain", "payment_request", "sensitive_data_request"].includes(item.kind)) : [],
     };
   } catch {
@@ -156,4 +168,17 @@ export function readableState(state: VerificationResult["state"]): string {
     default:
       return "not checked";
   }
+}
+
+/** Keep the latest attempt distinct from the last supported finding for this revision. */
+export function employerResearchForJob(job: ImportedJob, checks: ImportedJobCheck[]) {
+  const history = checksForJob(job.importId, checks).filter(check => !job.capturedAt || check.checkedAt >= job.capturedAt);
+  const latest = history[0];
+  const supported = history.find(check => check.employerResearch?.status === "completed" && check.employerResearch.sources.length > 0);
+  return {
+    latest,
+    supported,
+    showingEarlier: Boolean(supported && latest && supported !== latest),
+    research: supported?.employerResearch ?? latest?.employerResearch,
+  };
 }
