@@ -969,3 +969,38 @@ October 23 live trace: 85 evidence records / 49,167 characters, posting 10,317 c
 October 23 evidence attribution repair: provider output completed in 15 seconds but failed exact personal-quote transcription. AI now selects stable evidence excerpt references; the server attaches verbatim saved excerpts. Split selected career evidence into citable 550-character excerpts, retain runtime reference validation, and never rely on generated quotes for personal attribution.
 
 Live verification after reference-only citation repair: authenticated Vetcove Assess fit again completed in 17.365 seconds, saved and rendered AI-assisted personal fit 10/10 with Talk to someone first, three lane comparisons (partial/strong/partial), and source-backed requirement excerpts. Type check plus 27 focused tests passed. This confirms execution and persistence; scoring remains an interpretation for user review.
+
+## Implemented 2026-10-23: collapse the job list into triage rows
+
+Founder review: the job list had become unusable in length as fit and verification detail were added
+to each card. Each searched job was rendering eleven to thirteen blocks - title, employer, new chip,
+verification chip, skill-match chip, a facts line, a pay line, a verification note, a source-tier
+line, an archive button, the full fit assessment, the assess form with its clarification and progress
+indicator, and a recommendation block with up to four status buttons. At the 55 listings of a real
+run that is not a long page, it is an unreadable one.
+
+Each job is now a disclosure. The founder proposed three visible fields - title, employer,
+verification. The summary carries five, because the list's job is triage: with only three, a reader
+would have to open every row to decide anything, which trades scrolling for a click per job and loses
+the ability to scan. The summary is title and employer on the first line; verification state, the fit
+conclusion, and a compact facts line (location, pay, posted) on the second. The fit chip shows the
+user's own decision where they have made one, the assessment where one exists, and "Fit not assessed"
+otherwise - so an unassessed job looks unassessed rather than neutral.
+
+Imported jobs got the same treatment, so one screen does not carry two visual languages for "a job".
+
+Fixed as part of this rather than left to be discovered: archiving a job re-renders the whole search
+panel (`hx-target="#job-search-panel" hx-swap="outerHTML"`), which would have snapped every open row
+shut and lost the reader's place. Open rows are now recorded before the swap and restored after. The
+assess-fit form was already scoped to its own result element and needed no change.
+
+One deliberate change of behaviour: the job title in the collapsed row is text, not a link. A link
+inside a summary competes with the disclosure toggle; the link to the posting lives in the body.
+
+Verified by rendering the panel through the real view function: the collapsed row reads
+"Executive Director · Upper Valley Haven · Verified open on the source page · Talk to someone first ·
+Worksite: Lebanon, NH". Typecheck clean, 848 tests passing, SSR build passed.
+
+Next, agreed with the founder: filtering and sorting, by fit first and then by verification freshness.
+Collapsing buys roughly a sixfold reduction in height; at 55-plus jobs that is necessary but probably
+not sufficient.

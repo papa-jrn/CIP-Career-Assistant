@@ -345,18 +345,31 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
           </h3>
           <div class="mt-3 grid gap-3">
             {[{ label: "Jobs to review", jobs: importedJobs.filter(job => showingArchived || fitForJob(job)?.analysis?.rubricVersion !== 3 || fitForJob(job)?.analysis?.score == null || fitForJob(job)!.analysis!.score! >= 6), lower: false }, { label: "Lower-fit opportunities", jobs: showingArchived ? [] : importedJobs.filter(job => fitForJob(job)?.analysis?.rubricVersion === 3 && fitForJob(job)?.analysis?.score != null && fitForJob(job)!.analysis!.score! < 6), lower: true }].filter(group => group.jobs.length).map(group => <details open={!group.lower} class="rounded-md border border-[var(--line)] p-3"><summary class="cursor-pointer font-semibold">{group.label} ({group.jobs.length})</summary>{group.lower && <p class="mt-2 text-xs">Scored below 6. Kept for review; Not for me archives a job.</p>}<div class="mt-3 grid gap-3">{group.jobs.map((job) => (
-              <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p class="font-semibold text-[var(--foreground)]">{job.title}</p>
-                    <p class="mt-1 text-sm text-[var(--muted)]">
-                      {job.worksiteText ? job.employer + " \u00b7 " + job.worksiteText : job.employer}
-                    </p>
-                  </div>
-                  <span class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
-                    {job.material === "pasted" ? "Your pasted text" : job.material === "url" ? "Your link" : "Link and text"}
+              <details class="group rounded-md border border-[var(--line)] bg-[var(--background)]">
+                <summary class="cursor-pointer list-none p-4">
+                  <span class="flex flex-wrap items-start justify-between gap-3">
+                    <span class="min-w-0">
+                      <span class="block font-semibold text-[var(--foreground)]">{job.title}</span>
+                      <span class="mt-1 block text-sm text-[var(--muted)]">
+                        {job.worksiteText ? job.employer + " \u00b7 " + job.worksiteText : job.employer}
+                      </span>
+                    </span>
+                    <span class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                      <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold bg-[var(--panel)] text-[var(--muted)]">
+                        {job.verification ? readableState(job.verification.state) : "Not checked yet"}
+                      </span>
+                      <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold bg-[var(--panel)] text-[var(--muted)]">
+                        {fitForJob(job) ? readableRecommendation(fitForJob(job)!.recommendation) : "Fit not assessed"}
+                      </span>
+                    </span>
                   </span>
-                </div>
+                  <span class="mt-2 block text-xs leading-5 text-[var(--muted)]">
+                    {job.material === "pasted" ? "Your pasted text" : job.material === "url" ? "Your link" : "Link and text"}
+                    {job.capturedAt ? " \u00b7 saved " + new Date(job.capturedAt).toLocaleDateString() : ""}
+                    <span class="ml-2 font-semibold text-[var(--accent-strong)] group-open:hidden">Open</span>
+                  </span>
+                </summary>
+                <div class="border-t border-[var(--line)] p-4">
                 {job.userNote ? (
                   <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{job.userNote}</p>
                 ) : null}
@@ -503,7 +516,8 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
                     </p>
                   </details>
                 ) : null}
-              </article>
+                </div>
+              </details>
             ))}</div></details>)}
           </div>
         </div>
@@ -511,6 +525,31 @@ const withCareerPage = employers.filter((employer) => employer.careers_url);
     </section>
   </main>
   <script is:inline>
+    // Archiving a job re-renders the whole search panel, which would snap every
+    // open job row shut and lose the reader's place in a long list. Remember
+    // which rows were open across the swap and restore them.
+    (function () {
+      var openRows = [];
+      document.body.addEventListener("htmx:beforeSwap", function (event) {
+        var target = event.target;
+        if (!target || target.id !== "job-search-panel") return;
+        openRows = [].slice
+          .call(target.querySelectorAll("details[data-job-row][open]"))
+          .map(function (row) { return row.getAttribute("data-job-row"); });
+      });
+      document.body.addEventListener("htmx:afterSwap", function (event) {
+        var target = event.target && event.target.id === "job-search-panel"
+          ? event.target
+          : document.getElementById("job-search-panel");
+        if (!target || !openRows.length) return;
+        openRows.forEach(function (key) {
+          var row = target.querySelector('details[data-job-row="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+          if (row) row.open = true;
+        });
+        openRows = [];
+      });
+    })();
+
     // The import form is reached from the top of the page, so opening it must
     // not cost a reload or a scroll hunt. Also handles landing on the anchor
     // directly, e.g. from a bookmark or the back button.

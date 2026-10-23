@@ -221,18 +221,33 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
     row.requisition_id ? `Req ${escapeHtml(row.requisition_id)}` : "",
   ].filter(Boolean);
   const payLine = describePay(row.salary_text, floorUsd);
+  // The summary carries what a reader triages on: who and where, whether the
+  // listing is real, and what the app (or the user) concluded about fit.
+  // Everything else is one click away. Without a fit or verification signal up
+  // here, a long list would have to be opened row by row, which is worse than
+  // scrolling it.
+  const summaryFacts = [locationLine(row), payLine ? `Pay: ${payLine}` : "", row.posted_text ?? ""]
+    .filter(Boolean)
+    .map((value) => escapeHtml(value))
+    .join(" · ");
   return `
-    <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0">
-          <p class="text-sm">${title}</p>
-          <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(row.employer_text)}</p>
-        </div>
-        <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          ${isNew ? `<span class="inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">New since your last search</span>` : ""}
-          <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${label.tone}">${escapeHtml(label.text)}</span>
-        </div>
-      </div>
+    <details class="group rounded-md border border-[var(--line)] bg-[var(--background)]" data-job-row="${escapeHtml(row.source_url)}">
+      <summary class="cursor-pointer list-none p-4">
+        <span class="flex flex-wrap items-start justify-between gap-2">
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold text-[var(--foreground)]">${escapeHtml(row.title)}</span>
+            <span class="mt-1 block text-sm text-[var(--muted)]">${escapeHtml(row.employer_text)}</span>
+          </span>
+          <span class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            ${isNew ? `<span class="inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">New since your last search</span>` : ""}
+            <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${label.tone}">${escapeHtml(label.text)}</span>
+            ${summaryFitChip(row, annotations)}
+          </span>
+        </span>
+        <span class="mt-2 block text-xs leading-5 text-[var(--muted)]">${summaryFacts}<span class="ml-2 font-semibold text-[var(--accent-strong)] group-open:hidden">Open</span></span>
+      </summary>
+      <div class="border-t border-[var(--line)] p-4">
+      <p class="text-sm">${title}</p>
       ${isSkillMatch(row) ? `<p class="mt-2 inline-flex rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">Outside your current lanes — matches your proven experience</p>` : ""}
       <p class="mt-2 text-xs leading-5 text-[var(--muted)]">${escapeHtml(locationLine(row))}${bits.length ? ` · ${bits.join(" · ")}` : ""}</p>
       ${payLine ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">Pay: ${escapeHtml(payLine)}</p>` : ""}
@@ -249,7 +264,35 @@ function postingCard(row: ObservationRow, floorUsd: number | null, newUrls?: Set
         </form><div id="fit-result-${escapeHtml(row.id)}" role="status"></div>
       </div>
       ${recommendationBlock(row, annotations)}
-    </article>`;
+      </div>
+    </details>`;
+}
+
+/**
+ * The fit signal shown in the collapsed row.
+ *
+ * The user's own decision wins over the app's suggestion, because that is what
+ * they are actually triaging against. When nothing has been assessed the row
+ * says so rather than staying silent, so an unassessed job is visibly
+ * unassessed instead of looking neutral.
+ */
+function summaryFitChip(row: ObservationRow, annotations?: PostingAnnotations): string {
+  if (!annotations) return "";
+  const userStatus = matchDisposition(row, annotations.dispositions);
+  if (userStatus) {
+    return `<span class="${PILL} bg-[var(--accent-soft)] text-[var(--accent-strong)]">Your call: ${escapeHtml(STATUS_LABEL_USER[userStatus.status])}</span>`;
+  }
+  const fit = annotations.fits?.get(row.source_url);
+  if (fit) {
+    const chip = CHIP_META[fit.recommendation] ?? CHIP_META.monitor;
+    return `<span class="${PILL} ${chip.tone}">${escapeHtml(chip.label)}</span>`;
+  }
+  const rec = annotations.recommendations.get(row.source_url);
+  if (rec) {
+    const chip = CHIP_META[rec.category] ?? CHIP_META.monitor;
+    return `<span class="${PILL} ${chip.tone}">${escapeHtml(chip.label)}</span>`;
+  }
+  return `<span class="${PILL} bg-[var(--panel)] text-[var(--muted)]">Fit not assessed</span>`;
 }
 
 function group(title: string, note: string, rows: ObservationRow[], floorUsd: number | null, newUrls?: Set<string>, annotations?: PostingAnnotations) {
