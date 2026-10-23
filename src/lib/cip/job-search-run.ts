@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { currentCareersUrls, loadCareersUrlCorrections } from "@/lib/cip/employer-careers-url";
+import { normOrg } from "@/lib/cip/employer-resolution";
 import { loadSearchBrief, type AreaResolver } from "@/lib/cip/brief-loader";
 import {
   addUsage,
@@ -721,6 +723,28 @@ async function loadTargetCareerUrls(
     const url = String(row.careers_url ?? "").trim();
     if (name && url) byName.set(name, url);
   }
+
+  // The user's own answer wins over the one discovery guessed, and their
+  // "there is no careers page" removes the target entirely rather than
+  // sending the search back to a guess they have already rejected.
+  const corrections = currentCareersUrls(await loadCareersUrlCorrections(supabase, userId));
+  if (corrections.size) {
+    for (const name of [...byName.keys()]) {
+      const correction = corrections.get(normOrg(name));
+      if (!correction) continue;
+      if (correction.careersUrl) byName.set(name, correction.careersUrl);
+      else byName.delete(name);
+    }
+    // A correction can also name an employer discovery never gave a page for.
+    for (const correction of corrections.values()) {
+      if (!correction.careersUrl) continue;
+      const already = [...byName.keys()].some((name) => normOrg(name) === correction.employerKey);
+      if (!already && wanted.some((name) => normOrg(name) === correction.employerKey)) {
+        byName.set(correction.employerName, correction.careersUrl);
+      }
+    }
+  }
+
   return [...byName].map(([name, url]) => ({ name, url }));
 }
 

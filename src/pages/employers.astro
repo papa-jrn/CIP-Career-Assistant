@@ -11,6 +11,13 @@ import { loadTargetWorkspace, type TargetWorkspace } from "../lib/cip/target-wor
 import { renderWorkspace } from "../lib/cip/target-workspace-view";
 import { loadStrategicState, type StrategicEmployerScore } from "../lib/cip/strategic-state";
 import { createServer } from "../lib/supabase/server";
+import {
+  currentCareersUrls,
+  describeCareersUrl,
+  loadCareersUrlCorrections,
+  resolveCareersUrl,
+  type CareersUrlCorrection,
+} from "../lib/cip/employer-careers-url";
 
 type EmployerRow = {
   id: string;
@@ -115,6 +122,8 @@ const employerSectors = [
 
 let signedIn = false;
 let employers: EmployerRow[] = [];
+// The user's own answers about where each employer posts its jobs.
+let careersUrlRecords: CareersUrlCorrection[] = [];
 let candidates: CandidateRow[] = [];
 let sources: SourceRow[] = [];
 let loadError = "";
@@ -143,6 +152,8 @@ if (import.meta.env.PUBLIC_SUPABASE_URL && import.meta.env.PUBLIC_SUPABASE_ANON_
 
       if (error) loadError = error.message;
       else employers = (data ?? []) as EmployerRow[];
+
+      careersUrlRecords = await loadCareersUrlCorrections(supabase, user.id);
 
       const { data: candidateData } = await supabase
         .from("employer_candidates")
@@ -203,6 +214,9 @@ function safeLink(url: string | null | undefined): string | null {
 
 // Detail the dossier does not carry (kept from the old saved-businesses list so nothing is lost).
 const employerById = new Map(employers.map((employer) => [employer.id, employer]));
+// What the user has told us about where each employer posts its jobs. The
+// weekly search targets this, so a guess and an answer must not look alike.
+const careersCorrections = currentCareersUrls(careersUrlRecords);
 function extrasHtml(dossier: TargetDossier): string {
   const employer = employerById.get(dossier.employerId);
   if (!employer) return "";
@@ -210,17 +224,48 @@ function extrasHtml(dossier: TargetDossier): string {
   const roles = (employer.target_roles ?? []).map((role) => `<span class="${chip}">${escapeHtml(role)}</span>`).join(" ");
   const notes = (employer.source_notes ?? []).map((note) => `<p><span class="font-semibold">${escapeHtml(note.label)}:</span> ${escapeHtml(note.value)}</p>`).join("");
   const sourceHref = safeLink(employer.source_url);
-  const careersHref = safeLink(employer.careers_url);
+  const careers = resolveCareersUrl({ name: employer.name, careers_url: employer.careers_url }, careersCorrections);
+  const careersHref = careers ? safeLink(careers.url) : null;
   const links = [
     sourceHref ? `<a class="underline" href="${escapeHtml(sourceHref)}" target="_blank" rel="noopener noreferrer">Source</a>` : "",
     careersHref ? `<a class="underline" href="${escapeHtml(careersHref)}" target="_blank" rel="noopener noreferrer">Careers page</a>` : "",
   ].filter(Boolean).join(" · ");
+
+  // Where the search will look, said plainly, with a way to correct it.
+  const careersBlock = `
+    <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+      <p class="text-xs font-semibold uppercase text-[var(--muted)]">Where the search looks first</p>
+      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(describeCareersUrl(careers))}</p>
+      ${careers?.replaced ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">It replaced: ${escapeHtml(careers.replaced)}</p>` : ""}
+      <details class="mt-2">
+        <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">${careers ? "Correct this address" : "Add the careers page"}</summary>
+        <form class="mt-2 grid gap-2" method="post" action="/api/employers/careers-url" hx-post="/api/employers/careers-url">
+          <input type="hidden" name="employerName" value="${escapeHtml(employer.name)}" />
+          <input type="hidden" name="returnTo" value="/employers" />
+          <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+            Careers page address
+            <input name="careersUrl" type="url" maxlength="2000" placeholder="https://" value="${escapeHtml(careers?.url ?? "")}" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
+          </label>
+          <label class="inline-flex items-center gap-2 text-xs text-[var(--muted)]">
+            <input type="checkbox" name="none" value="yes" class="h-4 w-4" />
+            This employer has no careers page I know of
+          </label>
+          <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
+            How you found it (optional)
+            <input name="note" maxlength="300" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
+          </label>
+          <button class="cip-action justify-self-start" type="submit">Save this address</button>
+          <p class="text-xs leading-5 text-[var(--muted)]">Used by the weekly search before sector boards and the open web.</p>
+        </form>
+      </details>
+    </div>`;
   const body = [
     employer.location || employer.estimated_size ? `<p class="text-sm text-[var(--muted)]">${escapeHtml([employer.location, employer.estimated_size].filter(Boolean).join(" - "))}</p>` : "",
     employer.fit_summary ? `<p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(employer.fit_summary)}</p>` : "",
     roles ? `<p class="mt-2 flex flex-wrap gap-2">${roles}</p>` : "",
     notes ? `<div class="mt-2 space-y-1 text-xs text-[var(--muted)]">${notes}</div>` : "",
     links ? `<p class="mt-2 text-xs">${links}</p>` : "",
+    careersBlock,
   ].join("");
   return body ? `<div class="mt-4"><h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Details</h4>${body}</div>` : "";
 }

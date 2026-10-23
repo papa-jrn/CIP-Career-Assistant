@@ -1607,3 +1607,32 @@ Resume context follow-up: verify the original intake resume separately from gene
 Concrete evidence bug found in live SEO verification: the old aspiration/negation guard matched any occurrence of not, including not-for-profit in the Bee Balm excerpt, and wrongly downgraded WordPress/HTML/CSS support. Restrict it to explicit first-person lack/aspiration statements. Named tooling copied from a posting must not be presented as user expertise without corresponding cited user evidence. Regression tests cover both false negatives and tool-claim inflation.
 
 Final live verification after the nonprofit-negation repair: Web Optimization and Support Analyst saved and displayed 8/10 using the persisted user clarification, complete resume and selected career evidence. Below-floor compensation remained separate pursuit advice. Named SEO tool specifics and PHP/Apache details remain clarification questions rather than invented expertise or zero-value experience. User clarification includes organic SEO duration, WordPress work, at least 20 client websites and Prouty/Luminate work, saved as user-stated evidence without changing the original resume. Last focused regression run: 44 passed; final build and live flow succeeded.
+
+### 2026-10-23 — Remember each target's real career-page URL: BUILT (item 3)
+
+The weekly search targets an employer's careers page before sector boards and the open web, and that
+address could only ever come from business discovery - a model's suggestion. Nothing distinguished a
+guess from a page anyone had opened, and there was no way to correct one. A wrong address makes an
+employer look like it has nothing open.
+
+The user can now set an employer's careers page, or say it has none, from the employer card. Their
+answer is stored additively and applied when the employer is read, so the discovered value survives
+and the card can say "Careers page you supplied, replacing the one CIP had guessed" rather than
+presenting their answer as its own finding. A discovered address now says so plainly: "CIP guessed
+this when it found this employer. It has not been confirmed."
+
+"There is no careers page" is treated as a real answer: it removes the target rather than falling
+back to the guess the user just rejected, and the card explains that the search will use sector
+boards and the open web for that employer instead. A correction can also name an employer discovery
+never found a page for.
+
+Fed back where it matters: `loadCareerPageTargets` applies corrections before the run picks targets,
+matching on the normalized employer name so small naming differences do not lose the answer. Only
+http(s) is accepted, at the schema and at read time, so an unusable address can never be handed to
+the fetcher.
+
+Verified by printing all four states through the real functions - discovered only, corrected, "none",
+and nothing known - and checking what the search targets and what the card claims in each. Typecheck
+clean, 886 tests passing including fourteen on the resolution rules, SSR build passed. A founder pass
+on live employers remains, and nothing here fetches the address to confirm it is really a careers
+page; that is a separate check.
