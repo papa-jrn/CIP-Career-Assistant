@@ -335,15 +335,30 @@ score or an inference. Lane role families remain founder-shaped and are deferred
 covered against fixtures, no live AI. Three defects found and fixed in the writing, including two
 founder-specific heuristics that survived Step 2.
 
-**Step 4 — Finish the redesign.** (D)
-The agreed implementation slices are built: core jobs (founder-reviewed October 23), consolidated
-People navigation/capture and compact employer dossiers/status access (founder-reviewed October 26),
-and careers-page persistence through dossier links and both search paths. Final founder confirmation
-of saving/reloading a real careers URL and the next search remains before closing this step.
+**Step 4 — Finish the redesign.** ~~(D)~~ **CLOSED 2026-10-26.**
+Every agreed implementation slice is built and founder-accepted: core jobs (October 23), consolidated
+People navigation/capture and compact employer dossiers/status access (October 26), careers-page
+persistence through dossier links and both search paths, and the fit-summary boundary repair. The
+founder saved real careers pages for employers discovery had failed to find one for, confirmed they
+were retained, and ran a further weekly search.
+
+Closed with two gaps stated rather than resolved, because closing a step on an inference is how a
+feature nobody has watched work reaches beta:
+
+- **The saved careers URL steering the search is confirmed by fixtures, not by a live run.** The
+  October 26 search returned nothing from the two employers whose pages the founder had supplied.
+  The founder checked both pages by hand and there was genuinely nothing fitting, so the *outcome*
+  is correct either way - but "nothing found" is equally consistent with the run reading the saved
+  page and with the run never using it. The run's stored coverage (`careersPageUrl` per employer,
+  shown in "What was checked") can still settle this for free, with no new run.
+- **Exclusion and restore (§14 slice 2) has no signed-in acceptance.** It has only ever been seen
+  rendering "Excluded (0)". The reviewed status control is a different path.
+
 Import-component extraction is deferred unless empty-account acceptance identifies a real usability
 problem. The historical contact-metadata issue is not a reproduced current importer defect; keep its
 provenance/correction backlog separate from an unnecessary importer rewrite. Broader target workspace
-work remains deferred. Formal end-to-end acceptance belongs to Step 5.
+work remains deferred. Both gaps above carry into Step 5, whose live passes exercise the search and
+the workspace anyway. Formal end-to-end acceptance belongs to Step 5.
 **Step 5 — Acceptance.** (E)
 Two live passes, first use on an empty account, induced failure and retry, screen-reader. These need
 steps 1–4 to be meaningful, because they test the loop end to end.
@@ -431,3 +446,22 @@ Fit-summary repair validation: TypeScript, all 935 tests and isolated SSR build 
 ### October 26: founder testing accepted; Git checkpoint
 
 Founder reports successful additional job-fit assessments and a complete fresh weekly search with good results, accepting the reviewed fit-summary repair and live assessment/search flow. Earlier employer UI and People navigation/capture acceptance stand. Formal Step 5 acceptance remains open, and the specific careers-URL correction scenario is not inferred from a generally successful search. Final code validation: 935 tests, TypeScript and isolated SSR build passed. This checkpoint is being committed/pushed under the founder's earlier instruction to push after testing; no deployment is part of it.
+
+### October 26: Step 4 closed
+
+The founder saved real careers pages for employers discovery had not found one for, confirmed the
+addresses were retained, and ran a further weekly job search with new jobs appearing. Nothing
+appeared from the two employers whose pages had just been supplied; the founder checked both pages
+directly and confirmed there was nothing fitting there, and called the test positive. That judgement
+is about the result, and the result is right.
+
+Recorded precisely, because the distinction matters later: this establishes that saving a careers
+page works end to end from the user's side, and that the search produces good results with the
+saved addresses in place. It does not establish that the run read those specific saved pages, since
+an empty result looks identical whether the page was read or never reached. The stored coverage for
+that run still answers it at no cost.
+
+Step 4's implementation work is complete and accepted. Carried into Step 5: live confirmation that a
+saved careers URL reaches the run, and signed-in acceptance of exclusion/restore. Nine days of
+building, testing and cleanup across jobs, employers, People and the search - the largest step in
+the plan.

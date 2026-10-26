@@ -1193,3 +1193,21 @@ Fit-summary validation: TypeScript and all 935 tests across 68 files passed; iso
 ## Founder live acceptance checkpoint — 2026-10-26
 
 Founder ran additional job-fit assessments and a complete new weekly job search and reports the results look good. This accepts the reviewed fit-summary repair and ordinary live assessment/search flow, alongside the earlier employer dossier and People navigation/capture acceptance. It is not the formal Step 5 constraint-change, empty-account, induced-failure or screen-reader acceptance pass. The specific manually corrected careers-URL save/refresh/next-search scenario has not been separately confirmed. Automated validation remains 935 passing tests, TypeScript clean and isolated SSR build passed; no application code changed after that validation. Proceed with the previously planned commit/push after this live testing report.
+
+## Step 4 closed — 2026-10-26
+
+The founder supplied real careers pages for employers discovery had failed on, confirmed they were
+retained across a reload, and ran another weekly search that surfaced new jobs. The two employers
+whose pages were just added returned nothing; the founder verified by hand that neither had a
+fitting role, and accepted the test.
+
+What that confirms: saving a careers page works from the user's side, and the search runs well with
+saved addresses in place. What it does not confirm: that the run actually read those pages. An empty
+result is identical whether the saved URL was used or never reached the run, so the fixtures remain
+the only evidence for that leg. The run's stored coverage (`careersPageUrl` per employer, surfaced
+in "What was checked") can confirm it without a new search.
+
+Also unverified signed in: §14 slice 2 exclusion and restore, seen only as "Excluded (0)".
+
+Step 4 implementation is complete and accepted. Both gaps carry into Step 5 rather than being
+treated as closed.
