@@ -280,6 +280,8 @@ files with no way to tell.
 
 ### E. Acceptance work still open
 
+**Planned 2026-10-26: see section 4 for the accounts, the order, and what each pass proves.**
+
 - Two live acceptance passes (Rethink §15.3): baseline run, change a constraint, re-run, trace the
   change through brief, search, observations, result. Include zero-result and failure paths.
 - First use on an empty new account.
@@ -359,9 +361,11 @@ problem. The historical contact-metadata issue is not a reproduced current impor
 provenance/correction backlog separate from an unnecessary importer rewrite. Broader target workspace
 work remains deferred. Both gaps above carry into Step 5, whose live passes exercise the search and
 the workspace anyway. Formal end-to-end acceptance belongs to Step 5.
-**Step 5 — Acceptance.** (E)
+**Step 5 — Acceptance.** (E) **Planned 2026-10-26 — see section 4, "Step 5 acceptance plan".**
 Two live passes, first use on an empty account, induced failure and retry, screen-reader. These need
-steps 1–4 to be meaningful, because they test the loop end to end.
+steps 1–4 to be meaningful, because they test the loop end to end. Step 5 is also the first time the
+product is used by someone who is not the founder, which is a larger change in test conditions than
+the item list suggests.
 
 **Step 6 — Launch gates.** (G)
 Hosted migrations, restore the run cap, secrets to runtime, Vercel adapter, cost model, sign-up
@@ -374,7 +378,112 @@ someone else.
 
 ---
 
-## 4. Honest notes on this plan
+## 4. Step 5 acceptance plan
+
+Written 2026-10-26, when Step 4 closed. Everything built so far has been validated against one
+person's data: the founder's. Three of the five acceptance items do not need that to change, but the
+one that does is the one that matters most, and the decision below goes further than the item list.
+
+### 4.1 The accounts
+
+**Account A — the founder's.** Real history, known-good expectations, three concentrated lanes
+(technology executive, nonprofit executive, education). Best for anything where the tester needs to
+recognise a wrong answer on sight.
+
+**Account B — the founder's wife's existing account.** Chosen deliberately over an invented persona:
+real messy data beats a fixture, and this account already exists from Spring 2026, when the app
+produced resumes and little else. Her background spans five strands - database/SQL work, user
+support, fundraising, financial advising, and now high-school teaching.
+
+Two properties make this account unusually valuable:
+
+- **Her Spring records are the first legacy data this codebase has ever read.** Several migrations
+  and the whole de-founder pass landed after they were written. Read-path failures on
+  old-shaped records are expected here, are findings rather than setbacks, and could not be obtained
+  from a fixture.
+- **One of her five strands is in-lane and four are not**, which gives the lane-coverage test a
+  built-in control (see 4.4).
+
+She is a participant, not a data source: the import runs under her login, not the founder's, so her
+contacts - real third parties - do not land in account A.
+
+**Account C — a genuinely empty alias.** Account B cannot serve the first-use item because it
+already holds Spring data. A `+alias` address is a distinct identity to Supabase and arrives in the
+founder's inbox, so the magic-link round trip works without a second mailbox.
+
+### 4.2 The passes, and what each one actually proves
+
+1. **Live loop pass, twice (Rethink §15.3), account A.** Baseline run; change a constraint; re-run;
+   trace the change through brief, search, observations and result. Must include a zero-result path
+   and a failure path. *Proves:* the loop propagates a change rather than recomputing from scratch.
+   Needs account A because recognising a wrong trace requires knowing the right one.
+2. **Second-user pass, account B.** Import her network, capture a conversation, run a search, assess
+   a fit, set an employer status. *Proves:* the product works for someone who is not the founder -
+   and, incidentally, that RLS isolates two real concurrent users, which nothing has ever tested.
+3. **First use, account C.** Sign up and get to a first useful output with nothing stored.
+   *Proves:* the empty-account path is navigable. This is the pass that decides whether import-first
+   placement needs revisiting; import-component extraction was deferred on 2026-10-26 pending
+   exactly this evidence.
+4. **Induced analysis failure and retry**, either account. Force a failure (an unreachable page, a
+   missing key, a malformed upload) and retry. *Proves:* the deterministic fallbacks and retry paths
+   behave as the integrity rules require, and that failure is stated rather than hidden.
+5. **Screen-reader pass**, either account. *Proves:* the redesigned surfaces are operable
+   non-visually. The accessibility review was static; this is the first assistive-technology run.
+
+### 4.3 Carried in from Step 4, to close here
+
+- **A saved careers URL steering the search is fixture-evidenced only.** The 2026-10-26 run returned
+  nothing from the two employers whose pages had just been supplied; hand-checking confirmed there
+  was nothing fitting, so the outcome was right, but an empty result cannot distinguish the run
+  reading the saved page from the run never using it. The stored coverage (`careersPageUrl` per
+  employer, surfaced in "What was checked") settles it at no cost.
+- **Exclusion and restore (§14 slice 2) has no signed-in acceptance**, having only ever rendered
+  "Excluded (0)".
+
+### 4.4 Lane coverage: what to expect, and what not to fix
+
+`ROLE_FAMILIES` (`strategic-state.ts`) still recognises three families - the founder's. Phase 7 lane
+infrastructure is not started. Nothing crashes outside them: matching falls back to token overlap,
+which needs two or more shared significant title tokens, so near-miss titles fail quietly.
+
+| Account B strand | Expected lane match | Why |
+| --- | --- | --- |
+| High-school teacher | **education** | `teacher` trigger, and `teacher`/`instructor` are synonyms |
+| Database / SQL | none | tech triggers require CTO/CIO/director-of-technology titles |
+| Fundraising | none | nonprofit_exec requires ED/CEO/managing-director titles |
+| User support | none | no family covers it |
+| Financial advising | none | no family covers it |
+
+Education is therefore a **control**: if her teaching lane matches well and the other four do not,
+lane absence is isolated as the cause rather than something else being broken. Her breadth also
+stresses single-best-lane assignment and its tie-break, which three concentrated lanes never did -
+"program director" is an education synonym and a fundraising title, so leakage is plausible.
+
+**These are Phase 7 findings, not Step 5 defects.** Widening `ROLE_FAMILIES` mid-acceptance would
+destroy the evidence the pass exists to collect. Record what degraded and how badly; size Phase 7
+from it afterwards.
+
+### 4.5 Recording findings
+
+For each pass record: what was done, what the product claimed, what was true, and whether the gap is
+a defect, a known deferral, or an integrity violation (§8/§19 - fabricated data presented as real,
+unlabelled AI output, a missing confidence, a bare score where a recommendation belongs). Integrity
+violations stop the pass; the rest are logged and triaged after it.
+
+Run cost is real: account B's searches and fit assessments spend API budget on top of account A's,
+and `JOB_SEARCH_MAX_RUNS_PER_WEEK` is unset, so the normal weekly cap applies per user rather than
+founder-dev's disabled one.
+
+### 4.6 Order
+
+Pass 1 on account A first - cheapest, and it establishes what correct looks like. Then pass 2 on
+account B, which is where the real unknowns are. Then pass 3 on account C. Passes 4 and 5 can go on
+either account at any point after pass 1. Step 5 closes when all five are recorded and the two
+Step 4 carry-ins are confirmed.
+
+---
+
+## 5. Honest notes on this plan
 
 This is a reconciliation of plans against code, not a verification that every built feature works.
 "Built" below the Autumn table means the code and its tests exist, not that it has been proven on
