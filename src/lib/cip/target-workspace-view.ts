@@ -3,7 +3,6 @@ import type { RecommendationCategory } from "@/lib/cip/recommendation";
 import {
   groupDossiers,
   STATUS_LABEL,
-  type TargetAction,
   type TargetDossier,
   type TargetPosting,
   type TargetStatus,
@@ -28,7 +27,7 @@ export interface WorkspaceViewOptions {
 const STATUS_BLURB: Record<TargetStatus, string> = {
   talk_first: "A saved person or an open follow-up makes a conversation the best next move.",
   applying: "You marked a posting here as applied or in conversation.",
-  researching: "A verified opening may fit. Check it before acting.",
+  researching: "Employers to review and learn more about.",
   monitoring: "Nothing to act on yet. Kept on your watch list.",
   new: "Recently added with no signals yet.",
   paused: "Paused by you.",
@@ -51,12 +50,6 @@ function safeHref(url: string | null | undefined): string | null {
   } catch {
     return null;
   }
-}
-
-function actionClasses(tone: TargetAction["tone"]): string {
-  if (tone === "talk_first" || tone === "apply") return "border-[var(--accent)] bg-[var(--accent-soft)]";
-  if (tone === "check_funding") return "border-yellow-300 bg-yellow-50 text-yellow-900";
-  return "border-[var(--line)] bg-[var(--panel)]";
 }
 
 function statusClasses(status: TargetStatus): string {
@@ -170,7 +163,8 @@ export function renderTargetCard(d: TargetDossier, options: WorkspaceViewOptions
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <h3 class="text-lg font-semibold">${escapeHtml(d.name)}</h3>
-          <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${statusClasses(d.status)}" title="The app's suggestion from what it knows. Setting your own status comes next.">${escapeHtml(STATUS_LABEL[d.status])} · ${d.statusSource === "set" ? "set by you" : "suggested"}</span>
+          <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold ${statusClasses(d.status)}" title="${d.statusSource === "set" ? "Your saved decision about this employer." : "CIP suggestion; you can set your own status."}">${escapeHtml(STATUS_LABEL[d.status])} · ${d.statusSource === "set" ? "set by you" : "suggested"}</span>
+          <a href="#target-status-${escapeHtml(d.employerId)}" data-open-target-status class="text-xs font-semibold underline text-[var(--accent-strong)]">Set status</a>
           ${d.category ? `<span class="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">${escapeHtml(d.category)}</span>` : ""}
           ${d.region ? `<span class="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">${escapeHtml(d.region.replaceAll("_", " "))}</span>` : ""}
         </div>
@@ -182,16 +176,17 @@ export function renderTargetCard(d: TargetDossier, options: WorkspaceViewOptions
         ${d.priority ? `<p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(d.priority)} priority</p>` : ""}
       </div>
     </div>
-    <div class="mt-4 rounded-md border p-3 ${actionClasses(d.action.tone)}">
-      <p class="text-xs font-semibold uppercase opacity-70">Suggested next action</p>
-      <p class="mt-1 text-sm font-semibold">${escapeHtml(d.action.label)}</p>
-      <p class="mt-1 text-sm leading-6">${escapeHtml(d.action.rationale)}</p>
-      ${why}
-      <a class="mt-3 inline-block text-sm font-semibold underline" href="/workbench?view=work&amp;context=${encodeURIComponent(d.name)}&amp;title=${encodeURIComponent(d.action.label)}">Work on this in Workbench</a>
-    </div>
-    ${fundingLine}${changes}
-    <details class="mt-3">
-      <summary class="cursor-pointer text-sm font-semibold text-[var(--muted)]">Dossier: people, openings, funding</summary>
+    <p class="mt-3 text-sm text-[var(--muted)]"><span class="font-semibold text-[var(--foreground)]">Suggested next action · ${escapeHtml(CHIP_LABEL[d.action.tone as RecommendationCategory] ?? "Research")}:</span> ${escapeHtml(d.action.label)}</p>
+    <details class="mt-3 group/dossier" name="employer-dossier" data-employer-dossier>
+      <summary class="cursor-pointer rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"><span class="group-open/dossier:hidden">Open dossier</span><span class="hidden group-open/dossier:inline">Close dossier</span><span class="ml-2 text-xs font-normal">People, jobs, funding &amp; status</span><span class="sr-only"> for ${escapeHtml(d.name)}</span></summary>
+      <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
+        <h4 class="text-xs font-semibold uppercase text-[var(--muted)]">Suggested next action</h4>
+        <p class="mt-1 text-sm font-semibold">${escapeHtml(d.action.label)}</p>
+        <p class="mt-1 text-sm leading-6">${escapeHtml(d.action.rationale)}</p>
+        ${why}
+        <a class="mt-2 inline-block text-sm font-semibold underline" href="/workbench?view=work&amp;context=${encodeURIComponent(d.name)}&amp;title=${encodeURIComponent(d.action.label)}">Work on this in Workbench</a>
+      </div>
+      ${fundingLine}${changes}
       ${peopleSection(d)}
       ${openingsSection(d, options.run)}
       ${section("Funding", options.renderFunding(d))}

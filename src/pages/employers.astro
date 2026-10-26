@@ -228,6 +228,7 @@ function safeLink(url: string | null | undefined): string | null {
 }
 
 // Detail the dossier does not carry (kept from the old saved-businesses list so nothing is lost).
+const targetEvents = currentTargetEvents(targetEventRecords);
 const employerById = new Map(employers.map((employer) => [employer.id, employer]));
 // What the user has told us about where each employer posts its jobs. The
 // weekly search targets this, so a guess and an answer must not look alike.
@@ -241,6 +242,8 @@ function extrasHtml(dossier: TargetDossier): string {
   const sourceHref = safeLink(employer.source_url);
   const careers = resolveCareersUrl({ name: employer.name, careers_url: employer.careers_url }, careersCorrections);
   const careersHref = careers ? safeLink(careers.url) : null;
+  const careersAnswer = careersCorrections.get(normOrg(employer.name));
+  const noCareersPage = Boolean(careersAnswer && !careersAnswer.careersUrl);
   const links = [
     sourceHref ? `<a class="underline" href="${escapeHtml(sourceHref)}" target="_blank" rel="noopener noreferrer">Source</a>` : "",
     careersHref ? `<a class="underline" href="${escapeHtml(careersHref)}" target="_blank" rel="noopener noreferrer">Careers page</a>` : "",
@@ -257,7 +260,7 @@ function extrasHtml(dossier: TargetDossier): string {
           ? "You set this." + (shownStatus.note ? " " + escapeHtml(shownStatus.note) : "")
           : "CIP's suggestion from what it can see. Set your own below and yours will be used instead."
       }</p>
-      <details class="mt-2">
+      <details class="mt-2" id="target-status-${escapeHtml(dossier.employerId)}">
         <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Set your status</summary>
         <form class="mt-2 grid gap-2" method="post" action="/api/employers/target-status" hx-post="/api/employers/target-status">
           <input type="hidden" name="employerName" value="${escapeHtml(employer.name)}" />
@@ -282,19 +285,19 @@ function extrasHtml(dossier: TargetDossier): string {
   const careersBlock = `
     <div class="mt-3 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
       <p class="text-xs font-semibold uppercase text-[var(--muted)]">Where the search looks first</p>
-      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(describeCareersUrl(careers))}</p>
+      <p class="mt-1 text-xs leading-5 text-[var(--muted)]">${escapeHtml(describeCareersUrl(careers, noCareersPage))}</p>
       ${careers?.replaced ? `<p class="mt-1 text-xs leading-5 text-[var(--muted)]">It replaced: ${escapeHtml(careers.replaced)}</p>` : ""}
       <details class="mt-2">
         <summary class="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">${careers ? "Correct this address" : "Add the careers page"}</summary>
-        <form class="mt-2 grid gap-2" method="post" action="/api/employers/careers-url" hx-post="/api/employers/careers-url">
+        <form class="mt-2 grid gap-2" method="post" action="/api/employers/careers-url" hx-post="/api/employers/careers-url" hx-target="#careers-result-${escapeHtml(dossier.employerId)}" hx-swap="innerHTML" hx-disabled-elt="find button">
           <input type="hidden" name="employerName" value="${escapeHtml(employer.name)}" />
-          <input type="hidden" name="returnTo" value="/employers" />
+          <input type="hidden" name="returnTo" value="/employers#target-${escapeHtml(dossier.employerId)}" />
           <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
             Careers page address
             <input name="careersUrl" type="url" maxlength="2000" placeholder="https://" value="${escapeHtml(careers?.url ?? "")}" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
           </label>
           <label class="inline-flex items-center gap-2 text-xs text-[var(--muted)]">
-            <input type="checkbox" name="none" value="yes" class="h-4 w-4" />
+            <input type="checkbox" name="none" value="yes"${noCareersPage ? " checked" : ""} class="h-4 w-4" />
             This employer has no careers page I know of
           </label>
           <label class="grid gap-1 text-xs font-semibold text-[var(--muted)]">
@@ -302,7 +305,8 @@ function extrasHtml(dossier: TargetDossier): string {
             <input name="note" maxlength="300" class="rounded-md border border-[var(--field-border)] bg-[var(--background)] p-2 text-sm font-normal text-[var(--foreground)]" />
           </label>
           <button class="cip-action justify-self-start" type="submit">Save this address</button>
-          <p class="text-xs leading-5 text-[var(--muted)]">Used by the weekly search before sector boards and the open web.</p>
+          <div id="careers-result-${escapeHtml(dossier.employerId)}" data-careers-result role="status" aria-live="polite"></div>
+          <p class="text-xs leading-5 text-[var(--muted)]">Used as a starting point in your next search. Saving an address does not confirm the page or verify any jobs.</p>
         </form>
       </details>
     </div>`;
@@ -319,7 +323,10 @@ function extrasHtml(dossier: TargetDossier): string {
 }
 
 const workspaceHtml = workspace
-  ? renderWorkspace(workspace.dossiers, {
+  ? renderWorkspace(workspace.dossiers.map((dossier) => {
+      const status = resolveTargetStatus(dossier.name, dossier.status, targetEvents);
+      return { ...dossier, status: status.status, statusSource: status.source };
+    }), {
       run: workspace.run,
       renderExtras: extrasHtml,
       renderFunding: (dossier) => {
@@ -377,7 +384,7 @@ const staticMapUrl = mapCoordinates
 const liveBusinessSearchEnabled = canRunLiveBusinessSearch();
 const geocodioEnabled = Boolean(import.meta.env.GEOCODIO_API_KEY);
 const savedEmployerNames = new Set(employers.map((employer) => normalizeEmployerName(employer.name)));
-const targetEvents = currentTargetEvents(targetEventRecords);
+
 const excluded = excludedKeys(targetEvents);
 const excludedList = excludedTargets(targetEvents);
 
@@ -418,6 +425,9 @@ function normalizeEmployerName(name: string) {
         </div>
       </div>
 
+      {Astro.url.searchParams.get("careers") === "saved" && (
+        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-sm text-[var(--accent-strong)]" data-announce tabindex="-1" role="status">Careers-page choice saved. Your next search will use this choice; existing search results have not been rechecked.</p>
+      )}
       {signedIn ? (
         <div class="mt-6">
           {workspaceError ? <p class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">Could not build your target workspace: {workspaceError}</p> : null}
@@ -858,6 +868,38 @@ function normalizeEmployerName(name: string) {
     }
   </style>
   <script>
+    // Reopen the employer after a save; the server cannot see a URL fragment.
+    function revealEmployerDossier() {
+      let id = "";
+      try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+      if (!id.startsWith("target-")) return;
+      const card = document.getElementById(id);
+      const dossier = card?.querySelector<HTMLDetailsElement>("[data-employer-dossier]");
+      if (dossier) dossier.open = true;
+    }
+    revealEmployerDossier();
+    window.addEventListener("hashchange", revealEmployerDossier);
+    // Keep validation/storage failures beside the form, with the entered URL intact.
+    document.addEventListener("htmx:beforeSwap", (event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.target?.matches("[data-careers-result]") && detail.xhr?.status >= 400) {
+        detail.shouldSwap = true;
+        detail.isError = false;
+      }
+    });
+    // Status shortcuts reveal the existing form without a second modal or form.
+    document.addEventListener("click", (event) => {
+      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>("[data-open-target-status]");
+      if (!link) return;
+      const formDetails = document.getElementById(link.hash.slice(1));
+      if (!(formDetails instanceof HTMLDetailsElement)) return;
+      const dossier = formDetails.closest<HTMLDetailsElement>("[data-employer-dossier]");
+      if (!dossier) return;
+      event.preventDefault();
+      dossier.open = true;
+      formDetails.open = true;
+      formDetails.querySelector<HTMLSelectElement>('select[name="status"]')?.focus();
+    });
     // "Not interested" from the queue. The row lives inside the promote form, so
     // this posts on its own rather than nesting a second form inside that one.
     document.addEventListener("click", async (event) => {

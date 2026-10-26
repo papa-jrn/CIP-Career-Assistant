@@ -23,3 +23,15 @@ it("distinguishes a failed assessment from a low score", () => {
   expect(html).toContain("remains unscored");
   expect(html).not.toContain("On your next visit");
 });
+
+it("flags a legacy cut-off summary without inventing its ending or changing the saved score", () => {
+  const assessment = fit(8);
+  assessment.analysis!.summary = "x".repeat(600);
+  const html = renderCompletedFit(assessment);
+  expect(html).toContain("This saved summary appears cut off");
+  expect(html).toContain("Assess fit again");
+  expect(html).toContain("Competitive fit: 8/10");
+  expect(assessment.analysis!.summary).toBe("x".repeat(600));
+  assessment.analysis!.summary = "x".repeat(599) + ".";
+  expect(renderCompletedFit(assessment)).not.toContain("This saved summary appears cut off");
+});

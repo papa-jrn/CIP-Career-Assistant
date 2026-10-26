@@ -7,10 +7,10 @@ const returnAction = /^[a-f0-9-]{36}$/.test(actionParam) ? actionParam : "";
 const groups = [
   { label: "Workbench", href: "/workbench", icon: "house", paths: ["/workbench", "/opportunities", "/briefing", "/report"] },
   { label: "Your direction", href: "/intake", icon: "compass", paths: ["/intake", "/evidence", "/assets"] },
-  { label: "People", href: "/network", icon: "users", paths: ["/network", "/follow-up"] },
+  { label: "People", href: "/people", icon: "users", paths: ["/people", "/network", "/follow-up"] },
   { label: "Employers", href: "/employers", icon: "buildings", paths: ["/employers"] },
 ];
-const subviews = ["/intake", "/evidence", "/assets"].includes(path) ? [{ href: "/intake", label: "Your story" }, { href: "/evidence", label: "Evidence" }, { href: "/assets", label: "Career lanes" }] : ["/network", "/follow-up"].includes(path) ? [{ href: "/network", label: "Connections" }, { href: "/follow-up", label: "Follow-ups" }] : path === "/opportunities" ? [{ href: "/workbench?view=overview", label: "Overview" }, { href: "/workbench?view=work", label: "My work" }, { href: "/opportunities", label: "Jobs & opportunities" }, { href: "/workbench?view=changes", label: "What changed" }] : [];
+const subviews = ["/intake", "/evidence", "/assets"].includes(path) ? [{ href: "/intake", label: "Your story" }, { href: "/evidence", label: "Evidence" }, { href: "/assets", label: "Career lanes" }] : path === "/opportunities" ? [{ href: "/workbench?view=overview", label: "Overview" }, { href: "/workbench?view=work", label: "My work" }, { href: "/opportunities", label: "Jobs & opportunities" }, { href: "/workbench?view=changes", label: "What changed" }] : [];
 ---
 <aside class="career-sidebar">
   <a href="/workbench" class="career-brand"><strong>CIP</strong><span>Career Intelligence<br/>Platform</span></a>

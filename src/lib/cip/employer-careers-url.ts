@@ -18,6 +18,7 @@ export const CAREERS_URL_SOURCE_TYPE = "employer_careers_url";
 
 /** Where a careers URL came from. Shown to the user, never implied. */
 export type CareersUrlOrigin = "discovered" | "user_supplied";
+export interface TargetCareerPage { name: string; url: string | null; origin: CareersUrlOrigin | "none_known" }
 
 export interface CareersUrlCorrection {
   /** Normalized employer name, so a correction survives small naming differences. */
@@ -115,7 +116,8 @@ export function resolveCareersUrl(
 }
 
 /** How the link should be described, so a guess never reads as a fact. */
-export function describeCareersUrl(resolved: ResolvedCareersUrl | null): string {
+export function describeCareersUrl(resolved: ResolvedCareersUrl | null, noneKnown = false): string {
+  if (!resolved && noneKnown) return "You recorded that this employer has no careers page you know of. The search will use sector boards and the open web instead.";
   if (!resolved) return "No careers page recorded. The search will fall back to sector boards and the open web for this employer.";
   if (resolved.origin === "user_supplied") {
     return resolved.replaced

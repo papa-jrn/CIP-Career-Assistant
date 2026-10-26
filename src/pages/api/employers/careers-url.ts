@@ -7,7 +7,7 @@ import {
 } from "@/lib/cip/employer-careers-url";
 import { normOrg } from "@/lib/cip/employer-resolution";
 import { escapeHtml } from "@/lib/cip/job-search-view";
-import { isSameOriginRequest } from "@/lib/security";
+import { isSafeRedirectPath, isSameOriginRequest } from "@/lib/security";
 import { createServer } from "@/lib/supabase/server";
 
 const html = (message: string, status = 200) =>
@@ -94,10 +94,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
     if (error) return html("Could not save that address. Your entry is still here; please retry.", 500);
 
-    const path = input.returnTo && /^\/[A-Za-z0-9/_\-?=&#.]*$/.test(input.returnTo) ? input.returnTo : "/employers";
-    const destination = `${path}${path.includes("?") ? "&" : "?"}careers=saved`;
+    const destinationUrl = new URL(isSafeRedirectPath(input.returnTo, "/employers"), request.url);
+    destinationUrl.searchParams.set("careers", "saved");
+    const destination = `${destinationUrl.pathname}${destinationUrl.search}${destinationUrl.hash}`;
     return request.headers.get("HX-Request") === "true"
-      ? new Response(null, { status: 200, headers: { "HX-Redirect": destination } })
+      ? new Response(null, { status: 200, headers: { "HX-Redirect": destination, "HX-Refresh": "true" } })
       : new Response(null, { status: 303, headers: { Location: destination } });
   } catch {
     return html("Could not save that address. Your entry is still here; please retry.", 500);

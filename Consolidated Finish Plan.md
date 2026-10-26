@@ -161,11 +161,19 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
 
    `loadContactCorrections` is shared, so a new consumer picks corrections up by using it rather
    than by remembering to.
-7. **Mis-parsed contact titles at import** — confirmed in the stored data 2026-10-21: Eric Kidd's
-   record holds `contactTitle` "Managing Director, Custom Software" and `contactOrganization`
-   "Senior Lead Programmer, Managing Directo", which are swapped, and the organization value is
-   exactly 40 characters, cut mid-word. No 40-character cap exists anywhere in this codebase, so the
-   truncation most likely arrived with the import source; the swap is still ours to trace.
+7. **Historical contact metadata issue — current importer defect not reproduced (2026-10-26).**
+   The October 21 stored-data observation was Eric Kidd's `contactTitle` "Managing Director, Custom
+   Software" and `contactOrganization` "Senior Lead Programmer, Managing Directo". This was on the
+   People/Follow-ups contact, not a job import. Both values look like title text; calling them
+   "swapped" did not establish the original organization or where corruption began. Current LinkedIn
+   CSV/XLSX parsing maps Company and Position by header, preserves quoted commas and long strings,
+   and contains no 40-character cap. Contact feedback and display also retain the field mapping.
+   Three focused fixtures pass, including reordered columns and values longer than 40 characters;
+   the full contact-parser file passes all 40 tests. No production parser change is warranted from
+   this evidence. The original export row and corresponding saved import/analysis are still needed
+   to trace this particular historical record. Follow-ups prefers saved analysis matches, so a newer
+   import alone does not prove what an older displayed analysis contained. Keep this as an unresolved
+   provenance/data-correction item, not a confirmed current LinkedIn-import bug.
 8. ~~**No way to delete a saved conversation**~~ **DONE 2026-10-21.** A conversation can be removed
    from Connections, with an optional reason. It stops counting towards lanes, employers,
    follow-ups and evidence re-analysis, and stops appearing in the conversation lists.
@@ -182,8 +190,7 @@ compressed follow-up cards, one capture form with the detailed form behind a tog
 
    Not done, and worth stating: there is no hard delete. A user who wants a conversation erased from
    storage rather than withdrawn from use still has no way to do that.
-9. **Follow Ups capture is gated behind a non-empty queue** — a user with no imported network cannot
-   capture a conversation there at all.
+9. ~~**Follow Ups capture is gated behind a non-empty queue**~~ **FIXED 2026-10-26.** Both capture forms now render independently of the queue in the People Follow-ups view; signed-in users can capture a person not yet imported.
 
 ### B. Phase 5 — de-founder pass ~~(beta-blocking, barely started)~~ **DONE 2026-10-21**
 
@@ -252,7 +259,7 @@ remaining validation that matters is beta users' data rather than more unit test
 to stop what works from breaking silently - the de-founder pass had already changed three of these
 files with no way to tell.
 
-### D. Redesign slices not yet delivered
+### D. Redesign delivery and remaining verification
 
 - ~~**Imported-job slice** (Workbench §10 step 4)~~ **CORE FLOW IMPLEMENTED AND FOUNDER-REVIEWED 2026-10-23.**
   Import/dedupe, separate source checks and personal fit, additive correction, Workbench actions,
@@ -266,12 +273,10 @@ files with no way to tell.
   **Section 7 still has broader open scope:** document attachments, independent checks of every
   supplied source, and further redirect/red-flag hardening. Founder review of this slice does not
   close the full acceptance plan, screen-reader testing, or scoring calibration across other users.
-- **People consolidation proper** — Connections and Follow Up still exist as two routes under the
-  People nav rather than one surface.
-- **Import component extraction** — so first use can truly lead with import rather than it sitting
-  below the loop.
-- **Target workspace slices beyond slice 1** (Rethink §14), including how local-area businesses are found.
-- **Remember each target's real career-page URL** and feed it back to the search and direct reader.
+- **People consolidation — FOUNDER-REVIEWED 2026-10-26.** `/people` provides Connections and Follow-ups views; legacy routes preserve context. Founder approved switching between views and successfully saved a new conversation. Re-analysis of that note is not yet verified.
+- **Import component extraction — DEFERRED 2026-10-26.** Founder reports roughly 11 successful LinkedIn imports. Extraction alone is not needed; revisit placement only if empty-account acceptance reveals a real usability problem.
+- **Target workspace slices 1–2 are implemented** (Rethink §14), including saved user decisions and reversible exclusions. Compact dossier/status UI is founder-accepted. Broader workspace/discovery work remains deferred; exclusion/restore live acceptance is distinct from the reviewed Researching control.
+- **Careers-page persistence — IMPLEMENTED; final live confirmation pending.** Saved choices now reach dossier links, web-search requests and guarded direct reads. Save/reload/search integration fixtures cover correction and no-page answers; see October 26 checkpoint below.
 
 ### E. Acceptance work still open
 
@@ -331,12 +336,14 @@ covered against fixtures, no live AI. Three defects found and fixed in the writi
 founder-specific heuristics that survived Step 2.
 
 **Step 4 — Finish the redesign.** (D)
-The core jobs slice is implemented and founder-reviewed as of 2026-10-23, including searched-job
-assessments, evidence corrections and reversible archives. Step 4 remains in progress: People
-consolidation, import-first component extraction, contact-title import correction (A7), and target
-career-page URL persistence remain. Target workspace work beyond slice 1 stays explicitly deferred.
-The formal end-to-end acceptance passes belong to Step 5.
-
+The agreed implementation slices are built: core jobs (founder-reviewed October 23), consolidated
+People navigation/capture and compact employer dossiers/status access (founder-reviewed October 26),
+and careers-page persistence through dossier links and both search paths. Final founder confirmation
+of saving/reloading a real careers URL and the next search remains before closing this step.
+Import-component extraction is deferred unless empty-account acceptance identifies a real usability
+problem. The historical contact-metadata issue is not a reproduced current importer defect; keep its
+provenance/correction backlog separate from an unnecessary importer rewrite. Broader target workspace
+work remains deferred. Formal end-to-end acceptance belongs to Step 5.
 **Step 5 — Acceptance.** (E)
 Two live passes, first use on an empty account, induced failure and retry, screen-reader. These need
 steps 1–4 to be meaningful, because they test the loop end to end.
@@ -397,3 +404,30 @@ October 23 follow-up: rubric 3 separates competitiveness from preference conflic
 
 ### October 23 morning checkpoint
 Founder reports the jobs functionality, completion UX and revised assessment now look substantially better and requested commit/push. This is acceptance of the reviewed jobs slice, not closure of all Step 4 redesign work or the separate Autumn Phase 4 weekly-diff briefing. Remaining work is listed in the Step 4 checkpoint above. No deployment or migrations were requested.
+
+### October 26: employer status render-order repair
+The new employer-status controls accessed the current-event map before initialization when rendering saved employer dossiers, causing HTTP 500 on a populated Employers page. Initialization now precedes rendering. Page-setup regression tests cover saved employers with and without a user status. Typecheck and all 917 tests passed; isolated SSR build passed. Founder confirmed the page works after the repair. No further migration is needed for this repair.
+
+
+### October 26: employer dossier discoverability
+Step 4 UI refinement: compact collapsed employer cards, prominent inline dossier accordion, direct status access, saved-status grouping, and neutral explicitly labelled action suggestions. Details and decision rationale remain inside each dossier. See Workbench Redesign Plan.md for the approved direction. No migration; **employer UI founder-accepted 2026-10-26**. Founder confirmed improved discoverability, reduced competing information, and saved Researching choices, then explicitly closed this slice.
+
+### October 26: employer UI accepted; People consolidation implemented
+
+Founder explicitly closed the compact employer dossier/status UI slice after using it and saving Researching decisions. That portion of Step 4 is COMPLETE. The employer target-event migration was applied by the founder, who reported successful SQL checks and working saved decisions; this does not establish that the other listed migrations have been applied.
+
+The next slice now implements one `/people` destination with Connections and Follow-ups views, legacy-route compatibility, and conversation capture independent of an imported contact queue. TypeScript and all 920 tests passed; isolated SSR build passed. Built-app HTTP checks confirmed both views render with a single People heading and empty-state capture, and both old URLs preserve confirmation parameters on redirect. Signed-in populated-account review is pending. Next unfinished implementation item remains import-component extraction/first-use import ordering, followed by contact-title import diagnosis; Step 4 overall is still open.
+
+### October 26: careers-page completion checkpoint
+
+The agreed Step 4 implementation is ready for its final careers-page live check. Fixed saved-address propagation to the dossier Openings link and web-search request (the direct reader already had corrections), kept explicit no-page answers out of both direct-read paths, added same-dossier save confirmation/reopening and accurate not-yet-rechecked copy, and preserved additive history. See Workbench Redesign Plan.md for the exact contract, test coverage and founder checklist. No live paid search, migration, deployment, commit or push was performed. Step 4 is not declared closed before the final live check; Step 5 is the next phase of work after that confirmation.
+Final automated validation for the careers-page checkpoint: TypeScript and all 931 tests passed; isolated Astro SSR build passed. Final signed-in careers-page acceptance remains pending; no push yet.
+
+### October 26: fit-summary boundary repair during live review
+
+Founder supplied a 600-character competitiveness summary ending mid-word. The length matches the provider summary schema ceiling; display does not truncate the saved string. Removed that tight provider bound, retained strict schema/token caps/local defensive validation and unscored fallback, rejected explicitly incomplete responses, and added an honest reassess notice to affected legacy summaries. Existing scores/comparisons/history remain intact. See Workbench Redesign Plan.md for details. Signed-in Acelero reassessment remains pending; Git push is still deferred until testing is accepted.
+Fit-summary repair validation: TypeScript, all 935 tests and isolated SSR build passed. Restart the local server and reassess the affected job to obtain a new complete summary; the old missing ending cannot be recovered from saved text.
+
+### October 26: founder testing accepted; Git checkpoint
+
+Founder reports successful additional job-fit assessments and a complete fresh weekly search with good results, accepting the reviewed fit-summary repair and live assessment/search flow. Earlier employer UI and People navigation/capture acceptance stand. Formal Step 5 acceptance remains open, and the specific careers-URL correction scenario is not inferred from a generally successful search. Final code validation: 935 tests, TypeScript and isolated SSR build passed. This checkpoint is being committed/pushed under the founder's earlier instruction to push after testing; no deployment is part of it.

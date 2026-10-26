@@ -332,3 +332,30 @@ describe("pasted contact text", () => {
     expect(parseContactText("", "Pasted")).toEqual([]);
   });
 });
+
+describe("Contact title and company field integrity", () => {
+  const company = "Example Custom Software and Technology Consulting Corporation";
+  const title = "Senior Lead Programmer, Managing Director of Custom Software";
+
+  it("uses LinkedIn headers rather than column position and preserves quoted commas and long fields", () => {
+    const csv = `First Name,Last Name,Position,Company,URL\nJordan,Lee,"${title}",${company},https://www.linkedin.com/in/example\n`;
+    expect(parseCsvContacts(csv, "Connections.csv")[0]).toMatchObject({
+      name: "Jordan Lee", company, title,
+    });
+    expect(parseCsvContacts(csv, "Connections.csv")[0].company.length).toBeGreaterThan(40);
+    expect(parseCsvContacts(csv, "Connections.csv")[0].title.length).toBeGreaterThan(40);
+  });
+
+  it("does not guess a repair when the source itself puts a title in Company", () => {
+    const csv = `Name,Company,Position\nJordan Lee,"${title}",${company}\n`;
+    expect(parseCsvContacts(csv, "Connections.csv")[0]).toMatchObject({
+      company: title, title: company,
+    });
+  });
+
+  it("keeps company/title order and comma-containing titles in structured pasted rows", () => {
+    expect(parseContactText(`Jordan Lee | ${company} | ${title} | Worked together`, "Pasted contacts")[0]).toMatchObject({
+      company, title,
+    });
+  });
+});

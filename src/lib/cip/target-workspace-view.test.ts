@@ -48,14 +48,18 @@ describe("renderTargetCard", () => {
     expect(renderTargetCard(dossier({ movement: { direction: "steady", explanation: "x", nextMove: "y" } }), options())).not.toContain("moved");
   });
 
-  it("styles a talk-first action as prominently as apply, and a funding check as a caution", () => {
+  it("uses explicit action labels and a prominent compact dossier for every action", () => {
     const talk = renderTargetCard(dossier({ action: { kind: "reach_out", label: "Reach out to Sarah Lin about Granite", rationale: "r", signals: [], person: "Sarah Lin", tone: "talk_first" } }), options());
     const apply = renderTargetCard(dossier({ action: { kind: "review_posting", label: "Review it", rationale: "r", signals: [], person: null, tone: "apply" } }), options());
     const funding = renderTargetCard(dossier({ action: { kind: "check_funding", label: "Check funding", rationale: "r", signals: [], person: null, tone: "check_funding" } }), options());
     const research = renderTargetCard(dossier({ action: { kind: "find_someone", label: "Find someone", rationale: "r", signals: [], person: null, tone: "research" } }), options());
     expect(talk).toContain("border-[var(--accent)] bg-[var(--accent-soft)]");
     expect(apply).toContain("border-[var(--accent)] bg-[var(--accent-soft)]");
-    expect(funding).toContain("bg-yellow-50");
+    expect(funding).not.toContain("bg-yellow-50");
+    expect(funding).toContain("Suggested next action · Check funding");
+    expect(talk).toContain('name="employer-dossier"');
+    expect(talk).toContain("Open dossier");
+    expect(talk).toContain("data-open-target-status");
     expect(research).not.toContain("bg-[var(--accent-soft)] p-3");
   });
 

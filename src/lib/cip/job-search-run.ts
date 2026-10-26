@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { currentCareersUrls, loadCareersUrlCorrections } from "@/lib/cip/employer-careers-url";
+import { currentCareersUrls, loadCareersUrlCorrections, resolveCareersUrl, type TargetCareerPage } from "@/lib/cip/employer-careers-url";
 import { normOrg } from "@/lib/cip/employer-resolution";
 import { loadSearchBrief, type AreaResolver } from "@/lib/cip/brief-loader";
 import {
@@ -346,7 +346,8 @@ export async function advanceJobSearchRun(
   if (!claimed?.length) return loadRunView(supabase, userId, runId);
 
   const facets = run.outbound_facets as OutboundSearchFacets;
-  const request = buildStepRequest(step, facets, config);
+  const careerPages = step.tier === "target_page" ? await loadTargetCareerPages(supabase, userId, step.targets ?? []) : [];
+  const request = buildStepRequest(step, facets, config, careerPages);
   const result = await provider.runStep(request as unknown as Record<string, unknown>);
 
   if (!result.ok) {
@@ -373,7 +374,7 @@ export async function advanceJobSearchRun(
   if (step.tier === "target_page") {
     const fetcher = deps.fetcher ?? safePageFetcher;
     const alreadyReadHosts = new Set(run.trace.flatMap((entry) => entry.directReads ?? []).map((read) => read.host));
-    const knownTargets = await loadTargetCareerUrls(supabase, userId, step.targets ?? []);
+    const knownTargets = careerPages.filter((target): target is TargetCareerPage & { url: string } => Boolean(target.url));
     const known = knownTargets.length
       ? await directReadKnownTargets({
           targets: knownTargets,
@@ -387,7 +388,12 @@ export async function advanceJobSearchRun(
         })
       : null;
     const stuck = await directReadStuckTargets({
-      entries: parsed.response.employers_checked,
+      entries: parsed.response.employers_checked
+        .filter((entry) => !careerPages.some((target) => target.origin === "none_known" && normOrg(target.name) === normOrg(entry.name)))
+        .map((entry) => {
+          const saved = careerPages.find((target) => normOrg(target.name) === normOrg(entry.name));
+          return saved?.url ? { ...entry, careers_page_url: saved.url } : entry;
+        }),
       step,
       facets,
       config,
@@ -702,52 +708,38 @@ export async function loadObservations(supabase: SupabaseClient, userId: string,
 
 /**
  * Stored careers/listing URLs for the named saved targets (watched employers first, then
- * candidates). Only targets that actually have a URL are returned; the deterministic known-target
- * reader tries each and silently skips any whose page is not a supported board.
+ * candidates), with user corrections applied. Explicit no-page answers are retained for the web
+ * search; only usable URLs are passed to the guarded direct reader.
  */
-async function loadTargetCareerUrls(
+export async function loadTargetCareerPages(
   supabase: SupabaseClient,
   userId: string,
   names: string[],
-): Promise<Array<{ name: string; url: string }>> {
+): Promise<TargetCareerPage[]> {
   const wanted = [...new Set(names.map((name) => name.trim()).filter(Boolean))];
   if (!wanted.length) return [];
   const [{ data: watched }, { data: candidates }] = await Promise.all([
     supabase.from("watched_employers").select("name,careers_url").eq("user_id", userId).in("name", wanted),
     supabase.from("employer_candidates").select("name,careers_url").eq("user_id", userId).in("name", wanted),
   ]);
-  const byName = new Map<string, string>();
-  // Candidates first so watched employers win on a name collision.
+  const byKey = new Map<string, { name: string; careers_url: string }>();
+  // Candidates first, then watched employers; decisions use the normalized key.
   for (const row of [...(candidates ?? []), ...(watched ?? [])] as Array<{ name?: unknown; careers_url?: unknown }>) {
     const name = String(row.name ?? "").trim();
     const url = String(row.careers_url ?? "").trim();
-    if (name && url) byName.set(name, url);
+    if (name && url) byKey.set(normOrg(name), { name, careers_url: url });
   }
-
-  // The user's own answer wins over the one discovery guessed, and their
-  // "there is no careers page" removes the target entirely rather than
-  // sending the search back to a guess they have already rejected.
   const corrections = currentCareersUrls(await loadCareersUrlCorrections(supabase, userId));
-  if (corrections.size) {
-    for (const name of [...byName.keys()]) {
-      const correction = corrections.get(normOrg(name));
-      if (!correction) continue;
-      if (correction.careersUrl) byName.set(name, correction.careersUrl);
-      else byName.delete(name);
-    }
-    // A correction can also name an employer discovery never gave a page for.
-    for (const correction of corrections.values()) {
-      if (!correction.careersUrl) continue;
-      const already = [...byName.keys()].some((name) => normOrg(name) === correction.employerKey);
-      if (!already && wanted.some((name) => normOrg(name) === correction.employerKey)) {
-        byName.set(correction.employerName, correction.careersUrl);
-      }
-    }
+  const pages: TargetCareerPage[] = [];
+  for (const name of wanted) {
+    const key = normOrg(name);
+    const answer = corrections.get(key);
+    const resolved = resolveCareersUrl(byKey.get(key) ?? { name }, corrections);
+    if (resolved) pages.push({ name, url: resolved.url, origin: resolved.origin });
+    else if (answer && !answer.careersUrl) pages.push({ name, url: null, origin: "none_known" });
   }
-
-  return [...byName].map(([name, url]) => ({ name, url }));
+  return pages;
 }
-
 /**
  * Persistence (build step 4): re-verify still-live postings from the user's previous searched run
  * that this run did not re-surface, and insert them as observations on this run with their original

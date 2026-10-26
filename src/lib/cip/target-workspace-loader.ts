@@ -1,3 +1,5 @@
+import { normOrg } from "@/lib/cip/employer-resolution";
+import { currentCareersUrls, loadCareersUrlCorrections, resolveCareersUrl } from "@/lib/cip/employer-careers-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadFundingProfiles, type FundingProfile } from "@/lib/cip/employer-financials";
 import { loadRunView, type RunView } from "@/lib/cip/job-search-run";
@@ -74,6 +76,7 @@ export async function loadTargetWorkspace(supabase: SupabaseClient, userId: stri
   const floorUsd = typeof brief?.compensation?.floorUsd === "number" ? brief.compensation.floorUsd : prefs?.salaryFloorUsd ?? null;
   const inputs = await loadRecommendationInputs(supabase, userId, floorUsd, state);
 
+  const careersCorrections = currentCareersUrls(await loadCareersUrlCorrections(supabase, userId));
   const dossierEmployers: DossierEmployer[] = employers.map((row) => ({
     id: row.id,
     name: row.name,
@@ -82,7 +85,7 @@ export async function loadTargetWorkspace(supabase: SupabaseClient, userId: stri
     location: row.location,
     priority: row.priority,
     fitScore: typeof row.fit_score === "number" ? row.fit_score : null,
-    careersUrl: row.careers_url,
+    careersUrl: resolveCareersUrl(row, careersCorrections)?.url ?? null,
     createdAt: row.created_at,
     financialsMode: row.financials_mode,
   }));
@@ -99,6 +102,18 @@ export async function loadTargetWorkspace(supabase: SupabaseClient, userId: stri
     dispositions,
     profiles: funding.profiles,
     now,
+  }).map((dossier) => {
+    const answer = careersCorrections.get(normOrg(dossier.name));
+    if (!runView || !answer || Date.parse(answer.recordedAt) <= Date.parse(runView.run.started_at)) return dossier;
+    // Keep prior postings/history, but do not imply the newly saved page was read.
+    return {
+      ...dossier,
+      openings: {
+        ...dossier.openings,
+        careers: dossier.careersUrl ? "not_checked" as const : "none_on_file" as const,
+        careersNote: "Your careers-page choice changed after the latest search. That search did not check this new choice.",
+      },
+    };
   });
 
   return {

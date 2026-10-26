@@ -179,3 +179,41 @@ it("does not promote a posting's named tools into personal experience", async ()
   expect(fit.analysis?.summary).not.toContain("extensive Screaming Frog expertise");
   expect(fit.analysis?.requirements[1].status).toBe("unknown");
 });
+
+it("preserves a complete summary longer than the old 600-character ceiling", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "test-only");
+  const value = reading();
+  value.summary = "Your documented operations leadership supports several duties in this role. ".repeat(10).trim();
+  expect(value.summary.length).toBeGreaterThan(600);
+  ai(value);
+  const fit = await assessImportedJobFitWithAi(job, context, at);
+  expect(fit.basis).toBe("ai_assisted");
+  expect(fit.analysis?.summary).toBe(value.summary);
+  expect(parseImportedJobFit(JSON.stringify(importedJobFitPayload(fit)), at)?.analysis?.summary).toBe(value.summary);
+  const request = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+  expect(request.text.format.schema.properties.summary.maxLength).toBeUndefined();
+  expect(request.max_output_tokens).toBe(4200);
+});
+
+it("does not score a response flagged incomplete even if its partial JSON parses", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "test-only");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+    status: "incomplete", incomplete_details: { reason: "max_output_tokens" },
+    output: [{ content: [{ type: "output_text", text: JSON.stringify(reading()) }] }],
+  }))));
+  const fit = await assessImportedJobFitWithAi(job, context, at);
+  expect(fit.basis).toBe("deterministic");
+  expect(fit.analysis?.score).toBeNull();
+  expect(fit.analysis?.limitations.join(" ")).toContain("did not complete");
+});
+
+it("rejects the old boundary-cutoff symptom instead of saving it as a complete new assessment", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "test-only");
+  const value = reading();
+  value.summary = "Grounded experience is relevant. " + "x".repeat(600 - "Grounded experience is relevant. ".length);
+  ai(value);
+  const fit = await assessImportedJobFitWithAi(job, context, at);
+  expect(fit.basis).toBe("deterministic");
+  expect(fit.analysis?.score).toBeNull();
+  expect(fit.analysis?.limitations.join(" ")).toContain("appears cut off");
+});

@@ -1134,3 +1134,62 @@ section 12's wording is the thing that is now out of date.
 
 Verified: typecheck clean, 872 tests passing including fifteen pinning the status and next-action
 rules, SSR build passed.
+
+## Fixed 2026-10-26: saved employer cards returned HTTP 500
+
+The workspace rendered cards before initializing the target-event map used by their status controls. A populated workspace therefore accessed a const in its temporal dead zone; an empty workspace hid the defect. Initialize the map before rendering. Regression coverage executes the page's card setup in source order with a saved employer, both with and without a user decision. This is independent of migration success.
+
+
+## October 26: compact employer cards and a visible dossier doorway
+
+Founder-approved direction: keep 50+ employers scannable. Use inline expansion rather than a popup. Collapsed cards show the employer, status access, lane fit and one concise suggested action. A full-width purple outlined Open dossier control names the contents (People, jobs, funding & status), changes to Close dossier when expanded, and uses a native named details accordion so only one employer dossier is open at a time. Detailed rationale, Workbench handoff, changes and funding detail stay inside. Native summary controls preserve keyboard operation and expanded-state semantics.
+
+Set status beside the employer name reveals the existing status form and focuses its select using an Astro-bundled script. Saved user statuses also drive the card heading, summary and grouping. Suggestions remain labelled separately. Yellow is not priority: suggested actions use neutral styling and explicit action labels; the prominent purple treatment belongs to opening the dossier. Existing specific funding information and posting recommendation chips remain available inside.
+
+This is a presentation and navigation change, not an automated employer-research feature. No migration is required. Signed-in founder review remains necessary.
+Validation: TypeScript checks and all 917 tests passed; isolated Astro SSR build passed. Signed-in visual and interaction review remains pending.
+
+## Accepted 2026-10-26: compact employer dossier UI
+
+Founder confirmed the new layout makes next steps visible without competing with Open dossier, saved Researching decisions, and explicitly asked to close this portion of Step 4. Employer dossier discoverability/status-access UI is COMPLETE. This supersedes the pending founder-review note above. It does not close all Step 4 work or the separate Autumn Phase 4 weekly briefing.
+
+## Implemented 2026-10-26: one People destination, two views
+
+Next Step 4 slice: `/people` is the canonical destination, with Connections and Follow-ups views under one shared heading/navigation and layout. Existing feature implementations are reusable view components; only the selected view loads its data. `/network` and `/follow-up` redirect to the matching People view, preserving query context, confirmations and fragment destinations. Internal correction/removal/resolution forms return to the canonical view. Existing storage, endpoints, corrections and recoverable removals are unchanged.
+
+Connections still leads with conversation capture, following the founder's October 21 direction. The old introductory networking essay is removed from the top; deeper help remains expandable. Follow-ups retains its compact searchable people rows, obligations and drafting tools. Conversation capture is now outside the nonempty-queue condition, including the detailed form's save control: no imported network is required to record a conversation. Drafting still requires a queued contact.
+
+Remaining Step 4 work: extract the import component and make empty-account first use lead with import; trace the contact-title/company import issue. This route consolidation is implemented, pending founder review; it does not claim the full People redesign or first-use acceptance is complete. No migration or deployment.
+People validation: TypeScript and 920 tests passed; isolated SSR build passed. Built-app HTTP checks confirmed both views return 200, have one H1 and conversation capture with an empty queue, and both legacy routes preserve confirmation query parameters. Signed-in populated views and complete keyboard/screen-reader acceptance remain unverified.
+
+## October 26: People founder review and contact-import investigation
+
+Founder approved the consolidated People navigation and successfully saved a new conference-planning conversation. This accepts the reviewed navigation/capture slice, not re-analysis of that note, which the founder has not run. Import-component extraction is deferred: approximately 11 successful LinkedIn imports are live evidence that the importer works, and code extraction alone is not a user need. Reconsider first-use placement only if empty-account acceptance exposes a problem.
+
+The historical Eric Kidd issue concerns a person's title/organization on People, not bringing in a job. The October 21 observation established malformed saved contact metadata, not its origin. Both recorded values look title-like, so describing them as a simple swap was too strong. Current CSV/XLSX header mapping, cleaning, saved-feedback mapping and card display do not reproduce a field swap or impose a 40-character cap. Focused fixtures verify reordered Company/Position columns, quoted commas and long strings, preservation of already malformed source data without guessing a repair, and pipe-separated company/title order. All 40 contact-parser tests passed; no production parser logic changed.
+
+Tracing the historical record requires its original export row and corresponding saved import/analysis. The Follow-ups queue prefers saved analysis contact matches, which can also explain why a later import alone does not refresh a displayed title. That is a provenance limitation, not proof of what happened to Eric's record. Keep historical correction/provenance open without blocking on a speculative importer rewrite.
+
+## October 26: careers-page save-to-search completion
+
+Tracing the implemented careers-URL feature found two incomplete consumers: the dossier's Openings link still used discovery's original address, and the web-search request only received employer names. Corrections previously reached the supported-board direct reader, not the web provider. The workspace now resolves the link through the same saved answers. Target-page search requests explicitly include only the current step's employer names, resolved careers URLs and provenance (no correction notes); they start with those URLs. Supported-board direct reads and unreadable-page fallback use the same resolved URL. A no-page answer is explicit in the request and suppresses direct fetching of the rejected guess; open-web/sector-board search remains available. Existing guarded fetches, verification states, model caps and failure paths remain intact.
+
+Saving now confirms the choice, refreshes repeat saves, and returns to/reopens the same employer dossier. Query parameters are composed before the fragment and off-site returns are rejected. The no-page checkbox reflects the saved answer; that choice is described as something the user recorded, not a discovery result. Validation/storage errors remain beside the form with its entry retained. Saving is explicitly not page verification, job verification, or a recheck of historical results. A choice changed after the latest search is labelled not checked by that search; prior postings/history remain intact.
+
+Integration fixtures call the real save endpoint against an in-memory database, reload the workspace, inspect its rendered careers link, and advance the actual search orchestration with a fake provider/fetcher. Coverage includes corrected URL propagation to web/direct/fallback readers, no-page suppression, later correction without deleting history, user isolation/auth/origin checks, invalid URLs, repeat/native redirects and query/fragment ordering. No production migration or deployment; no live paid search was made by these checks.
+
+Founder check before closing Step 4: open a real employer dossier, save its actual careers page, confirm the saved notice and reopened dossier, refresh to verify the supplied address is retained, and confirm its use on the next search. Test no-page only for an employer where that is a truthful answer (the automated fixture already exercises reversal). Then proceed to Step 5's conversation-to-analysis and constraint-change acceptance passes. Git push remains deferred until testing is accepted.
+Final careers-page validation: TypeScript checks and all 931 tests across 68 files passed; isolated Astro SSR build passed. Signed-in save/refresh and live next-search acceptance remain pending. Git push is deferred until the founder accepts testing.
+
+## October 26: competitive-fit summary cut off at 600 characters
+
+Founder reported an Acelero Executive Director assessment whose summary ended "and an un". The supplied summary is exactly 600 characters, matching the AI response schema's maxLength; the renderer outputs the saved summary in full and does not slice it. This identifies a schema-boundary generation symptom, not a CSS clipping problem. The prompt already asked for a complete shorter summary, which was insufficient protection.
+
+Removed the provider-side summary maxLength while retaining the 4200-token response cap, strict structured output, a defensive local 4000-character validation bound and the deterministic unscored fallback. The prompt requests concise complete sentences without a hard character target. Responses explicitly marked incomplete/failed are rejected even if text happens to parse. A new response with the legacy exact-600/no-terminal-punctuation symptom also falls back unscored rather than saving an apparently cut-off assessment as complete.
+
+Existing saved summaries are preserved, with a notice when the exact legacy boundary symptom is detected: reassess for a complete explanation; saved score and detailed comparisons remain available. The notice says "appears cut off" because boundary/punctuation detection is evidence, not proof of missing prose. No missing ending is invented and no historical assessment is overwritten. A fresh assessment is additive through the existing flow. The founder's saved Acelero assessment requires Assess fit again after restart; no live reassessment was run by the agent.
+Fit-summary validation: TypeScript and all 935 tests across 68 files passed; isolated Astro SSR build passed. Regression checks preserve complete summaries beyond 600 characters through save/load, reject explicitly incomplete responses, and flag the legacy symptom without altering saved history. Founder live reassessment remains pending; no push.
+
+## Founder live acceptance checkpoint — 2026-10-26
+
+Founder ran additional job-fit assessments and a complete new weekly job search and reports the results look good. This accepts the reviewed fit-summary repair and ordinary live assessment/search flow, alongside the earlier employer dossier and People navigation/capture acceptance. It is not the formal Step 5 constraint-change, empty-account, induced-failure or screen-reader acceptance pass. The specific manually corrected careers-URL save/refresh/next-search scenario has not been separately confirmed. Automated validation remains 935 passing tests, TypeScript clean and isolated SSR build passed; no application code changed after that validation. Proceed with the previously planned commit/push after this live testing report.

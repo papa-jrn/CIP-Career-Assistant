@@ -1677,3 +1677,7 @@ parent organisation. Typecheck clean, 915 tests passing (19 on the event rules, 
 SSR build passed. The signed-in card controls and the suppressed-count notice still need a founder
 pass on live data, and **the migration is not applied to the hosted database** — it joins the other
 unapplied migrations, so nothing persists there until it is.
+
+### 2026-10-26 — Careers-page choice reaches all search/display consumers
+
+Completed the remaining URL propagation gaps: the dossier Openings link now resolves the user's saved answer, and target-page web-search requests receive the selected employers' resolved URLs and provenance. Only names/URLs/origins cross that added outbound boundary; correction notes stay private. Known-target and unreadable-page fallback direct readers use the same answer. Explicit no-page choices suppress direct reads of the rejected guessed page while leaving open-web/sector-board search available. Saving confirms and returns to the same open dossier; it does not verify the page or recheck historical jobs. Choices saved after the latest search are explicitly labelled as not checked by that search. Additive storage and guarded fetches remain intact. TypeScript and 931 tests passed; isolated SSR build passed. The signed-in real-employer save/reload and next-search check remain pending; no live paid search or push was performed.

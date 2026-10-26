@@ -1,0 +1,23 @@
+---
+import Layout from "../layouts/Layout.astro";
+import PeopleConnections from "../components/PeopleConnections.astro";
+import PeopleFollowUps from "../components/PeopleFollowUps.astro";
+import { peopleView } from "../lib/cip/people-routing";
+
+const view = peopleView(Astro.url.searchParams.get("view"));
+const workAction = Astro.url.searchParams.get("workAction");
+const context = workAction && /^[a-f0-9-]{36}$/.test(workAction) ? `&workAction=${workAction}` : "";
+---
+<Layout title={`People — ${view === "connections" ? "Connections" : "Follow-ups"} — CIP`}>
+  <main class="mx-auto w-full max-w-6xl px-5 py-8">
+    <header>
+      <h1 class="text-3xl font-semibold">People</h1>
+      <p class="mt-2 text-sm text-[var(--muted)]">Keep your connections, conversation notes, and follow-ups together.</p>
+      <nav class="mt-4 flex flex-wrap gap-2" aria-label="People views">
+        <a class:list={["cip-action", { "cip-action-primary": view === "connections" }]} href={`/people?view=connections${context}`} aria-current={view === "connections" ? "page" : undefined}>Connections</a>
+        <a class:list={["cip-action", { "cip-action-primary": view === "follow-ups" }]} href={`/people?view=follow-ups${context}`} aria-current={view === "follow-ups" ? "page" : undefined}>Follow-ups</a>
+      </nav>
+    </header>
+    {view === "connections" ? <PeopleConnections /> : <PeopleFollowUps />}
+  </main>
+</Layout>
