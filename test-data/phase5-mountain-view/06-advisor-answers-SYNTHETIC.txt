@@ -1,0 +1,107 @@
+SYNTHETIC CIP TEST DATA — NOT A REAL PERSON OR EMPLOYMENT RECORD
+All names, affiliations, dates, compensation, metrics, and experiences below are invented for testing.
+
+MORGAN ELLIS — ANSWERS TO ADVISOR FOLLOW-UP QUESTIONS
+Recorded October 28 2026, from the twelve questions the advisor asked after the resume,
+career context and supporting evidence were uploaded.
+
+WHY THIS FILE EXISTS
+The answers are derived only from files 01, 02 and 03. Nothing new is invented: no extra
+accomplishment, metric, certificate, portfolio link, team size or management responsibility,
+per the work-sample limits in file 03. Most answers are therefore "no evidence", because that
+is what the fixture says is true of Morgan.
+
+Keeping them here makes the run repeatable. Answering these questions generously would convert
+a deliberately thin persona into a strong candidate across three lanes and destroy the
+calibration in file 00 — Product Operations is supposed to stay adjacent with gaps stated, and
+volunteer coordination is supposed not to become people management.
+
+1. QUANTIFY THE SCOPE AND IMPACT OF MENTORING TWO PROGRAM MANAGERS
+Informal mentoring of two program managers, no direct reports, no authority over their reviews
+or assignments. I have no data on their subsequent performance or career progression; it was
+never tracked and I was not their manager. Please do not treat this as people management.
+
+2. INFLUENCE ON PRODUCT ROADMAPS IN THE PRODUCT OPERATIONS EXPERIMENT
+None in the sense of authority. April through June 2026 I spent roughly four hours a week
+tagging customer feedback, grouping recurring requests and giving product managers a monthly
+synthesis. Product chose the roadmap; I did not. My manager's September 2026 note named
+influencing priorities earlier as a development area, not a strength. How I might expand it is
+a hypothesis, not evidence.
+
+3. CERTIFICATIONS
+None. No PMP, no cloud certification, none in progress or planned. Degree is a BS in
+Information Systems, 2014.
+
+4. LEADERSHIP OR INITIATIVE SHOWING READINESS FOR EXPANDED AUTHORITY
+I can give initiative examples but I decline the framing of roadmap or strategic
+decision-making authority, which I have never held. Accurately: introduced a dependency
+register and readiness checklist (on-time milestone completion rose from 68% to 84% over four
+quarters on an unchanged internal definition); wrote a shared readiness definition after
+interviewing engineering leads and customer-success managers; escalated ownership gaps to the
+engineering director; built a SQL delivery dashboard and used it to propose a staged release
+process (critical post-release incidents declined from 10 to 6 across comparable six-month
+periods). All delivery and process initiative. None of it is roadmap authority or P&L.
+
+5. EMPLOYERS OR INDUSTRIES RESEARCHED FOR PROGRAM MANAGEMENT MATURITY AND CULTURE
+None yet. I have not researched specific employers or industries on this. It is a genuine gap
+and a reasonable next step; treat it as unknown rather than inferring from my current employer.
+
+6. MEASURABLE OUTCOMES FROM VOLUNTEER COORDINATION AT SOUTH BAY LEARNING LAB
+Attendance figures only: a monthly adult digital-skills workshop since January 2024, a rotating
+group of six volunteers, 12 to 18 participants per session. No outcome measurement exists — no
+skills assessment, completion tracking or follow-up. This is coordination and explains an
+interest in education access. It is not school administration, teaching certification, people
+management or nonprofit executive experience.
+
+7 AND 8. GITHUB AND LINKEDIN
+None to supply. There is no public GitHub or LinkedIn profile for this account, and the resume
+address is example.invalid. Leave these blank rather than substituting a guess; do not fill them
+with a real identity.
+
+9. PROOF OF OWNERSHIP OR INFLUENCE ON PRICING, MARKET SIZING, ROADMAP PRIORITIZATION OR
+   EXPERIMENTATION PLATFORMS (Product Operations lane)
+No proof exists. I have not owned or influenced pricing, market sizing, product discovery,
+roadmap prioritization or an experimentation platform. The product-operations work was feedback
+tagging and synthesis, four hours a week for three months. This requirement is unmet and should
+be shown as a gap, not estimated.
+
+10. PROOF OF PRODUCT-MANAGER FEEDBACK ON CONTRIBUTIONS TO STRATEGIC DECISIONS
+   (Product Operations lane)
+None. The only manager input I have is my own paraphrase of a private September 2026 check-in
+with my line manager, who is not a product manager. It is not a signed or uploaded review and
+should not be cited as endorsement.
+
+11. PROOF OF TECHNICAL DECISION-MAKING BEYOND COORDINATION, E.G. SYSTEM ARCHITECTURE INPUTS
+   (Platform Program Management lane)
+No proof, and I want the distinction preserved. On the February 2026 permissions redesign a
+security engineer designed the authorization changes; I mapped affected customers, staged the
+rollout, coordinated help-center updates and scheduled a rollback review. I can explain
+delivery risks and ask technical questions. I could not independently design an identity
+service and have no system-architecture inputs to cite.
+
+12. COMFORT AND CAPABILITY IN DEEPER TECHNICAL DOMAINS OR DEV TEAM LIAISON ROLES
+   (Platform Program Management lane)
+Split answer. Liaison: yes, with evidence — built a SQL dashboard combining Jira exports and
+support tickets and used it to propose a release-process change; translated recurring support
+issues into problem statements for product managers; coordinated with security engineers on
+rollout. Deeper technical domains: no — no production software engineering ownership, no
+machine-learning work, no architecture authority. Score the liaison capability and leave the
+deep-domain capability unmet.
+
+WHAT TO WATCH AFTER SUBMITTING THESE
+- Product Operations should weaken or stay adjacent with its gaps stated, not disappear silently
+  and not survive unchanged.
+- Platform Program Management's technical-ownership framing should narrow to liaison.
+- Technical program management should remain the best-supported direction.
+- No answer above should be restated as an accomplishment. "No proof" must not become a neutral
+  or positive signal, and the volunteering must not reappear as management experience.
+- Note any question that is simply re-asked after being answered "none".
+
+OBSERVATION ON THE QUESTIONS THEMSELVES (2026-10-28)
+File 01 carries a BOUNDARIES OF EXPERIENCE section and file 03 adds explicit disclaimers on the
+permissions work, the product-operations experiment and the volunteering. Questions 1, 4, 6 and
+arguably 2 ask for exactly what those sections rule out: question 1 presupposes tracked outcomes
+from informal mentoring with no direct reports, and question 4 presupposes readiness for
+authority the resume documents not having. Stated boundaries do not appear to suppress questions
+that contradict them. Questions 5 and 9 through 12 are well formed by contrast: they name the
+specific unmet requirement and ask for proof.
