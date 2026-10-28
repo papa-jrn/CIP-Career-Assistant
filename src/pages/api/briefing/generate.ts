@@ -24,9 +24,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   return html(`
     <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-      <p class="text-sm font-semibold text-[var(--accent-strong)]">Weekly strategy snapshot generated.</p>
+      <p class="text-sm font-semibold text-[var(--accent-strong)]">Strategy refreshed from saved data.</p>
       <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(result.summary)}</p>
-      <p class="mt-3 text-sm text-[var(--muted)]">Refresh this page to view the saved briefing.</p>
+      <p class="mt-3 text-sm text-[var(--muted)]">No new job search was run. Your latest saved job-search results were reused, and your next search due date is unchanged. Refresh this page to view the saved briefing, or open Opportunities to run a new job search.</p>
     </div>
   `);
 };

@@ -281,7 +281,7 @@ function renderAlreadyTracked(alreadyTracked: AlreadyTracked[]) {
   if (!alreadyTracked.length) return "";
   return `
     <details class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
-      <summary class="cursor-pointer text-sm font-semibold">Already tracked (${alreadyTracked.length}) — not added again</summary>
+      <summary class="cursor-pointer text-sm font-semibold">Already tracked among these results (${alreadyTracked.length}) — not added again</summary>
       <ul class="mt-2 grid gap-1 text-sm text-[var(--muted)]">
         ${alreadyTracked
           .map((entry) => `<li><span class="font-semibold">${escapeHtml(entry.candidate.name)}</span> — already on your list as ${escapeHtml(entry.trackedAs)}</li>`)
@@ -377,6 +377,7 @@ function renderDiscoveryResult({
         </div>` : ""}
       ${renderNineNinetyCoverage(nineNinety, nineNinetyNote)}
       ${renderSearchArea(result)}
+      ${(result.locationChecks ?? []).some(item => item.status !== "within") ? `<details class="mt-3 rounded-md border border-[var(--line)] p-3"><summary class="cursor-pointer text-sm font-semibold">Location checks requiring attention</summary><ul class="mt-2 text-sm">${result.locationChecks!.filter(item => item.status !== "within").map(item => `<li>${escapeHtml(item.name)} — ${escapeHtml(item.location)}: ${item.status === "outside" ? `${item.distanceMiles} mi, outside the radius; not added` : "distance unknown; review before treating as local"}</li>`).join("")}</ul></details>` : ""}
       ${signedIn ? `<p class="mt-3 text-sm text-[var(--muted)]">Refresh this page to review saved candidates and source pages.</p>` : ""}
     </div>
     ${renderSourcePages(result.sourcePages)}
@@ -436,19 +437,20 @@ function renderCurrentSearchSaveForm(candidates: SavedCandidateRow[]) {
   `;
 }
 
-function renderSearchArea(result: BusinessSearchResult) {
+export function renderSearchArea(result: BusinessSearchResult) {
   const area = result.searchArea;
   if (!area) return "";
-  const nearby = area.nearbyPlaces.slice(0, 12);
-  const queries = area.searchQueries.slice(0, 8);
+  const nearby = [...area.nearbyPlaces].sort((a, b) => a.distanceMiles - b.distanceMiles).slice(0, 12);
+  const queries = area.searchQueries;
   return `
     <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
       <p class="text-sm font-semibold">Geocoded search area</p>
       <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(area.displayName)}</p>
       <p class="mt-1 text-xs text-[var(--muted)]">Center: ${area.latitude.toFixed(4)}, ${area.longitude.toFixed(4)} - Radius: ${area.radiusMiles} miles</p>
+      ${area.nearbyLookup === "fallback" ? '<p class="mt-2 text-sm font-semibold text-[var(--warning)]">Nearby-town lookup failed. Only the search center is available; regional and cross-border coverage is incomplete.</p>' : area.nearbySource === "geocodio_samples" ? '<p class="mt-2 text-sm text-[var(--muted)]">The nearby-town service was unavailable. Geocodio recovered nearby localities from sampled points. Coverage is limited, not an exhaustive town list.</p>' : ""}
       ${nearby.length ? `
         <p class="mt-3 text-xs font-semibold uppercase text-[var(--muted)]">Nearby places included</p>
-        <p class="mt-1 text-sm text-[var(--muted)]">${nearby.map((place) => `${escapeHtml(place.name)} (${place.distanceMiles} mi)`).join(", ")}</p>
+        <p class="mt-1 text-sm text-[var(--muted)]">${nearby.map((place) => `${escapeHtml(place.name)}${place.state ? `, ${escapeHtml(place.state)}` : " (state unconfirmed)"} (${place.distanceMiles} mi)`).join(", ")}</p>
       ` : ""}
       ${queries.length ? `
         <details class="mt-3">

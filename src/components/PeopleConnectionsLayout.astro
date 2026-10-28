@@ -1,0 +1,21 @@
+---
+interface Props {
+  hasNetwork: boolean;
+}
+const { hasNetwork } = Astro.props;
+---
+<div>
+  {hasNetwork ? (
+    <>
+      <slot name="conversations" />
+      <slot name="network" />
+      <slot name="guidance" />
+    </>
+  ) : (
+    <>
+      <slot name="guidance" />
+      <slot name="network" />
+      <slot name="conversations" />
+    </>
+  )}
+</div>

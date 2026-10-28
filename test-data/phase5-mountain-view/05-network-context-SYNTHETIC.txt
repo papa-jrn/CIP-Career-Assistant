@@ -1,0 +1,19 @@
+SYNTHETIC CIP TEST DATA — NOT A REAL PERSON OR EMPLOYMENT RECORD
+All names, affiliations, dates, compensation, metrics, and experiences below are invented for testing.
+
+MORGAN ELLIS — NETWORK CONTEXT
+All people below are fictional. Real organization names in the CSV are geographic/industry anchors only; every claimed affiliation is invented. There are no actual LinkedIn profiles, introductions, or referral offers. Do not contact these people or treat them as verified employees.
+Paste the relationship details below into the network relationship-notes field after uploading the CSV. The CSV importer does not preserve arbitrary Notes columns, so these details are intentionally supplied separately.
+
+Avery Chen: Former engineering partner at fictional Orchard Relay. Now notionally a Staff Software Engineer at Google. We worked together for three years and exchange messages quarterly. Can discuss platform program work; has not offered a referral.
+Priya Raman: Former peer program manager. Now notionally a Senior Technical Program Manager at Microsoft. Warm relationship; we last caught up in July 2026. Could compare program scope and interview expectations.
+Jordan Park: Met once at a product-operations meetup. Notionally a Product Operations Manager at LinkedIn. Weak relationship; useful exploratory perspective, no introduction promised.
+Samira Patel: Former customer-success partner at Orchard Relay. Knows my migration work well. Can discuss implementation leadership and customer operations, but has not validated product operations.
+Elena Torres: Volunteer colleague at fictional South Bay Learning Lab. Friendly monthly contact. Can explain education-access organizations, but does not know whether I qualify for education-sector leadership.
+Noah Brooks: Former project sponsor at Harbor Circuit. Notionally a Director of Technical Program Management at Intuit. Strong professional history, no contact in 18 months. Reconnect respectfully before any request.
+Riley Morgan: Friend from a hiking club, notionally a Software Engineer at Google. We have never discussed work. Social connection alone does not establish a professional endorsement.
+Mina Okafor: Met twice at a conference. Notionally an AI Research Scientist at Google. Her title is not evidence that I have AI research experience or that she can evaluate TPM hiring.
+Cameron Ellis: A relative in residential real estate, unrelated to my career directions. Same surname does not establish professional relevance.
+Theo Martin: Former colleague now notionally working in Seattle. Useful remote-work perspective; not proof of a Mountain View office or a relocation preference.
+Mei Tan: Knows me through volunteering; prefers that I do not ask for job referrals. General advice is okay if I ask first. Preserve that boundary.
+The other CSV contacts are acquaintances with limited relationship context. Their job titles and company names are clues to investigate, not validated relationships or offers of help. No conversations about this job search have happened yet. Do not populate conversation outcomes or follow-up promises from this file.

@@ -1,0 +1,31 @@
+SYNTHETIC CIP TEST DATA — NOT A REAL PERSON OR EMPLOYMENT RECORD
+All names, affiliations, dates, compensation, metrics, and experiences below are invented for testing.
+
+MORGAN ELLIS — CAREER CONTEXT
+As of October 28 2026
+
+WHY I AM EXPLORING
+I am still employed. My company has become more reactive after a reorganization, and I spend too much time producing executive status slides. There is no layoff notice and no urgent deadline. I want more ownership of a meaningful technical program, with clearer priorities and a reasonable work week.
+
+WHAT I WANT TO DO
+I enjoy turning an ambiguous cross-team problem into a plan, finding where delivery breaks down, and helping specialists make decisions. I like working with engineers but do not want to become a software engineer. I am curious about senior technical program manager, platform program manager, and product operations roles. Those are hypotheses, not instructions to endorse all of them.
+
+CONSTRAINTS TO ENTER IN SEARCH PREFERENCES
+Geographic center: Mountain View, CA, United States.
+Search radius: 25 straight-line miles for the initial test; this is a search boundary, not an assurance of an acceptable commute.
+Current home: Sunnyvale CA. No relocation planned.
+Work model: hybrid preferred, up to three office days a week; remote acceptable. Five days on site is a conflict that should be identified.
+Compensation floor: USD 150000 annual BASE salary. Bonus and equity do not satisfy this floor. Preferred base range: USD 165000–185000. Current fictional base: USD 148000, with a discretionary bonus target of 8%.
+A listing without a base-salary range is unknown, not proven to meet the floor. A range crossing the floor needs clarification, not an assumption that the top applies to me.
+Travel: at most 10%; no regular overnight on-call requirement.
+Employment: full-time employee; no short-term contracts or commission-led roles.
+Work authorization: authorized to work in the US without employer sponsorship, as a fictional test input.
+
+TRADEOFFS
+I would consider an individual-contributor role with smaller scope if it restores hands-on problem solving and meets the base floor. I do not need a director title. I could consider four office days for an unusually strong role, but only after an explicit discussion; do not silently change my saved three-day preference. I am interested in education and climate technology, but those interests are not professional domain expertise.
+
+WHAT I DO NOT WANT
+Do not steer me toward CTO, engineering director, or machine-learning research roles because I coordinate engineers. I have never managed an engineering organization. I do not want a quota-bearing sales role. I am unsure about consulting because of travel.
+
+WHAT IS STILL UNKNOWN
+I have not researched current salary bands or specific openings. I do not know which employers have healthy program-management practices. I have not tested whether product operations teams would value my experience. I have no referral promises, interviews, or active applications.

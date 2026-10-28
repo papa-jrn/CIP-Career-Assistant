@@ -1211,3 +1211,8 @@ Also unverified signed in: §14 slice 2 exclusion and restore, seen only as "Exc
 
 Step 4 implementation is complete and accepted. Both gaps carry into Step 5 rather than being
 treated as closed.
+
+## October 27: employer discovery geographic feedback
+
+See the Consolidated Finish Plan's Step 5 Norwich finding and the Rethink's cross-state repair entry. The discovery result now shows locality states, warns when regional expansion fails or uses limited Geocodio recovery, exposes withheld/unknown location checks and labels Already tracked as applying only to returned results. This fixes misleading coverage presentation alongside the underlying geography/distance repair; it does not change the accepted compact dossier layout or turn discovery into an exhaustive employer inventory. Founder Norwich rerun remains pending.
+Validation: TypeScript, all 941 tests and final isolated SSR build passed; final live Geocodio recovery generated Hanover NH queries. Founder employer-search rerun remains pending.

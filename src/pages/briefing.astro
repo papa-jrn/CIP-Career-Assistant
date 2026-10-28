@@ -169,10 +169,11 @@ function movementClass(direction: string) {
             <button class="cip-fancy-button" type="submit" disabled={!signedIn}>
               <span class="flex items-center gap-2">
                 <Icon name="sparkles" class="h-4 w-4" strokeWidth={2} />
-                Generate weekly snapshot
+                Refresh strategy from saved data
               </span>
             </button>
           </form>
+          <p class="max-w-sm text-sm leading-6 text-[var(--muted)]">Uses your saved evidence and latest job-search results. Does not run a new search or change when your next search is due.</p>
           <a class="cip-fancy-button cip-fancy-button-secondary" href="/report">
             <span>View Career Report</span>
           </a>
@@ -185,7 +186,7 @@ function movementClass(direction: string) {
       <div id="briefing-loading" class="htmx-indicator mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
         <div class="flex items-center gap-3 text-sm font-semibold text-[var(--accent-strong)]">
           <span class="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"></span>
-          Building weekly career strategy from watched employers and opportunity matches...
+          Refreshing strategy from saved evidence, conversations, employers, and job-search results. No new job search is running...
         </div>
       </div>
       <div id="briefing-result" class="mt-5"></div>

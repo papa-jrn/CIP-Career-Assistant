@@ -396,7 +396,8 @@ describe("runNineNinetyDiscovery", () => {
   it("reports a failed category instead of inventing organizations", async () => {
     const fetchImpl = fetcherFor((url) => (url.includes("/search.json") ? jsonResponse({}, 500) : null));
     const result = await runNineNinetyDiscovery({ searchArea: area, lanes: [EDUCATOR_LANE], fetchImpl, sleep: noSleep });
-    expect(result!.coverage.categoryErrors).toHaveLength(1);
+    expect(result!.coverage.categoryErrors).toHaveLength(2);
+    expect(result!.coverage.categoryErrors).toEqual(expect.arrayContaining([expect.stringMatching(/^VT:.*Education/), expect.stringMatching(/^NH:.*Education/)]));
     expect(result!.coverage.categoryErrors[0]).toContain("Education");
     expect(result!.candidates).toHaveLength(0);
     expect(result!.summary).toContain("unavailable");
@@ -594,4 +595,19 @@ describe("ProPublica's zero-result search is HTTP 404 with a JSON body (found li
     expect((await searchNineNinetyOrgs("NH", "5", { fetchImpl: fetcherFor(() => new Response("<html>not found</html>", { status: 404 })), sleep: noSleep })).failed).toBe(true);
     expect(await fetchNineNinetyOrgDetail(999999999, { fetchImpl: fetcherFor(() => jsonResponse({ error: "not found" }, 404)), sleep: noSleep })).toBeNull();
   });
+});
+
+it("searches nonprofit categories in both VT and nearby NH while retaining radius checks", async () => {
+  const fetchImpl = fetcherFor(url => {
+    if (url.includes("/search.json")) {
+      return jsonResponse(searchPage(url.includes("state[id]=NH") ? [orgRow({ ein: 987654321, name: "Example Cross-Border Charity", city: "Lebanon", state: "NH" })] : []));
+    }
+    if (url.includes("/organizations/987654321.json")) return jsonResponse(detailPayload(987654321, "Example Cross-Border Charity", [filingPayload(2024, 1400000, 987654321)]));
+    return jsonResponse({}, 404);
+  });
+  const result = await runNineNinetyDiscovery({ searchArea: area, lanes: [EDUCATOR_LANE], fetchImpl, sleep: noSleep });
+  expect(result!.coverage.statesSearched).toEqual(["VT", "NH"]);
+  expect(fetchImpl.urls.some(url => url.includes("state[id]=VT"))).toBe(true);
+  expect(fetchImpl.urls.some(url => url.includes("state[id]=NH"))).toBe(true);
+  expect(result!.candidates.map(row => row.name)).toContain("Example Cross-Border Charity");
 });

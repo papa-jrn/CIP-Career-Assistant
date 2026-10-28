@@ -1,0 +1,31 @@
+CIP PHASE 5 EMPTY ACCOUNT TEST
+Synthetic Morgan Ellis dataset | Created October 28 2026
+
+PURPOSE
+Test first-use Direction with no previous records, then network import and a geographically constrained job search. This is a fictional fixture, not evidence from a real second user. Keep all files in a dedicated test account. Use your actual inbox or an alias for login; the example.invalid address in the resume cannot receive mail.
+
+FILES AND ORDER
+1. Upload 01-resume-SYNTHETIC.txt as the resume/work history.
+2. Add 02-direction-context-SYNTHETIC.txt and 03-additional-evidence-SYNTHETIC.txt through the supporting-evidence flow or paste their contents where appropriate. Enter constraints explicitly in Search preferences too; a note does not prove a structured preference was saved.
+3. Complete Direction and record the first output BEFORE importing the network. Confirm the output reaches this account without old records from yours or Jen's account.
+4. Upload 04-network-SYNTHETIC.csv in People. It has 24 unique fictional contacts and LinkedIn-style columns. Blank profile URLs and emails are intentional; do not fill them with real identities.
+5. Paste 05-network-context-SYNTHETIC.txt into relationship notes to supply warmth, history, and boundaries. CSV metadata alone cannot establish those things.
+6. Review the suggested people and reasons. Do not actually send outreach or create real conversation outcomes from this invented history.
+7. Enter Mountain View CA, radius 25 miles, USD 150000 annual base floor, hybrid up to three days, remote acceptable. Use employer discovery or job search for real public opportunities, but do not automatically add fictional resume employers as real search targets.
+
+REVIEW EXPECTATIONS — DO NOT UPLOAD THIS ANSWER GUIDE
+These are review questions, not prescribed outputs or guaranteed lane labels.
+- Technical program management should have stronger direct evidence than senior product management or engineering leadership.
+- Product operations has limited supporting work and should remain an adjacent direction to test, with gaps stated.
+- Education/climate interest must not become invented domain experience. Volunteer coordination must not become executive or formal people-management experience.
+- A 150K base floor must not become 150K total compensation. Missing pay stays unknown. A posted range crossing 150K is not a guarantee.
+- Mountain View is the search center, not a requirement to work for Google. Radius uses straight-line distance, not drive time. Remote eligibility needs its own interpretation.
+- A contact at a desirable employer is not a referral offer. Weak, distant, irrelevant and referral-restricted relationships should be treated differently.
+- No exact number of recommendations or job matches is required. Zero results can be correct if explained.
+- Record missing/unclear fields and confusing first-use steps. Do not fix the output by silently changing the fixture.
+
+IMPORTANT LIMITS
+Every person, employment affiliation, achievement, date and salary in these inputs is synthetic. Resume employers and the volunteering organization are fictional; recognizable network organizations are real names with invented affiliations. No live job listings, current salary-market claims or working contact details are supplied. A good result proves behavior on this fixture, not a real person's employability or universal lane coverage.
+
+OPTIONAL LATER PROPAGATION TEST
+After baseline acceptance, change ONLY the radius from 25 to 10 miles; keep base floor and work model unchanged. Compare saved brief, coverage and resulting exclusions with the baseline. Do not upload fabricated conversations to simulate real follow-through.

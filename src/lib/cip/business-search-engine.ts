@@ -1,3 +1,4 @@
+import { checkBusinessLocations, type BusinessLocationCheck } from "./business-search-geography";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IntakeForm } from "@/lib/cip/intake";
 import { type GeocodedSearchArea, resolveSearchArea } from "@/lib/cip/geography-engine";
@@ -50,6 +51,7 @@ export interface BusinessSearchResult {
   geography: string;
   radiusMiles: number;
   searchArea?: GeocodedSearchArea;
+  locationChecks?: BusinessLocationCheck[];
   summary: string;
   sourcePages: BusinessSearchSource[];
   candidates: BusinessSearchCandidate[];
@@ -79,7 +81,12 @@ export async function runBusinessSearch(input: BusinessSearchInput): Promise<Bus
 
   try {
     const searchArea = await resolveSearchArea(normalized.geography, normalized.radiusMiles);
-    return await runOpenAiBusinessSearch(normalized, searchArea, openAiKey);
+    const result = await runOpenAiBusinessSearch(normalized, searchArea, openAiKey);
+    const checked = await checkBusinessLocations(result.candidates, searchArea);
+    const within = checked.checks.filter(item => item.status === "within").length;
+    const unknown = checked.checks.filter(item => item.status === "unknown").length;
+    const outside = checked.checks.filter(item => item.status === "outside").length;
+    return { ...result, candidates: checked.candidates, locationChecks: checked.checks, summary: `Employer discovery checked ${checked.checks.length} reported locations: ${within} within ${normalized.radiusMiles} miles, ${unknown} not geographically confirmed, ${outside} outside the radius and not added. Location distances are approximate, not commuting times. This is a bounded search, not an exhaustive employer inventory.` };
   } catch (error) {
     return {
       mode: "error",
@@ -237,6 +244,8 @@ async function runOpenAiBusinessSearch(
               city: searchArea.city,
               county: searchArea.county,
               state: searchArea.state,
+              nearby_lookup: searchArea.nearbyLookup,
+              nearby_source: searchArea.nearbySource ?? "overpass",
               nearby_places: searchArea.nearbyPlaces.map((place) => ({
                 name: place.name,
                 type: place.placeType,
@@ -258,6 +267,7 @@ async function runOpenAiBusinessSearch(
               "Return only employers that are connected to source pages found through web search.",
               "Actively search the generated_search_queries and nearby_places, not only the original geography string.",
               "For exact-name collisions, prefer employers inside the radius and explain uncertainty. Do not include a same-name employer just because it ranks highly if it is outside the geocoded radius.",
+              "The radius crosses state borders. Search all verified nearby states and localities; never restrict results to the center state. If nearby_lookup is fallback or nearby_source is geocodio_samples, locality coverage is partial: actively search neighboring towns and regional anchor employers across borders using sources, not guesses.",
               "For small towns, include nearby labor-market anchors inside the radius, such as nearby hospitals, colleges, manufacturers, municipalities, school systems, and regional brands.",
               "Include chambers, municipalities, economic development organizations, schools, healthcare systems, and business directories in source_pages when useful.",
               "Do not use built-in app fixtures or examples.",

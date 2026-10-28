@@ -1,0 +1,24 @@
+SYNTHETIC CIP TEST DATA — NOT A REAL PERSON OR EMPLOYMENT RECORD
+All names, affiliations, dates, compensation, metrics, and experiences below are invented for testing.
+
+MORGAN ELLIS — WORK EXAMPLES AND REFLECTIONS
+These are fictional self-reported notes, not independently verified endorsements.
+
+CUSTOMER MIGRATION RETROSPECTIVE — AUGUST 2025
+The migration was delayed at first because each team used a different definition of readiness. I interviewed engineering leads and customer-success managers, wrote a shared checklist, and got the engineering director to resolve ownership gaps. I did not personally implement the migration scripts. The 21-to-15-day onboarding measure came from the customer-operations dashboard; it is an observed team outcome, not proof that my checklist alone caused the change.
+I liked the customer interviews and the difficult dependency decisions. I disliked spending several hours each week rebuilding the same status presentation.
+
+PERMISSIONS REDESIGN — FEBRUARY 2026
+A security engineer designed the authorization changes. I mapped customers affected by the change, coordinated rollout stages and help-center updates, and scheduled a rollback review. I can explain the delivery risks and ask technical questions, but I could not independently design an identity service. I want CIP to preserve that distinction.
+
+MANAGER CHECK-IN NOTES — SEPTEMBER 2026
+My manager described my strength as making cross-team ownership visible and keeping communication calm during an escalation. The development area was influencing roadmap priorities earlier rather than accepting every request. This is my paraphrase of a private check-in, not an uploaded signed performance review.
+
+PRODUCT OPERATIONS EXPERIMENT — APRIL THROUGH JUNE 2026
+I spent roughly four hours per week tagging customer feedback, grouping recurring requests, and sharing a monthly synthesis with product managers. Product chose the roadmap; I did not. I enjoyed translating scattered evidence into a decision discussion, but have not owned pricing, market sizing, product discovery, or an experimentation platform. This is a plausible adjacent direction to investigate, not proof of senior product-manager readiness.
+
+VOLUNTEERING — JANUARY 2024 TO PRESENT
+At the fictional South Bay Learning Lab, I coordinate a monthly adult digital-skills workshop and a rotating group of six volunteers. About 12–18 participants attend a session. This explains my interest in education access. It is not school administration, teaching certification, or nonprofit executive experience.
+
+WORK SAMPLE LIMITS
+No confidential employer documents, customer identities, source code, or real third-party statements are included. All figures in this fixture are synthetic. Do not invent additional portfolio links, certificates, accomplishments, team size, or management responsibilities.

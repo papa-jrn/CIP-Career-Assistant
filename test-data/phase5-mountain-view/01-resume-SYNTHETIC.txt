@@ -1,0 +1,40 @@
+SYNTHETIC CIP TEST DATA — NOT A REAL PERSON OR EMPLOYMENT RECORD
+All names, affiliations, dates, compensation, metrics, and experiences below are invented for testing.
+
+MORGAN ELLIS
+Senior Technical Program Manager
+Sunnyvale, California | morgan.ellis@example.invalid
+
+SUMMARY
+Technical program manager with 12 years across enterprise software implementation and platform delivery. Coordinates engineering, security, customer success, and operations to ship internal tools and customer migrations. Strong in risk management, process design, and using SQL to investigate delivery bottlenecks. Interested in technical program management and product operations in the Mountain View area.
+
+EXPERIENCE
+Orchard Relay Software — fictional B2B workflow software company, Sunnyvale CA
+Senior Technical Program Manager | July 2021–Present
+- Coordinate a customer-platform migration across five engineering teams and security, support, and customer-success partners; own dependencies, release readiness, and escalation cadence.
+- Led a 14-month migration of 38 enterprise customers from a legacy provisioning workflow. Median onboarding time declined from 21 to 15 business days in the six months after rollout; shared result with engineering and customer operations.
+- Built a SQL-based delivery dashboard combining Jira exports and support tickets. Used the findings to propose a staged release process; critical post-release incidents declined from 10 to 6 across comparable six-month periods.
+- Manage a program budget of $1.2 million annually, primarily vendor services and implementation support; recommend tradeoffs to the engineering director.
+- Facilitate planning and retrospectives with approximately 45 cross-functional contributors. Mentor two program managers; no direct reports.
+- Coordinated a permissions redesign with security engineers; did not design the underlying identity architecture or write production services.
+
+Orchard Relay Software — fictional company, Sunnyvale CA
+Technical Program Manager | March 2018–June 2021
+- Managed integrations and rollout plans for eight enterprise customers across sales engineering, implementation, and product teams.
+- Introduced a dependency register and readiness checklist; on-time milestone completion increased from 68% to 84% over four quarters, using the same internal milestone definition.
+- Translated recurring support issues into problem statements for product managers and tracked decisions through launch.
+
+Harbor Circuit Systems — fictional enterprise software vendor, San Jose CA
+Implementation Project Manager | August 2014–February 2018
+- Planned configuration, training, and data-migration projects for midmarket customers.
+- Coordinated customer administrators and internal engineers; created runbooks and launch communications.
+- Progressed from coordinating individual deployments to managing three concurrent implementations.
+
+EDUCATION
+Bachelor of Science in Information Systems | fictional Pacific Crest Institute | May 2014
+
+SKILLS
+Cross-functional technical programs; software delivery; dependency and risk management; stakeholder communication; vendor coordination; SQL for analysis; Jira; Confluence; spreadsheet modeling; release planning; customer implementation.
+
+BOUNDARIES OF EXPERIENCE
+No production software engineering ownership, machine-learning model development, P&L ownership, formal product-roadmap authority, or direct people management. No PMP or cloud certification claimed.

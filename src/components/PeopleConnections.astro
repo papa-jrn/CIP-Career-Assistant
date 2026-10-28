@@ -2,6 +2,7 @@
 
 import ContactCorrectionForm from "../components/ContactCorrectionForm.astro";
 import Icon from "../components/Icon.astro";
+import PeopleConnectionsLayout from "./PeopleConnectionsLayout.astro";
 import {
   parseConversationOutcome,
   signalConfidences,
@@ -440,14 +441,13 @@ const networkSummary = hasNetwork
 ---
 
 
-  <div>
-
-
+  <PeopleConnectionsLayout hasNetwork={hasNetwork}>
+    <Fragment slot="conversations">
     <section id="capture-conversation" class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Conversation notes</p>
       <h2 class="mt-1 text-2xl font-semibold">Bring back what your advisors told you</h2>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        After market-read conversations, save what you learned here. Things change week to week: new employers come up, pay-band reality gets clearer, and your geography or work-model preferences may shift. These notes are additive evidence; the next network analysis and the next evidence re-analysis both read them, so the cycle actually updates instead of repeating itself.
+        After you talk with someone about a career direction or employer, save what you learned here: what the work involves, how your experience fits, new names or employers, and any follow-up you promised. You can save a conversation even before importing contacts. Your notes become evidence for future network and career analyses, helping you refine where to focus your job search.
       </p>
       <div class="mt-4 grid gap-2 sm:grid-cols-2">
         <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -565,7 +565,7 @@ const networkSummary = hasNetwork
           <span>Save conversation notes</span>
         </button>
         <p class="text-sm leading-6 text-[var(--muted)]">
-          Notes are saved as additive records; nothing earlier is overwritten. After saving, re-run the network analysis above or the evidence re-analysis on the Evidence page to fold the learnings in.
+          Notes are saved as additive records; nothing earlier is overwritten. After saving, re-run the network analysis in Add / update your network or the evidence re-analysis on the Evidence page to fold the learnings in.
         </p>
       </form>
       <div id="loopback-result" class="mt-4" aria-live="polite"></div>
@@ -680,7 +680,7 @@ const networkSummary = hasNetwork
     ) : null}
 
     {strategicState ? (
-      <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Current network memory</p>
@@ -808,7 +808,9 @@ const networkSummary = hasNetwork
       </section>
     ) : null}
 
-    <details class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" open={!hasNetwork}>
+    </Fragment>
+    <Fragment slot="network">
+    <details id="add-network" class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6" open={!hasNetwork}>
       <summary class="cursor-pointer text-lg font-semibold">
         {hasNetwork ? "Update your network" : "Add your network"}
         <span class="ml-2 text-sm font-normal text-[var(--muted)]">{networkSummary}</span>
@@ -835,7 +837,7 @@ const networkSummary = hasNetwork
         <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Step 2</p>
         <h2 class="mt-1 text-2xl font-semibold">Bring the data into CIP</h2>
         <p class="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Answer the ideal-work questions, then upload the LinkedIn archive ZIP, Connections.csv, Excel contact sheet, profile PDF, text notes, or pasted relationship data. CIP will parse reviewable contacts, compare them against saved employers and the latest career analysis, then save a network-intelligence readout as an additive source record.
+          Start with the people you already know. Answer the ideal-work questions so CIP knows what you are aiming for, then upload a LinkedIn archive ZIP, Connections.csv, Excel contact sheet, profile PDF, or text notes. You can also paste a small list with names, roles, employers, and how you know each person. You do not need a complete network to start. Run the analysis to see suggested people to talk to, why they may be relevant, and questions to explore. Review the contact details and suggestions before planning a conversation in Follow-ups.
         </p>
         <div class="mt-4 grid gap-3 md:grid-cols-2">
           <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -1265,46 +1267,27 @@ const networkSummary = hasNetwork
       </div>
     </details>
 
-    <details class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+    </Fragment>
+    <Fragment slot="guidance">
+    <details id="network-guidance" open={!hasNetwork} class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <summary class="cursor-pointer text-lg font-semibold">
         How to use your network well
-        <span class="ml-2 text-sm font-normal text-[var(--muted)]">Why CIP will not scrape, what to ask for, and how to run a market read</span>
+        <span class="ml-2 text-sm font-normal text-[var(--muted)]">Find people who can help you test career directions and focus your job search</span>
       </summary>
+        <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--accent-soft)] p-5">
+          <h2 class="text-xl font-semibold">Your network can help you find a direction worth pursuing.</h2>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Your network includes former coworkers, classmates, friends, and people you know through your community. They may help you understand what a role really involves, which employers could fit, and what experience you need to show. You do not need to know a hiring manager or have a job in mind to begin.</p>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Add the contacts you choose to share, and CIP can suggest relevant people and questions based on your career evidence and preferences. Review those suggestions using what you know about each relationship. A contact's title or employer is a starting clue; what you learn in a conversation is the evidence that can help you focus your search.</p>
+          <a href="#add-network" class="mt-3 inline-block text-sm font-semibold text-[var(--accent-strong)] underline">Next: add your network</a>
+        </div>
       <div class="mt-4">
-    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
-      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Trust boundary</p>
-      <h2 class="mt-1 text-2xl font-semibold">Why CIP cannot just scrape LinkedIn</h2>
-      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        Scraping logged-in LinkedIn pages can violate platform rules, create privacy risk, break without warning, and gather data people did not knowingly provide for this use. It can also damage user trust. CIP uses only data you provide directly: exported files, pasted notes, profile PDFs, and relationship context you choose to add. That boundary keeps the workflow professional, transparent, and reviewable.
-      </p>
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Allowed inputs</h3>
-          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-            <li>LinkedIn data archive or connections CSV supplied by the user.</li>
-            <li>LinkedIn profile PDF or pasted profile sections.</li>
-            <li>Alumni portal contacts, school mentoring data, alumni club lists, coworker, community, event, and personal contact lists the user chooses to provide.</li>
-            <li>Manual notes about relationship strength, history, and comfort level.</li>
-          </ul>
-        </div>
-        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-          <h3 class="font-semibold">Not allowed</h3>
-          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-            <li>Automated scraping of private LinkedIn pages.</li>
-            <li>Scraping or bypassing gated alumni directories, career-office portals, or member-only databases.</li>
-            <li>Bypassing access controls, rate limits, or login protections.</li>
-            <li>Implying CIP can inspect private connections directly.</li>
-            <li>Generating outreach without the user's contact-specific approval.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
+
 
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Lane validation</p>
       <h2 class="mt-1 text-2xl font-semibold">Test career directions before asking for referrals.</h2>
       <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-        CIP now treats networking data as a way to validate career lanes first. A former coworker, Rotary chapter, BNI group, or alumni affiliation can be useful context, but it is not a recommendation by itself. The app should identify named people who can help test whether a lane is real, reachable, and worth pursuing.
+        A career lane is a possible direction for your next role: a kind of work, level of responsibility, or industry you want to explore. Validating a lane means asking people with relevant experience whether it fits your background, what gaps you would need to close, and where that work exists. This helps you decide where to spend your time before applying.
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-3">
         <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
@@ -1325,6 +1308,17 @@ const networkSummary = hasNetwork
             The safest early move is often a short conversation about titles, expectations, and employers before asking anyone for a job lead.
           </p>
         </article>
+      </div>
+      <div class="mt-5 rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+        <h3 class="font-semibold">How to get that validation</h3>
+        <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">
+          <li><a href="#add-network" class="font-semibold text-[var(--accent-strong)] underline">Add your network below</a>. Upload an export or contact sheet, or paste a few contacts with their roles, employers, and how you know them. Start small if that is easier.</li>
+          <li>Run the network analysis, then review the suggested people and reasons. Choose someone who knows the work or an employer you are exploring, and correct any relationship context CIP has misunderstood.</li>
+          <li>Use the Follow-ups tab to plan your next conversation. Ask for a short perspective conversation: “I am exploring [career direction]. What would someone with my background need to demonstrate, and which teams do this work?” Use the questions below to prepare.</li>
+          <li><a href="#capture-conversation" class="font-semibold text-[var(--accent-strong)] underline">Save your conversation notes</a>: what supported or challenged the direction, specific employers or titles mentioned, and anything you promised to do.</li>
+          <li>Re-run network analysis or re-analyze your evidence to use what you learned in the next analysis. Compare the advice with your own priorities, then decide whether to pursue the lane, adjust it, or ask another person. When the fit is clearer, ask about an introduction or a specific opening.</li>
+        </ol>
+        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">An imported contact does not validate a career direction on their own. Keep track of who said what, and treat one person's perspective as a clue to investigate.</p>
       </div>
     </section>
 
@@ -1419,6 +1413,37 @@ const networkSummary = hasNetwork
       </div>
     </section>
 
+
+
+    <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
+      <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Trust boundary</p>
+      <h2 class="mt-1 text-2xl font-semibold">Why CIP cannot just scrape LinkedIn</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+        Scraping logged-in LinkedIn pages can violate platform rules, create privacy risk, break without warning, and gather data people did not knowingly provide for this use. It can also damage user trust. CIP uses only data you provide directly: exported files, pasted notes, profile PDFs, and relationship context you choose to add. That boundary keeps the workflow professional, transparent, and reviewable.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Allowed inputs</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>LinkedIn data archive or connections CSV supplied by the user.</li>
+            <li>LinkedIn profile PDF or pasted profile sections.</li>
+            <li>Alumni portal contacts, school mentoring data, alumni club lists, coworker, community, event, and personal contact lists the user chooses to provide.</li>
+            <li>Manual notes about relationship strength, history, and comfort level.</li>
+          </ul>
+        </div>
+        <div class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <h3 class="font-semibold">Not allowed</h3>
+          <ul class="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+            <li>Automated scraping of private LinkedIn pages.</li>
+            <li>Scraping or bypassing gated alumni directories, career-office portals, or member-only databases.</li>
+            <li>Bypassing access controls, rate limits, or login protections.</li>
+            <li>Implying CIP can inspect private connections directly.</li>
+            <li>Generating outreach without the user's contact-specific approval.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
     <section class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <p class="text-sm font-semibold uppercase text-[var(--accent-strong)]">Alumni data</p>
       <h2 class="mt-1 text-2xl font-semibold">Use university networks as permissioned warm context.</h2>
@@ -1507,5 +1532,6 @@ const networkSummary = hasNetwork
     </section>
       </div>
     </details>
-  </div>
+    </Fragment>
+  </PeopleConnectionsLayout>
 

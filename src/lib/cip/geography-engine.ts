@@ -16,6 +16,7 @@ export interface GeocodedSearchArea {
    * and `nearbyPlaces` holds only the center, so the labor shed was NOT expanded.
    */
   nearbyLookup: "ok" | "fallback";
+  nearbySource?: "overpass" | "geocodio_samples" | "center_only";
   searchQueries: string[];
   attribution: string;
 }
@@ -77,7 +78,7 @@ interface OverpassElement {
 
 export async function resolveSearchArea(query: string, radiusMiles: number): Promise<GeocodedSearchArea> {
   const geocoded = await geocode(query);
-  const { places: nearbyPlaces, lookup: nearbyLookup } = await findNearbyPlaces(geocoded, radiusMiles);
+  const { places: nearbyPlaces, lookup: nearbyLookup, source: nearbySource } = await findNearbyPlaces(geocoded, radiusMiles);
   const searchQueries = buildSearchQueries(geocoded, nearbyPlaces, radiusMiles);
 
   return {
@@ -92,6 +93,7 @@ export async function resolveSearchArea(query: string, radiusMiles: number): Pro
     country: geocoded.country,
     nearbyPlaces,
     nearbyLookup,
+    nearbySource,
     searchQueries,
     attribution: geocoded.attribution,
   };
@@ -204,7 +206,7 @@ async function geocodeWithNominatim(query: string) {
 async function findNearbyPlaces(
   center: Awaited<ReturnType<typeof geocode>>,
   radiusMiles: number,
-): Promise<{ places: NearbyPlace[]; lookup: "ok" | "fallback" }> {
+): Promise<{ places: NearbyPlace[]; lookup: "ok" | "fallback"; source: "overpass" | "geocodio_samples" | "center_only" }> {
   const radiusMeters = Math.round(radiusMiles * 1609.344);
   const overpassUrl = import.meta.env.OVERPASS_URL || process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
   const query = `
@@ -225,13 +227,13 @@ async function findNearbyPlaces(
     if (attempt > 1) await new Promise((done) => setTimeout(done, 1_500));
     elements = await fetchOverpassElements(overpassUrl, query);
   }
-  if (!elements) return { places: fallbackNearbyPlaces(center), lookup: "fallback" };
+  if (!elements?.length) return recoverNearbyPlaces(center, radiusMiles);
 
   try {
     const places = elements
       .map((element) => toNearbyPlace(element, center))
       .filter((place): place is NearbyPlace => Boolean(place))
-      .filter((place) => place.distanceMiles <= radiusMiles + 1);
+      .filter((place) => place.distanceMiles <= radiusMiles);
 
     const ranked = dedupePlaces(places)
       .sort((a, b) => {
@@ -240,10 +242,11 @@ async function findNearbyPlaces(
         return a.distanceMiles - b.distanceMiles;
       })
       .slice(0, 24);
-    return { places: await resolvePlaceStates(ranked), lookup: "ok" };
+    if (!ranked.length) return recoverNearbyPlaces(center, radiusMiles);
+    return { places: await resolvePlaceStates(ranked), lookup: "ok", source: "overpass" };
   } catch (error) {
     console.warn("[geography] nearby-place processing failed:", error instanceof Error ? error.message : error);
-    return { places: fallbackNearbyPlaces(center), lookup: "fallback" };
+    return recoverNearbyPlaces(center, radiusMiles);
   }
 }
 
@@ -307,11 +310,11 @@ function buildSearchQueries(
       .slice(0, 14)
       .map((place) => place.name),
   ]);
-  // A town's verified state wins; otherwise fall back to the center's, as before.
+  // A nearby town never inherits the center state: a river may be a state border.
   const stateByPlace = new Map(nearbyPlaces.filter((place) => place.state).map((place) => [place.name, place.state]));
   const stateFor = (place: string) => {
     const known = stateByPlace.get(place);
-    return known ? ` ${known}` : state;
+    return known ? ` ${known}` : place === center.city ? state : "";
   };
 
   const queries = [
@@ -325,6 +328,8 @@ function buildSearchQueries(
     queries.push(`${county} economic development business directory`);
   }
 
+  // Reserve anchor-sector coverage before the capped nearby-town query list.
+  queries.push(`${center.city}${state} healthcare employers`, `${center.city}${state} higher education employers`, `${center.city}${state} manufacturing technology employers`);
   for (const place of placeNames.slice(0, 12)) {
     queries.push(`${place}${stateFor(place)} major employers`);
     queries.push(`${place}${stateFor(place)} chamber of commerce business directory`);
@@ -374,9 +379,18 @@ async function resolvePlaceStates(places: NearbyPlace[]): Promise<NearbyPlace[]>
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
     .slice(0, STATE_LOOKUP_LIMIT);
   const resolved = new Map<NearbyPlace, string>();
+  const geocodioKey = import.meta.env.GEOCODIO_API_KEY || process.env.GEOCODIO_API_KEY;
+  if (geocodioKey && nearest.length) {
+    const rows = await geocodioBatch("reverse", nearest.map(place => `${place.latitude},${place.longitude}`), geocodioKey);
+    nearest.forEach((place, index) => {
+      const code = normalizeStateCode(rows?.[index]?.address_components?.state);
+      if (code) resolved.set(place, code);
+    });
+  }
   let lastRequestAt = 0;
 
   for (const place of nearest) {
+    if (resolved.has(place)) continue;
     const key = `${place.latitude.toFixed(3)},${place.longitude.toFixed(3)}`;
     const cached = stateCache.get(key);
     if (cached) {
@@ -460,4 +474,55 @@ function geocoderUserAgent() {
     process.env.GEOCODER_USER_AGENT ||
     "CIP-Career-Assistant/0.1 (local development; contact: configure GEOCODER_USER_AGENT)"
   );
+}
+
+/** Bounded Geocodio recovery when the public nearby-place service is unavailable.
+ * Sampling finds real locality names, then forward geocoding locates their centers.
+ * It is disclosed as limited coverage, never a complete town or employer inventory.
+ */
+async function recoverNearbyPlaces(center: Awaited<ReturnType<typeof geocode>>, radiusMiles: number) {
+  const fallback = { places: fallbackNearbyPlaces(center), lookup: "fallback" as const, source: "center_only" as const };
+  const key = import.meta.env.GEOCODIO_API_KEY || process.env.GEOCODIO_API_KEY;
+  if (!key) return fallback;
+  const samples: string[] = [];
+  for (const miles of [Math.min(5, radiusMiles / 4), radiusMiles * 0.3, radiusMiles * 0.6, radiusMiles * 0.85]) {
+    for (let bearing = 0; bearing < 360; bearing += 45) {
+      const radians = bearing * Math.PI / 180;
+      const latitude = center.latitude + Math.cos(radians) * miles / 69;
+      const longitude = center.longitude + Math.sin(radians) * miles / (69 * Math.cos(center.latitude * Math.PI / 180));
+      samples.push(`${latitude},${longitude}`);
+    }
+  }
+  const reverse = await geocodioBatch("reverse", samples, key);
+  const names = [...new Set((reverse ?? []).flatMap(row => {
+    const city = row?.address_components?.city?.trim();
+    const state = normalizeStateCode(row?.address_components?.state);
+    return city && state ? [`${city}, ${state}`] : [];
+  }))].slice(0, 16);
+  if (!names.length) return fallback;
+  const centers = await geocodioBatch("geocode", names, key);
+  const places: NearbyPlace[] = (centers ?? []).flatMap(row => {
+    const name = row?.address_components?.city?.trim();
+    const state = normalizeStateCode(row?.address_components?.state);
+    const latitude = row?.location?.lat;
+    const longitude = row?.location?.lng;
+    if (!name || !state || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+    const distance = straightLineMiles(center.latitude, center.longitude, latitude!, longitude!);
+    if (distance > radiusMiles) return [];
+    return [{ name, state, latitude: latitude!, longitude: longitude!, placeType: "locality", distanceMiles: round1(distance) }];
+  });
+  const recovered = dedupePlaces([...fallback.places, ...places]).sort((a, b) => a.distanceMiles - b.distanceMiles);
+  return recovered.length > 1 ? { places: recovered, lookup: "ok" as const, source: "geocodio_samples" as const } : fallback;
+}
+
+async function geocodioBatch(endpoint: "reverse" | "geocode", inputs: string[], key: string): Promise<Array<GeocodioResult | undefined> | null> {
+  try {
+    const url = new URL(`https://api.geocod.io/v1.12/${endpoint}`);
+    url.searchParams.set("api_key", key);
+    url.searchParams.set("limit", "1");
+    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(inputs), signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return null;
+    const payload = await response.json() as { results?: Array<{ response?: { results?: GeocodioResult[] } }> };
+    return Array.isArray(payload.results) ? payload.results.map(row => row.response?.results?.[0]) : null;
+  } catch { return null; }
 }

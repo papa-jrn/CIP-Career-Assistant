@@ -419,7 +419,7 @@ export async function filterOrgsToSearchArea(
 
   for (const org of orgs) {
     const cityKey = normalizeCityName(org.city);
-    if (centerCity && cityKey === centerCity) {
+    if (centerCity && cityKey === centerCity && org.state === normalizeStateCode(area.state)) {
       kept.push({ org, distanceMiles: 0, basis: "city" });
       continue;
     }
@@ -537,6 +537,7 @@ export function rankNineNinetyOrganizations(entries: RankedOrg[]): RankedOrg[] {
 
 export interface NineNinetyCoverage {
   stateCode: string;
+  statesSearched?: string[];
   categoriesSearched: string[];
   orgsScanned: number;
   inArea: number;
@@ -583,11 +584,14 @@ export async function runNineNinetyDiscovery(options: {
   const stateCode = normalizeStateCode(options.searchArea.state);
   if (!stateCode) return null;
 
+  const states = [...new Set([stateCode, ...options.searchArea.nearbyPlaces.map(place => normalizeStateCode(place.state)).filter(Boolean)])];
+  const searchedStates = states.slice(0, 4);
   const deps: NineNinetyDeps = { fetchImpl: options.fetchImpl, sleep: options.sleep };
   const sleep = options.sleep ?? (() => Promise.resolve());
   const categories = nteeCategoriesForLanes(options.lanes);
   const coverage: NineNinetyCoverage = {
     stateCode,
+    statesSearched: searchedStates,
     categoriesSearched: categories.map((category) => category.label),
     orgsScanned: 0,
     inArea: 0,
@@ -609,13 +613,14 @@ export async function runNineNinetyDiscovery(options: {
     parentBasis: "not_run",
   };
 
+  if (states.length > searchedStates.length) coverage.categoryErrors.push(`State coverage capped at four: ${states.slice(4).join(", ")} not searched.`);
   // 1. Search each lane-implied category; dedupe orgs across categories by EIN.
   const categoryByEin = new Map<number, NineNinetyOrgRow & { category: NteeCategory }>();
   const seen = new Set<number>();
-  for (const category of categories) {
-    const { orgs, failed } = await searchNineNinetyOrgs(stateCode, category.id, deps);
+  for (const searchState of searchedStates) for (const category of categories) {
+    const { orgs, failed } = await searchNineNinetyOrgs(searchState, category.id, deps);
     if (failed) {
-      coverage.categoryErrors.push(`${category.label} (NTEE ${category.letters}) was unavailable — nothing was invented to fill it.`);
+      coverage.categoryErrors.push(`${searchState}: ${category.label} (NTEE ${category.letters}) was unavailable — nothing was invented to fill it.`);
       continue;
     }
     for (const org of orgs) {
@@ -684,7 +689,7 @@ export async function runNineNinetyDiscovery(options: {
     coverage.skippedBelowFloor ? `${coverage.skippedBelowFloor} under the ${formatRevenueUsd(NINE_NINETY_MIN_REVENUE_USD)} budget floor` : "",
   ].filter(Boolean);
   const summary =
-    `IRS Form 990 layer: searched ${categories.length} nonprofit categor${categories.length === 1 ? "y" : "ies"} in ${stateCode} ` +
+    `IRS Form 990 layer: searched ${categories.length} nonprofit categor${categories.length === 1 ? "y" : "ies"} in ${searchedStates.join(", ")} ` +
     `(${coverage.categoriesSearched.join(", ")}) — ${coverage.orgsScanned} organizations scanned, ${coverage.inArea} within ` +
     `${options.searchArea.radiusMiles} miles, ${coverage.passedFloor} at or above the ${formatRevenueUsd(NINE_NINETY_MIN_REVENUE_USD)} floor, ` +
     `${coverage.kept} kept (cap ${NINE_NINETY_MAX_CANDIDATES}).` +
@@ -696,7 +701,7 @@ export async function runNineNinetyDiscovery(options: {
     source_type: "government_data",
     url: "https://projects.propublica.org/nonprofits/",
     usefulness_score: 80,
-    notes: `IRS Form 990 filings for ${stateCode}: ${coverage.orgsScanned} organizations scanned across ${coverage.categoriesSearched.join(", ")}.`,
+    notes: `IRS Form 990 filings for ${searchedStates.join(", ")}: ${coverage.orgsScanned} organizations scanned across ${coverage.categoriesSearched.join(", ")}.`,
   };
 
   return { candidates, sourcePage, coverage, summary };
