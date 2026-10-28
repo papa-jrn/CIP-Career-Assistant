@@ -269,3 +269,50 @@ function getText(form: FormData, key: string) {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
+
+/**
+ * The "Recently saved evidence" list, as HTML.
+ *
+ * Shared by the page's first render and by the save endpoint's out-of-band
+ * swap, so a freshly saved answer appears without a reload and the two renders
+ * cannot drift apart. The empty state is a real sentence rather than nothing,
+ * because an empty panel reads as a failure to save.
+ */
+export function renderSavedEvidenceHtml(responses: EvidenceResponsePayload[]) {
+  if (!responses.length) {
+    return `<p class="mt-3 text-sm leading-6 text-[var(--muted)]">No evidence answers saved yet. Start with one card and keep it rough.</p>`;
+  }
+
+  return `
+    <div class="mt-4 grid gap-3">
+      ${responses
+        .map(
+          (response) => `
+        <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
+          <p class="text-sm font-semibold">${escapeHtml(response.question)}</p>
+          <p class="mt-2 text-sm leading-6 text-[var(--muted)]">${escapeHtml(response.answer)}</p>
+          <p class="mt-3 text-xs font-semibold uppercase text-[var(--accent-strong)]">${escapeHtml(
+            String(response.confidence ?? "").replaceAll("_", " "),
+          )}</p>
+        </article>`,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+/**
+ * One stored `evidence_response` row's payload, or null when it cannot be read.
+ * A malformed row is skipped rather than rendered as a blank card.
+ */
+export function parseStoredEvidenceResponse(value: string | null): EvidenceResponsePayload | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    const response = parsed?.response;
+    if (!response || typeof response.question !== "string" || typeof response.answer !== "string") return null;
+    return response as EvidenceResponsePayload;
+  } catch {
+    return null;
+  }
+}

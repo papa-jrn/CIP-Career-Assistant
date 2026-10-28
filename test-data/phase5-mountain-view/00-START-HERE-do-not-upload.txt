@@ -2,7 +2,7 @@ CIP PHASE 5 EMPTY ACCOUNT TEST
 Synthetic Morgan Ellis dataset | Created October 28 2026
 
 PURPOSE
-Test first-use Direction with no previous records, then network import and a geographically constrained job search. This is a fictional fixture, not evidence from a real second user. Keep all files in a dedicated test account. Use your actual inbox or an alias for login; the example.invalid address in the resume cannot receive mail.
+Test first-use Direction with no previous records, then network import and a geographically constrained job search. This is a fictional fixture, not evidence from a real third user. Keep all files in a dedicated test account. Use your actual inbox or an alias for login; the example.invalid address in the resume cannot receive mail.
 
 FILES AND ORDER
 1. Upload 01-resume-SYNTHETIC.txt as the resume/work history.

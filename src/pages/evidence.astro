@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { buildEvidenceCards, renderEvidenceCardsHtml, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
+import { buildEvidenceCards, renderEvidenceCardsHtml,
+  renderSavedEvidenceHtml, type EvidenceResponsePayload } from "../lib/cip/evidence-builder";
 import { calculateEvidenceSufficiency } from "../lib/cip/evidence-sufficiency";
 import { sourceAnalysesToEvidence, type SourceAnalysisItem } from "../lib/cip/source-analysis";
 import type { AdvisorAnalysis } from "../lib/cip/advisor";
@@ -577,19 +578,11 @@ function parseSourceAnalysisItems(value: string | null): SourceAnalysisItem[] {
 
     <aside class="mt-6 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6">
       <h2 class="text-xl font-semibold">Recently saved evidence</h2>
-      {evidenceResponses.length ? (
-        <div class="mt-4 grid gap-3">
-          {evidenceResponses.map((response) => (
-            <article class="rounded-md border border-[var(--line)] bg-[var(--background)] p-4">
-              <p class="text-sm font-semibold">{response.question}</p>
-              <p class="mt-2 text-sm leading-6 text-[var(--muted)]">{response.answer}</p>
-              <p class="mt-3 text-xs font-semibold uppercase text-[var(--accent-strong)]">{response.confidence.replaceAll("_", " ")}</p>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p class="mt-3 text-sm leading-6 text-[var(--muted)]">No evidence answers saved yet. Start with one card and keep it rough.</p>
-      )}
+      {/* Rendered by the same function the save endpoint swaps in, so a newly
+          saved answer appears without a reload and the two cannot drift. */}
+      <div id="saved-evidence-list" aria-live="polite">
+        <Fragment set:html={renderSavedEvidenceHtml(evidenceResponses)} />
+      </div>
     </aside>
   </main>
 </Layout>
