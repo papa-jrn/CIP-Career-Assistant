@@ -11,6 +11,9 @@ stopped being updated when the next slice started. That is the main thing this d
 
 ---
 
+**Founder testing queue: see `FOUNDER-TEST-QUEUE.md`** - what needs the founder'''s own hands and
+eyes, in priority order, kept current as fixes land.
+
 ## 1. What is actually done
 
 **Autumn phases**
