@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { buildConversationOutcome } from "@/lib/cip/conversation-outcomes";
 import { scoreLanes } from "@/lib/cip/strategic-state";
@@ -231,5 +232,148 @@ describe("the cap explains the reason that actually applied", () => {
     });
     const capped = laneBy(lanes, /Product Enablement/)?.reasons.find((r) => /Capped as research/.test(r)) ?? "";
     expect(capped).toMatch(/light new-target signal/);
+  });
+});
+
+describe("re-reading your own records cannot buy the top band", () => {
+  // The Morgan fixture reached 90 / "high-confidence" from six answers that were all documented
+  // absences, with no verified posting and no conversation behind it. Analysis strength is not
+  // external validation.
+  const advisor = {
+    roleBriefs: [
+      brief("Senior Technical Manager", "Strong delivery leadership and cross-team coordination.", "Team-size examples."),
+    ],
+  };
+  const twoStrengthened = changeLog({
+    strengthened: [
+      "Senior Technical Manager delivery leadership confirmed",
+      "Senior Technical Manager cross-team coordination clarified",
+    ],
+  });
+
+  it("holds a lane just below high confidence when only re-analysis lifted it", () => {
+    const lane = scoreLanes({ latestAdvisor: { ...advisor, changeLog: twoStrengthened } })[0];
+    expect(lane.score).toBeLessThan(80);
+    expect(lane.explanation).not.toMatch(/high-confidence/);
+    expect(lane.reasons.join(" ")).toMatch(/Held just below high confidence/);
+  });
+
+  it("allows high confidence when a verified-open posting backs the lane", () => {
+    const lane = scoreLanes({
+      latestAdvisor: { ...advisor, changeLog: twoStrengthened },
+      verifiedPostings: [
+        { title: "Senior Technical Manager", employer: "An Employer", matchedRoleTerm: "senior technical manager", tier: "target_page" },
+      ],
+    })[0];
+    expect(lane.score).toBeGreaterThanOrEqual(80);
+    expect(lane.reasons.join(" ")).not.toMatch(/Held just below high confidence/);
+  });
+
+  it("allows high confidence when a substantive conversation backs the lane", () => {
+    const lane = scoreLanes({
+      latestAdvisor: { ...advisor, changeLog: twoStrengthened },
+      conversationOutcomes: [
+        buildConversationOutcome({
+          contactName: "A Real Person",
+          relatedLane: "Senior Technical Manager",
+          signalDirection: "strengthens",
+          signalType: "lane_fit",
+          confidence: "high",
+        }),
+      ],
+    })[0];
+    expect(lane.reasons.join(" ")).not.toMatch(/Held just below high confidence/);
+  });
+
+  it("leaves a lane alone when nothing from re-analysis lifted it", () => {
+    const lane = scoreLanes({ latestAdvisor: advisor })[0];
+    expect(lane.reasons.join(" ")).not.toMatch(/Held just below high confidence/);
+  });
+});
+
+describe("one conversation adjusts one lane", () => {
+  // Observed on the founder's own account: a single new_target signal added +5 to BOTH the
+  // Executive Director lane and the Director of Media Innovation lane, which share "director",
+  // "media" and "nonprofit".
+  const advisor = {
+    roleBriefs: [
+      brief("Executive Director / Nonprofit Media Leader", "Leads a community media organization.", "Audience growth."),
+      brief("Director of Media Innovation / CTO for Nonprofit Organizations", "Technical product leadership for mission-driven media.", "Project impact."),
+    ],
+  };
+
+  it("scores the lane the conversation was about, not every lane sharing words", () => {
+    const lanes = scoreLanes({
+      latestAdvisor: advisor,
+      conversationOutcomes: [
+        buildConversationOutcome({
+          contactName: "Christopher Diak",
+          relatedLane: "Executive Director / Nonprofit Media Leader",
+          signalDirection: "strengthens",
+          signalType: "new_target",
+          confidence: "medium",
+        }),
+      ],
+    });
+    const scored = lanes.filter((lane) => /Christopher Diak/.test(lane.reasons.join(" ")));
+    expect(scored).toHaveLength(1);
+    expect(scored[0]?.lane).toMatch(/Executive Director/);
+  });
+
+  it("still moves a real advisor lane that a conversation-only placeholder would have stolen", () => {
+    // conversationOnlyLanes names a placeholder after the outcome's own relatedLane, so it matches
+    // exactly and used to outrank the advisor lane that should own the signal.
+    const lanes = scoreLanes({
+      latestAdvisor: {
+        roleBriefs: [brief("Nonprofit operations and workflow modernization", "Matches operations leadership.", "Confirm scope.")],
+      },
+      conversationOutcomes: [
+        buildConversationOutcome({
+          contactName: "Security Friend",
+          relatedLane: "nonprofit operations",
+          signalDirection: "strengthens",
+          signalType: "lane_fit",
+          confidence: "high",
+        }),
+      ],
+    });
+    const real = laneBy(lanes, /workflow modernization/);
+    expect(real?.reasons.join(" ")).toMatch(/Security Friend/);
+    expect(real?.direction).toBe("up");
+  });
+
+  it("keeps an unrelated conversation off both advisor lanes", () => {
+    // It does not vanish: conversationOnlyLanes deliberately opens a placeholder lane for a
+    // direction the advisor has not named. It must not touch the two real lanes.
+    const lanes = scoreLanes({
+      latestAdvisor: advisor,
+      conversationOutcomes: [
+        buildConversationOutcome({
+          contactName: "Unrelated Person",
+          relatedLane: "veterinary radiology",
+          signalDirection: "strengthens",
+          signalType: "lane_fit",
+          confidence: "high",
+        }),
+      ],
+    });
+    const scored = lanes.filter((lane) => /Unrelated Person/.test(lane.reasons.join(" ")));
+    expect(scored).toHaveLength(1);
+    expect(scored[0]?.lane).toMatch(/veterinary radiology/i);
+    expect(laneBy(lanes, /Executive Director/)?.reasons.join(" ")).not.toMatch(/Unrelated Person/);
+    expect(laneBy(lanes, /Media Innovation/)?.reasons.join(" ")).not.toMatch(/Unrelated Person/);
+  });
+});
+
+describe("the changeLog contract is stated to the model", () => {
+  // A source assertion, not a behavioural one: the prompt is built inside a function that calls the
+  // API, and the suite never calls the real API. This guards the clause against silent deletion. It
+  // cannot verify the model obeys it - the high-confidence guard above is the actual enforcement,
+  // which is why that guard exists rather than trusting the prompt alone.
+  it("tells the model that an absence is never a strengthening", async () => {
+    const source = await readFile(new URL("./advisor.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/never belongs in strengthened/);
+    expect(source).toMatch(/Confirming what somebody cannot do is not evidence/);
+    expect(source).toMatch(/those go in weakened or newlyAnswered/);
   });
 });

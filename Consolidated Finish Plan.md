@@ -714,3 +714,68 @@ with its number and says which applied. This was the open hypothesis in the AFTE
 logged as `changeLog.strengthened`, which is what raised the score from 78 to 82) and lane title
 fidelity ("Senior Technical **Program** Manager" rendered as "Senior Technical Manager"). Both need
 a product decision, per the AFTER file's triage.
+
+### 2026-10-28: valence, the high-confidence guard, and conversation leakage
+
+Follow-on from the three mechanical fixes, after both accounts were re-checked against them.
+Typecheck clean, 979 tests across 73 files, isolated SSR build passed.
+
+**What the post-fix run showed first.** On the Morgan fixture all three earlier fixes worked - each
+changeLog phrase landed on exactly one lane, the secondary returned to "watch", and the strategic
+read read as English. A phrase previously crowded out surfaced correctly: the tertiary is now
+**weakened** by "Technical ownership roles requiring architecture input", the honest reading of her
+flat no on question 11.
+
+**But the primary rose 82 to 90**, because assigning both strengthened phrases correctly
+*concentrated* the full +12 on one lane instead of smearing it across three:
+
+```
+base 74 + strengthened 8 + strengthened 4 + positioning 4 = 90
+```
+
+So fix 2 made the untouched valence defect louder, and the lane entered the **high-confidence**
+band on six documented absences, with no verified posting and no conversation behind it. The
+earlier triage - "a product decision, does not stop the pass" - was too relaxed, and is revised
+here.
+
+**1. The changeLog contract is now stated to the model.** `strengthened` means the evidence base
+GREW; a boundary, limit, absence or self-correction belongs in `weakened` or `newlyAnswered`,
+never in `strengthened`. Added to `change_contract` and to the schema field descriptions, so it
+travels with the shape. "Confirming what somebody cannot do is not evidence that they can do
+something else."
+
+This is best-effort: a prompt cannot be enforced. A source assertion guards the clause against
+silent deletion but cannot verify compliance, which is why (2) exists.
+
+**2. Re-reading your own records cannot buy the top band.** Re-analysis deltas are worth up to
++12, which was enough to carry a lane from its baseline into high confidence on analysis alone. A
+lane lifted only by re-analysis is now held at 79 with the reason stated: "the lift came from
+re-reading your own records, and nothing outside them has confirmed this direction yet." A
+verified-open posting or a substantive conversation still permits the top band. Same principle as
+the research cap, applied to the band rather than a numeric ceiling, and sharing one
+`hasStrongConversationSupport` definition so the two cannot drift apart.
+
+**3. One conversation adjusts one lane.** Found in the founder's own post-fix data: a single
+`new_target` signal from one contact added +5 to BOTH the Executive Director lane and the Director
+of Media Innovation lane, which share "director", "media" and "nonprofit". `matchesText` is a loose
+substring-or-two-token test applied per lane with no single-best assignment - the same defect class
+as the changeLog phrases, on a different code path. Outcomes are now assigned to the one lane they
+fit best, containment beating token overlap.
+
+**A regression this introduced and the fix for it.** `conversationOnlyLanes` names a placeholder
+lane after an outcome's own `relatedLane`, so it matches that outcome *exactly* and immediately
+outranked the real advisor lane the signal was about - leaving a lane unmoved by the very
+conversation concerning it. Caught by an existing test. Real advisor lanes now always win over
+conversation-only placeholders, and an outcome naming no advisor lane still opens its placeholder
+lane as designed.
+
+**Verification discipline.** Nine new guards; the source was reverted and re-run to confirm they
+fail without the fixes, as with the previous batch. A test that passes before and after proves
+nothing.
+
+**Still open, unchanged:** lane title fidelity ("Senior Technical **Program** Manager" rendered as
+"Senior Technical Manager"), and whether to restore the entrepreneur and workforce-development
+caps as explicit structural rules after the prose regex that carried them was removed. Both need a
+founder decision. Also worth a decision eventually: "Primary lane" means the advisor's ordering
+while the headline score means evidence weight, and on the founder's account they disagree without
+saying so.

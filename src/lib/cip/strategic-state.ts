@@ -310,10 +310,8 @@ export function buildStrategicState(inputs: StrategicStateInputs): StrategicStat
 }
 
 export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
-  const targetLanes = [
-    ...buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null, { limit: 5 }),
-    ...conversationOnlyLanes(inputs),
-  ];
+  const advisorLanes = buildTargetLanes(inputs.latestSource ?? null, inputs.latestAdvisor ?? null, { limit: 5 });
+  const targetLanes = [...advisorLanes, ...conversationOnlyLanes(inputs)];
   const networkByLane = new Map(
     (inputs.latestNetworkAnalysis?.laneValidations ?? [])
       .filter((lane) => lane.lane)
@@ -328,6 +326,12 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
   // inflated several directions at once. Each phrase now adjusts only the lane it fits best.
   const strengthenedByLane = assignDeltasToLanes(targetLanes, inputs.latestAdvisor?.changeLog?.strengthened ?? []);
   const weakenedByLane = assignDeltasToLanes(targetLanes, inputs.latestAdvisor?.changeLog?.weakened ?? []);
+  // And the same for conversation outcomes. `matchesText` is a loose substring-or-two-tokens test,
+  // so one conversation scored every lane it loosely resembled: on the founder's own account a
+  // single new_target signal added +5 to BOTH the Executive Director lane and the Director of Media
+  // Innovation lane, which share "director", "media" and "nonprofit". One conversation is one
+  // signal about one direction.
+  const outcomeByLane = assignOutcomesToLanes(targetLanes, inputs.conversationOutcomes ?? [], advisorLanes.length);
 
   return targetLanes.map((lane, index): StrategicLaneScore => {
     const conversationResearchLane = lane.label === "Conversation research lane";
@@ -350,7 +354,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     }
 
     for (const outcome of inputs.conversationOutcomes ?? []) {
-      if (!matchesText(lane.role, outcome.relatedLane)) continue;
+      if (outcomeByLane.get(outcome) !== lane.role) continue;
       const adjustment = conversationAdjustment(outcome);
       if (!adjustment) continue;
       score += adjustment;
@@ -400,6 +404,22 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     if (cap && !validatedByPosting && score > cap.cap) {
       score = cap.cap;
       reasons.push(cap.why);
+    }
+
+    // Re-reading the same resume more favourably cannot buy the top band.
+    //
+    // The re-analysis deltas are worth up to +12, which was enough to carry a lane from its
+    // baseline into "high-confidence" with nothing outside the user's own documents behind it. On
+    // the Morgan Ellis fixture that produced a 90, high-confidence, from six answers that were all
+    // documented absences. Same principle as the research cap: analysis strength is not external
+    // validation, so it cannot assert the top band on its own. A verified-open posting or a
+    // substantive conversation still can.
+    const externallyValidated = validatedByPosting || hasStrongConversationSupport(lane, inputs.conversationOutcomes ?? []);
+    if (!externallyValidated && strengthenedTotal > 0 && score >= HIGH_CONFIDENCE_BAND) {
+      score = HIGH_CONFIDENCE_BAND - 1;
+      reasons.push(
+        "Held just below high confidence: the lift came from re-reading your own records, and nothing outside them has confirmed this direction yet.",
+      );
     }
 
     const finalScore = clamp(score);
@@ -610,6 +630,28 @@ function conversationAdjustment(outcome: ConversationOutcome) {
   return Math.round(base * confidence * typeWeight);
 }
 
+/** The score at which a lane is described as high confidence. */
+const HIGH_CONFIDENCE_BAND = 80;
+
+/**
+ * Whether a conversation says something substantive about this lane, as opposed to mentioning it.
+ * Shared by the research cap and the high-confidence guard so both mean the same thing by
+ * "something outside the user's own records".
+ */
+function hasStrongConversationSupport(lane: { role: string }, outcomes: ConversationOutcome[]) {
+  return outcomes
+    .filter((outcome) => matchesText(lane.role, outcome.relatedLane))
+    .some((outcome) =>
+      outcome.confidence === "high" ||
+      outcome.signalType === "lane_fit" ||
+      outcome.signalType === "employer_fit" ||
+      outcome.signalType === "compensation" ||
+      outcome.signalType === "hiring_process" ||
+      outcome.promisedFollowUp ||
+      outcome.followUpDueDate,
+    );
+}
+
 /**
  * The ceiling on a lane that nothing external has validated, and why it applies.
  *
@@ -624,15 +666,7 @@ function exploratoryLaneCap(
   const matching = outcomes.filter((outcome) => matchesText(lane.role, outcome.relatedLane));
 
   const positive = matching.filter((outcome) => outcome.signalDirection === "strengthens");
-  const strongSupport = matching.some((outcome) =>
-    outcome.confidence === "high" ||
-    outcome.signalType === "lane_fit" ||
-    outcome.signalType === "employer_fit" ||
-    outcome.signalType === "compensation" ||
-    outcome.signalType === "hiring_process" ||
-    outcome.promisedFollowUp ||
-    outcome.followUpDueDate,
-  );
+  const strongSupport = hasStrongConversationSupport(lane, outcomes);
   const onlyLightNewTargets = positive.length > 0 && matching.every((outcome) =>
     (outcome.signalType === "new_target" || outcome.signalType === "market_signal") &&
     outcome.confidence !== "high",
@@ -755,7 +789,7 @@ function reasonPriority(reason: string): number {
 }
 
 function scoreExplanation(score: number, reasons: string[]) {
-  const band = score >= 80
+  const band = score >= HIGH_CONFIDENCE_BAND
     ? "high-confidence"
     : score >= 65
       ? "promising"
@@ -853,6 +887,48 @@ function assignDeltasToLanes(
       }
     });
     if (bestLane) assignment.set(phrase, bestLane);
+  }
+  return assignment;
+}
+
+/**
+ * Assign each conversation outcome to the ONE lane it fits best.
+ *
+ * Scored by how specifically the outcome's own lane text matches: an exact or containment match
+ * beats shared-token overlap. A tie keeps the earlier, higher-priority lane. An outcome matching no
+ * lane adjusts none, which is what `matchesText` would also have concluded for it.
+ */
+function assignOutcomesToLanes<T extends { relatedLane?: string }>(
+  lanes: Array<{ role: string }>,
+  outcomes: T[],
+  advisorLaneCount: number,
+): Map<T, string> {
+  const assignment = new Map<T, string>();
+  const pick = (related: string, pool: Array<{ role: string }>) => {
+    let bestLane: string | null = null;
+    let bestScore = 0;
+    for (const lane of pool) {
+      const role = normalize(lane.role);
+      if (!role) continue;
+      // Containment is a far stronger claim than sharing a couple of generic role words.
+      const score = role === related ? 100 : role.includes(related) || related.includes(role) ? 50 : sharedTokenCount(role, related);
+      if (score >= 2 && score > bestScore) {
+        bestScore = score;
+        bestLane = lane.role;
+      }
+    }
+    return bestLane;
+  };
+  for (const outcome of outcomes) {
+    const related = normalize(outcome.relatedLane ?? "");
+    if (!related) continue;
+    // A real advisor lane always wins over a conversation-only lane. Those placeholder lanes are
+    // NAMED after an outcome's own relatedLane, so they match it exactly and would otherwise steal
+    // the outcome from the advisor lane that should own it - leaving the real lane unmoved by the
+    // very conversation that was about it.
+    const bestLane =
+      pick(related, lanes.slice(0, advisorLaneCount)) ?? pick(related, lanes.slice(advisorLaneCount));
+    if (bestLane) assignment.set(outcome, bestLane);
   }
   return assignment;
 }
