@@ -428,7 +428,7 @@ function displayChangeText(change: string) {
 
   // Strip the score band first: humanizing afterwards keeps the contact name from
   // being swallowed into the "<band> score based on <reason>" prefix.
-  return humanizeSignalPhrases(change.replace(/\b(?:high-confidence|promising|watch|low-priority) score based on /gi, ""))
+  return humanizeSignalPhrases(change.replace(/\b(?:high-confidence|promising|watch|low-priority) score(?: based on |\. )/gi, ""))
     .replace(/\s+/g, " ")
     .trim();
 }

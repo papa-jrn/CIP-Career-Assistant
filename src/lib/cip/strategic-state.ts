@@ -322,6 +322,12 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
   // Each verified posting validates the ONE lane its title fits best (not every lane that shares a
   // generic word), so a tech-exec role tagged loosely by the search can't leak into the ED lane.
   const postingByLane = assignPostingsToLanes(targetLanes, inputs.verifiedPostings ?? []);
+  // Same rule for re-analysis deltas, for the same reason. A changeLog phrase used to score EVERY
+  // lane sharing one distinctive word, so "Senior Technical Manager role alignment with delivery
+  // and liaison strengths" scored the primary lane AND the liaison lane, and a single clarification
+  // inflated several directions at once. Each phrase now adjusts only the lane it fits best.
+  const strengthenedByLane = assignDeltasToLanes(targetLanes, inputs.latestAdvisor?.changeLog?.strengthened ?? []);
+  const weakenedByLane = assignDeltasToLanes(targetLanes, inputs.latestAdvisor?.changeLog?.weakened ?? []);
 
   return targetLanes.map((lane, index): StrategicLaneScore => {
     const conversationResearchLane = lane.label === "Conversation research lane";
@@ -358,7 +364,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     const advisor = inputs.latestAdvisor ?? null;
     let strengthenedTotal = 0;
     for (const phrase of advisor?.changeLog?.strengthened ?? []) {
-      if (strengthenedTotal >= 12 || !matchDeltaToLane(lane, phrase)) continue;
+      if (strengthenedTotal >= 12 || strengthenedByLane.get(phrase) !== lane.role) continue;
       const add = Math.min(8, 12 - strengthenedTotal);
       score += add;
       strengthenedTotal += add;
@@ -366,7 +372,7 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     }
     let weakenedTotal = 0;
     for (const phrase of advisor?.changeLog?.weakened ?? []) {
-      if (weakenedTotal >= 12 || !matchDeltaToLane(lane, phrase)) continue;
+      if (weakenedTotal >= 12 || weakenedByLane.get(phrase) !== lane.role) continue;
       const sub = Math.min(8, 12 - weakenedTotal);
       score -= sub;
       weakenedTotal += sub;
@@ -391,9 +397,9 @@ export function scoreLanes(inputs: StrategicStateInputs): StrategicLaneScore[] {
     const validatedByPosting = matchingPostings.length > 0;
 
     const cap = exploratoryLaneCap(lane, inputs.conversationOutcomes ?? []);
-    if (cap && !validatedByPosting && score > cap) {
-      score = cap;
-      reasons.push(`Capped as research because current support is only a light new-target signal; needs a real role, employer, or current-work evidence before ranking higher.`);
+    if (cap && !validatedByPosting && score > cap.cap) {
+      score = cap.cap;
+      reasons.push(cap.why);
     }
 
     const finalScore = clamp(score);
@@ -604,20 +610,18 @@ function conversationAdjustment(outcome: ConversationOutcome) {
   return Math.round(base * confidence * typeWeight);
 }
 
+/**
+ * The ceiling on a lane that nothing external has validated, and why it applies.
+ *
+ * The reason travels with the number because the two branches cap for different reasons, and a
+ * single hardcoded sentence used to claim "only a light new-target signal" even when there was no
+ * signal of any kind - telling the user something untrue about their own data.
+ */
 function exploratoryLaneCap(
   lane: ReturnType<typeof buildTargetLanes>[number],
   outcomes: ConversationOutcome[],
-) {
+): { cap: number; why: string } | null {
   const matching = outcomes.filter((outcome) => matchesText(lane.role, outcome.relatedLane));
-  const laneText = normalize([lane.role, lane.rationale, lane.missing].join(" "));
-  const speculativeAdvisorLane = (
-    lane.label !== "Primary lane" &&
-    (
-      /\bentrepreneur(ship|ial)?\b/.test(laneText) ||
-      /\bworkforce development\b/.test(laneText) ||
-      /\b(explor|possible|potential|prior|past|old|stale|fresh evidence|current posting|real posting|worth exploring|needs validation|needs evidence)\b/.test(laneText)
-    )
-  );
 
   const positive = matching.filter((outcome) => outcome.signalDirection === "strengthens");
   const strongSupport = matching.some((outcome) =>
@@ -634,8 +638,28 @@ function exploratoryLaneCap(
     outcome.confidence !== "high",
   );
 
-  if (onlyLightNewTargets && !strongSupport) return 54;
-  if (speculativeAdvisorLane && !strongSupport) return 58;
+  if (onlyLightNewTargets && !strongSupport) {
+    return {
+      cap: 54,
+      why: "Capped as research because current support is only a light new-target signal; needs a real role, employer, or current-work evidence before ranking higher.",
+    };
+  }
+  // Anything below the top-ranked lane stays research until something OUTSIDE the resume says
+  // otherwise: a strong conversation here, or a verified-open posting at the call site.
+  //
+  // This used to be decided by scanning the model's own prose for hedging words ("potential",
+  // "preliminary", "needs evidence"). That made the guard evadable by rewording: when a user
+  // answered the advisor's questions honestly, the model rewrote the lane more confidently, the
+  // hedging disappeared, and the cap silently lifted - the protection switched off exactly when the
+  // model sounded surer rather than when the evidence improved. Observed on the Morgan Ellis
+  // fixture, where six answers of "no evidence" un-capped a lane. The lane's ORDER is structural
+  // (index 0 is always the primary lane), so it cannot be talked out of.
+  if (lane.label !== "Primary lane" && !strongSupport) {
+    return {
+      cap: 58,
+      why: "Capped as research because nothing outside your own records has validated this direction yet; a verified open role or a substantive conversation would lift it.",
+    };
+  }
   return null;
 }
 
@@ -740,7 +764,12 @@ function scoreExplanation(score: number, reasons: string[]) {
         : "low-priority";
   const ranked = reasons.slice(1).sort((a, b) => reasonPriority(a) - reasonPriority(b));
   const movement = ranked.slice(0, 2).join(" ") || reasons[0] || "";
-  return `${band} score based on ${movement}`.trim();
+  // The reasons are complete sentences, so "<band> score based on <sentence>" spliced a sentence
+  // into a noun phrase and read as broken English: "promising score based on Evidence re-analysis
+  // strengthened this direction: ...". Give the band its own clause instead, and end with exactly
+  // one full stop so a caller appending another does not produce "..".
+  const detail = movement.replace(/\s+/g, " ").trim().replace(/\.+$/, "");
+  return detail ? `${band} score. ${detail}.` : `${band} score.`;
 }
 
 function followUpUrgency(date: string): StrategicFollowUpObligation["urgency"] {
@@ -795,6 +824,37 @@ const GENERIC_DELTA_TOKEN = new Set([
 
 export function distinctiveTokens(text: string): Set<string> {
   return new Set(normalize(text).split(" ").filter((token) => token.length > 3 && !GENERIC_DELTA_TOKEN.has(token)));
+}
+
+/**
+ * Assign each re-analysis phrase to the ONE lane it fits best.
+ *
+ * Scored by how many distinctive tokens the phrase shares with the lane's role and rationale; a tie
+ * keeps the earlier, higher-priority lane, as posting assignment does. A phrase that matches nothing
+ * is left unassigned and adjusts no lane, which is better than adjusting all of them.
+ */
+function assignDeltasToLanes(
+  lanes: Array<{ role: string; rationale?: string }>,
+  phrases: string[],
+): Map<string, string> {
+  const assignment = new Map<string, string>();
+  const laneTokens = lanes.map((lane) => distinctiveTokens(`${lane.role} ${lane.rationale ?? ""}`));
+  for (const phrase of phrases) {
+    if (!phrase?.trim() || assignment.has(phrase)) continue;
+    const phraseTokens = distinctiveTokens(phrase);
+    let bestLane: string | null = null;
+    let bestScore = 0;
+    lanes.forEach((lane, index) => {
+      let shared = 0;
+      for (const token of phraseTokens) if (laneTokens[index].has(token)) shared += 1;
+      if (shared > bestScore) {
+        bestScore = shared;
+        bestLane = lane.role;
+      }
+    });
+    if (bestLane) assignment.set(phrase, bestLane);
+  }
+  return assignment;
 }
 
 function matchDeltaToLane(lane: { role: string; rationale?: string }, phrase: string) {

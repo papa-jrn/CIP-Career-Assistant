@@ -130,7 +130,8 @@ function selectAssetLanes(baseLanes: TargetLane[], strategicLanes: StrategicLane
   const targetLanes = ranked.slice(0, 3).map((lane, index) => ({
     ...lane,
     label: ["Primary lane", "Secondary lane", "Tertiary lane"][index],
-    rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}.` : lane.rationale,
+    // scoreExplanation already ends in a single full stop; appending one produced "..".
+    rationale: lane.explanation ? `${lane.rationale} Strategic read: ${lane.explanation}` : lane.rationale,
   }));
   const researchLanes = ranked.slice(3).map(lane => ({ ...lane, label: "Additional direction" }));
   return { targetLanes, researchLanes };

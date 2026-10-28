@@ -665,3 +665,52 @@ Founder accepted the revised People introduction and import flow after using Jen
 Resume Step 5 from a genuinely empty Morgan account using test-data/phase5-mountain-view/00-START-HERE-do-not-upload.txt. The six-file synthetic fixture includes a resume, career context, supporting evidence, 24-contact LinkedIn-style CSV and separate relationship context. Complete Direction before importing the network. Initial search constraints are Mountain View CA, 25 miles, and USD 150000 annual base salary. No Morgan account has been created or tested yet. The fixture's fictional affiliations and accomplishments are test inputs, not real employment or market evidence.
 
 Step 5 remains open: weekly-search constraint propagation, empty-account first useful output, induced failure/retry, screen-reader use, employer exclusion/restore and saved careers-URL coverage still require recorded acceptance. Jen's conversation capture, fit assessment and employer-status actions are not inferred from network/search acceptance. No deployment or migration is included in this Git handoff. Automated validation already completed: typecheck and 941 tests passed, isolated People and briefing SSR builds passed, and the CSV passed 24-row uniqueness, column-mapping and serialization checks.
+
+### 2026-10-28: the three mechanical fixes from the Morgan run
+
+From `test-data/phase5-mountain-view/08-AFTER-target-lanes-OBSERVED.md`. Typecheck clean, 971
+tests across 73 files, isolated SSR build passed. Thirteen new guards; six of them fail against the
+unfixed code, confirmed by reverting the source and re-running.
+
+**1. The research cap no longer depends on the model's adjectives.** `exploratoryLaneCap` decided a
+lane was speculative with a regex over the model's own prose, matching words like `potential`,
+`preliminary` and `needs evidence`. That made the guard evadable by rewording: when the Morgan
+fixture answered the advisor's questions honestly, the model rewrote the lane more confidently
+about a *narrower* role, the hedging vocabulary disappeared, and the cap silently lifted. The
+protection switched off exactly when the model sounded surer, not when the evidence improved.
+
+The rule is now structural: any lane below the top-ranked one stays capped at 58 until something
+outside the user's own records validates it - a strong conversation outcome, or a verified-open
+posting at the call site. Lane order is positional (index 0 is always the primary lane), so it
+cannot be talked out of.
+
+**This is a visible behaviour change, not only a bug fix.** Previously only prose-flagged lanes
+were capped; now every unvalidated non-primary lane is. A user with no conversations and no
+verified postings will see their primary lane uncapped and everything below it held at 58 with the
+reason stated. That is what the scoring block's own comment always said should happen - "resume
+/analysis strength alone does not promote a lane; that still needs a real external signal" - but it
+had not been enforced, so expect lanes that previously read 65-75 to read 58. Founder review of
+this specific change is worth having before beta.
+
+**2. One re-analysis phrase now adjusts one lane.** `matchDeltaToLane` returned true on a single
+shared distinctive token, so a `changeLog` phrase scored every lane sharing one word: the observed
+tertiary lane cited the primary's and the secondary's phrases, because "liaison" appeared in both.
+A single clarification inflated several directions at once. Phrases are now assigned to the one
+lane they fit best by shared-token count, ties to the earlier lane - the same rule
+`assignPostingsToLanes` already applied to postings, and for the same reason.
+
+**3. The strategic read reads as English.** `"<band> score based on <reason>"` spliced a complete
+sentence into a noun phrase: "promising score based on Evidence re-analysis strengthened this
+direction: ...", and `assets.astro` appended a second full stop, producing "..". Now
+`"<band> score. <detail>."` with exactly one terminal stop, the renderer no longer appends one, and
+the weekly diff strips either form of the prefix so existing records keep humanizing correctly.
+
+**Also fixed, found while doing the above.** Both cap branches pushed one hardcoded sentence
+claiming "current support is only a light new-target signal", which was untrue for a lane with no
+signal at all - and fix 1 routes more lanes through that branch. The cap now returns its reason
+with its number and says which applied. This was the open hypothesis in the AFTER file; confirmed.
+
+**Not addressed here**, from the same run: the valence-classification defect (a stated boundary
+logged as `changeLog.strengthened`, which is what raised the score from 78 to 82) and lane title
+fidelity ("Senior Technical **Program** Manager" rendered as "Senior Technical Manager"). Both need
+a product decision, per the AFTER file's triage.
