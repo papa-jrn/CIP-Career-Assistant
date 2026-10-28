@@ -454,10 +454,16 @@ which needs two or more shared significant title tokens, so near-miss titles fai
 | User support | none | no family covers it |
 | Financial advising | none | no family covers it |
 
-Education is therefore a **control**: if her teaching lane matches well and the other four do not,
-lane absence is isolated as the cause rather than something else being broken. Her breadth also
-stresses single-best-lane assignment and its tie-break, which three concentrated lanes never did -
-"program director" is an education synonym and a fundraising title, so leakage is plausible.
+**Superseded 2026-10-28 - the premise above was wrong.** It assumed that a persona with an in-lane
+job *title* yields an in-lane *lane*. Lanes are derived from evidence weight, not from current
+occupation, so a title predicts nothing about what the analysis produces. Account B's run proved it:
+she is a current high-school teacher and no education lane arrived at all (see the October 28
+finding below). Picking a control by title does not work; the only reliable in-lane reference is an
+account whose *evidence* is concentrated in a recognised family, which in practice means account A.
+
+Her breadth still stresses single-best-lane assignment and its tie-break, which three concentrated
+lanes never did - "program director" is an education synonym and a fundraising title, so leakage is
+plausible.
 
 **These are Phase 7 findings, not Step 5 defects.** Widening `ROLE_FAMILIES` mid-acceptance would
 destroy the evidence the pass exists to collect. Record what degraded and how badly; size Phase 7
@@ -480,6 +486,67 @@ Pass 1 on account A first - cheapest, and it establishes what correct looks like
 account B, which is where the real unknowns are. Then pass 3 on account C. Passes 4 and 5 can go on
 either account at any point after pass 1. Step 5 closes when all five are recorded and the two
 Step 4 carry-ins are confirmed.
+
+---
+
+### Step 5 finding — 2026-10-28: no education lane for a current teacher (account B)
+
+Founder ran a full pass on account B at home. She currently teaches high-school agriculture and
+botany (about one year) against 30+ years of operations and management in and around nonprofits. The
+analysis weighted the operations evidence far above the teaching and produced an operations /
+nonprofit direction, with her agriculture and botany teaching bridging towards agricultural
+nonprofits. **No education lane arrived.** The founder found this mildly surprising but agreed with
+it on the arithmetic.
+
+**Assessed as correct behaviour, and recorded as a positive.** The analysis is evidence-weighted
+rather than recency-weighted. A system that anchored on current occupation would have pointed a
+30-year operations leader at teaching vacancies. Bridging botany teaching to agricultural nonprofits
+is synthesis rather than keyword matching.
+
+**It is not a breach of the portfolio contract.** `advisor.ts` instructs the model to keep up to
+three working directions and forbids *omitting* existing supported lanes when a new priority
+reorders them. On a first analysis there were no existing lanes to preserve, so three stronger
+directions legitimately filling the portfolio is within the contract.
+
+**What this invalidated.** Section 4.4's lane-coverage control (see the superseded note there).
+
+**Open against this run - to be filled from the founder's record, not inferred:**
+
+- **The top lane's exact role text.** `ROLE_FAMILIES`'s nonprofit family matches only
+  `executive director`, `chief executive`, `ceo`, `managing director`. "Nonprofit operations",
+  "operations director", "program director" and "development director" all miss. If her lane was
+  phrased in operations terms it missed too, which would mean **zero in-lane coverage across two
+  real users** - a far stronger input to sizing Phase 7 than either run alone.
+- **Whether education was disclosed as considered and outweighed, or simply absent.** The ranking is
+  defensible; silence about the ranking is not. If nothing stated that one year of teaching had been
+  weighed against thirty years of operations, that is a disclosure gap under §8/§19 rather than a
+  ranking defect. The founder's reaction - agreeing with the result while finding it surprising - is
+  the symptom of exactly that gap.
+- **Whether agricultural *sector* experience was asserted anywhere.** Teaching botany is a fair
+  bridge to agricultural nonprofits; claiming she has agricultural operations experience would be
+  fabrication. The Morgan fixture guards the same line ("climate interest must not become invented
+  domain experience"); apply it retroactively here.
+
+**Structural observation.** There appears to be no control that lets a user *assert* a lane. Her
+routes to influence the portfolio are supplying more evidence or asking a strategic question;
+`changeLog.directionChanges` reports the analysis's own revisions, not a user preference. A product
+that resists wishful thinking may well be right to work this way, but it should be a recorded
+decision rather than an absence.
+
+### Morgan fixture: not adjusted, deliberately (2026-10-28)
+
+Considered and rejected changing Morgan's resume so lanes would match. All five of Morgan's candidate
+directions (senior technical program manager, platform program manager, product operations,
+engineering leadership, technical program management) miss all three families, verified against the
+trigger expressions. Editing the resume to fix that would be tuning the fixture until the product
+passes - the exact practice the fixture's own instructions forbid - and would invalidate an answer
+guide calibrated against this resume. Two independent out-of-lane runs (B real and messy, Morgan
+synthetic and controlled) plus account A as the in-lane reference is the stronger evidence base.
+
+One real gap in the fixture, noted rather than patched: Morgan has no recency-versus-depth conflict
+(twelve years pointing one way, same employer since 2018), so Morgan cannot exercise the weighting
+that produced account B's most interesting result. That belongs in a later purpose-built fixture, not
+in an edit to this one.
 
 ---
 
