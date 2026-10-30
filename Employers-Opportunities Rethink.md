@@ -1536,7 +1536,13 @@ parent_organization) and no migration of their own. The 990 **enrichment** needs
 `20261008120000_watched_employer_financials_mode.sql` (the per-employer Auto/Always/Never setting; without it the setting cannot be saved but Auto
 still works). Apply all five in order; each is safe to run twice. Without the first two, saving ANY discovered candidate fails (discovery writes those columns);
 without 140000 the financials blocks show a setup message and chips/briefing simply have no 990 data; without 150000 candidates still
-save (the EIN write retries without it) but a 990-discovered candidate's EIN is not kept for promotion.
+save (the EIN write retries without it) but a 990-discovered candidate's EIN is not kept for promotion. The
+2026-10-23 target workspace adds `20261023120000_employer_target_events.sql`, and the self-parent cleanup adds
+`20261030120000_clear_self_parent_organizations.sql` — a **data** migration, not a schema one: it clears
+`parent_organization` on saved candidates where the parent is the employer itself, and nulls `parent_key` on
+target events where it equals the employer's own key. It must run after `20261023120000` (it touches that table)
+and only fixes rows written before commit 1684ebb; ingest handles everything after. Safe to run twice, and a
+no-op once applied.
 
 ### Next, in order
 
