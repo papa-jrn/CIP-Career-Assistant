@@ -1689,3 +1689,115 @@ Norwich/25-mile acceptance exposed a silent center-only Overpass fallback despit
 The nonprofit layer searches center plus verified nearby states, capped at four with omitted states disclosed; existing organization/detail/geocode budgets remain. Same-name cities must match state. Web candidates are checked at their reported geocoded location (12 calls maximum per run, cached within run); outside-radius candidates are not saved and are listed as withheld, while unlocatable candidates remain explicitly unknown/low-confidence. Coordinates are locality/address approximations, not verified workplaces or driving distances. The provider's unsupported blanket within-radius summary is replaced by deterministic location-check counts. Existing saved records are not retroactively removed.
 
 Already tracked is explicitly among this run's returned results, not a census of every saved employer nearby. A bounded model search can still miss an employer; no special case forces Dartmouth or any founder-specific organization into results. Live Geocodio checks verified Hanover NH at about 4.3 miles and Montpelier VT at about 34.7 from the screenshot's center; final recovery generated Hanover NH queries during an induced map outage, after actual map-service failure was reproduced. No paid OpenAI search was run by the diagnostic, and no migration, push or deployment is part of this repair. Founder live employer-search acceptance remains pending.
+
+### 2026-10-29 — A search center nobody checked: the geocode verification repair
+
+Founder ran a 25-mile employer search on `Mountain View, CA` (no ZIP typed). Eleven real Mountain
+View employers came back and the run read as a success. It was not. The resolved center was
+`37.1894, -121.7053` — the Santa Clara County centroid, about 25 miles south-southeast of the city.
+Geocodio had returned a coarse match, formatted as `Mountain View, CA 94039` (the city's PO-box-only
+ZIP), and the app echoed that string verbatim while building everything else on the wrong point.
+
+**The defect was not the bad coordinate. It was that nothing could notice it**, and three places
+destroyed the evidence:
+
+1. `geocodeWithGeocodio` took `results[0]` and never read Geocodio's `accuracy` or `accuracy_type`.
+   Those fields were not in the result interface, so skipping them was never a decision.
+2. `city: address.city || query` pasted the user's own words over a missing city component, so a
+   county centroid was named "Mountain View" in every downstream consumer.
+3. `fallbackNearbyPlaces` then emitted the center as a nearby place at zero miles, which is how a
+   county centroid printed as "Mountain View, CA (0 mi)".
+
+Visible consequences: nearby towns were the centroid's neighbours (Morgan Hill, San Martin, Gilroy,
+Watsonville, Santa Cruz), not Mountain View's; 20 of the 24 generated source queries went to the
+wrong municipalities; and the radius check was **vacuous, not lucky** — `checkBusinessLocations`
+geocodes each candidate's location string through the same `geocode` call, so "Mountain View, CA"
+resolved to the same bad centroid and the distance was measured from the bad point to itself. The
+"11 within 25 miles" confirmation compared a wrong point with a copy of itself.
+
+A careful test suite missed all of this because every geography fixture was a *perfect* geocode with
+the city matching the query. The assumption "the geocoder is right" was baked into the fixture shape.
+
+**Repaired, four changes.** Coarse matches (`county`, `state`, `country` accuracy types, or Geocodio
+confidence below 0.5) are rejected and the Nominatim path is tried instead; when both fail the search
+raises a plain message naming the problem rather than drawing a radius around the middle of a county.
+The query string is never written into the center's `city` — a new `cityLabel` carries the display
+and query-building label, while `city` stays empty when the geocoder returned none, so a coarse match
+can no longer disguise itself. The center is corroborated against the localities found around it: if
+the requested place is not among its own neighbours, `centerCheck` is `unverified` and the UI says the
+center is not confirmed, with the nearest localities named; thin coverage reports "could not confirm"
+rather than claiming the center is wrong. Place-name comparison is letters-only, so Geocodio's
+"Morganhill" matches "Morgan Hill". The center is no longer emitted as a nearby place at zero miles.
+Nominatim's spelled-out state is normalized to a code, since the backup geocoder is now a routine
+path and must not change the shape of generated queries.
+
+Also fixed, from the same run: the model set `parent_organization` to the employer's own name
+("Intuit Inc. — Part of Intuit Inc.", and the same for Nuro, El Camino Health and Microsoft) despite
+being told to leave it empty for top-level organizations. `resolveParentOrganization` now compares
+normalized names at ingest and clears a self-parent, which also stops a self-parented row counting
+towards the shared-organization notice that told the founder to add a parent already in the list.
+
+**Deliberately not changed.** The unlabelled AI headcounts (`estimated_size` rendered bare as
+"- 23,100") and the clustered `fit_score` values from the same run are a separate §8 labelling
+problem, running in its own session. The preferences-page geography brief (`search-brief.ts`,
+`preferences.astro`) still discloses only `nearbyLookup`; the accuracy gate protects it, but it does
+not yet surface `centerCheck`. A second independent geocoder comparison was considered as the
+verification mechanism and rejected in favour of the containment check, which costs no extra request
+and uses localities the run already fetched.
+
+Typecheck clean, 987 tests passing (8 new: the coarse-match rejection, the loud failure when no
+geocoder is precise, no query-string laundering, the unverified-center disclosure, spelling-variant
+matching, and self-parenting). **Not verified on live data** — the founder has not re-run the
+Mountain View search against the real Geocodio response, so the exact `accuracy_type` that returned
+the county centroid is inferred from the coordinates, not observed. That re-run is the acceptance
+step. No migration, push or deployment is part of this repair.
+
+### 2026-10-29 (later) — what Geocodio actually returns, and the correction
+
+The first repair's accuracy gate did **not** fire on the live re-run, so the inference recorded
+above — that Geocodio had honestly labelled a coarse county match — was wrong. One live lookup
+settled it. `GET /v1.12/geocode?q=Mountain View, CA&limit=10` returns **six** results, one per
+postal code in the city, in ascending postal order, and every one of them reports
+`accuracy: 1, accuracy_type: "place"`:
+
+| ZIP | lat, lng | |
+|---|---|---|
+| 94039 | 37.18940, -121.70533 | non-deliverable |
+| 94040 | 37.380566, -122.085286 | real |
+| 94041 | 37.388528, -122.075734 | real |
+| 94043 | 37.421861, -122.070890 | real |
+| 94035 | 37.18940, -121.70533 | non-deliverable |
+| 94042 | 37.18940, -121.70533 | non-deliverable |
+
+Three non-deliverable codes share **one identical coordinate** in the interior of Santa Clara
+County, 25 miles from the city. `limit=1` took it. No confidence field could ever have caught this,
+because Geocodio reports full confidence in all six: the accuracy gate was aimed at a failure mode
+that was not happening. Source is TIGER/Line, so a postal code with no deliverable addresses gets a
+placeholder point rather than a centroid.
+
+A medoid or centroid of the six would also have chosen wrongly — the bad point is triplicated, so it
+has the *lowest* total distance to the others (75.0 miles against 76.8 for 94041). Majority and
+centrality both lose here.
+
+**What distinguishes them is the duplication itself.** Distinct postal codes cannot genuinely share
+a centroid, so a repeated coordinate is a placeholder. `chooseGeocodioResult` groups results by
+coordinate rounded to four decimals, discards any group holding two or more distinct postal codes,
+and then keeps Geocodio's own ordering — which now starts at 94040, half a mile from the city
+center. Checked against Gilroy CA (2 codes), Norwich VT (1) and White River Junction VT (2): all
+have distinct coordinates, so none is affected. When every coordinate repeats, the first result is
+kept and the center check judges it.
+
+**Detection now becomes correction.** When the center check fails and Geocodio is the primary,
+`retryWithBackupGeocoder` asks Nominatim, and adopts that center only if it is somewhere else *and*
+passes the same containment check — so a failed retry leaves the original center and its warning
+rather than swapping one unverified center for another. The adjustment is disclosed in the UI
+("this center is the backup geocoder's, N miles away"), as is a discarded placeholder. Cost is one
+extra geocode and one extra nearby lookup, only on a center that already failed.
+
+**The radius counts now honour the center check.** "9 within 25 miles" was being reported with no
+hint that the point it measured from was unconfirmed; the summary now carries the caveat, because
+candidate distances are measured from that same center and inherit its unreliability.
+
+Typecheck clean, 992 tests. The live re-run that produced this finding confirmed, on real data, that
+the containment check fires with the intended wording, the zero-mile center row is gone, and
+self-parenting is gone. The placeholder picker and the retry have not yet been seen on live data.

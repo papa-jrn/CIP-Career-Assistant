@@ -447,6 +447,8 @@ export function renderSearchArea(result: BusinessSearchResult) {
       <p class="text-sm font-semibold">Geocoded search area</p>
       <p class="mt-1 text-sm text-[var(--muted)]">${escapeHtml(area.displayName)}</p>
       <p class="mt-1 text-xs text-[var(--muted)]">Center: ${area.latitude.toFixed(4)}, ${area.longitude.toFixed(4)} - Radius: ${area.radiusMiles} miles</p>
+      ${area.centerCheck.status === "unverified" ? `<p class="mt-2 text-sm font-semibold text-[var(--warning)]">Search center not confirmed: ${escapeHtml(area.centerCheck.note)}</p>` : `<p class="mt-2 text-xs text-[var(--muted)]">Search center corroborated: ${escapeHtml(area.centerCheck.note)}</p>`}
+      ${area.centerAdjustment ? `<p class="mt-1 text-xs text-[var(--muted)]">${escapeHtml(area.centerAdjustment)}</p>` : ""}
       ${area.nearbyLookup === "fallback" ? '<p class="mt-2 text-sm font-semibold text-[var(--warning)]">Nearby-town lookup failed. Only the search center is available; regional and cross-border coverage is incomplete.</p>' : area.nearbySource === "geocodio_samples" ? '<p class="mt-2 text-sm text-[var(--muted)]">The nearby-town service was unavailable. Geocodio recovered nearby localities from sampled points. Coverage is limited, not an exhaustive town list.</p>' : ""}
       ${nearby.length ? `
         <p class="mt-3 text-xs font-semibold uppercase text-[var(--muted)]">Nearby places included</p>

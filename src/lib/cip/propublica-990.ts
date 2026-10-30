@@ -401,7 +401,7 @@ export async function filterOrgsToSearchArea(
   geocoder: CityGeocoder,
   maxGeocodes = MAX_CITY_GEOCODES,
 ): Promise<GeoFilterOutcome> {
-  const centerCity = normalizeCityName(area.city);
+  const centerCity = normalizeCityName(area.cityLabel);
   const placesByCity = new Map<string, NearbyPlace[]>();
   for (const place of area.nearbyPlaces) {
     if (!place.state) continue; // unverified state stays ambiguous — house rule, never matched

@@ -34,6 +34,8 @@ const area: GeocodedSearchArea = {
   longitude: -72.319,
   radiusMiles: 25,
   city: "White River Junction",
+  cityLabel: "White River Junction",
+  centerCheck: { status: "verified", note: "fixture center" },
   county: "Windsor County",
   state: "VT",
   country: "US",

@@ -86,7 +86,13 @@ export async function runBusinessSearch(input: BusinessSearchInput): Promise<Bus
     const within = checked.checks.filter(item => item.status === "within").length;
     const unknown = checked.checks.filter(item => item.status === "unknown").length;
     const outside = checked.checks.filter(item => item.status === "outside").length;
-    return { ...result, candidates: checked.candidates, locationChecks: checked.checks, summary: `Employer discovery checked ${checked.checks.length} reported locations: ${within} within ${normalized.radiusMiles} miles, ${unknown} not geographically confirmed, ${outside} outside the radius and not added. Location distances are approximate, not commuting times. This is a bounded search, not an exhaustive employer inventory.` };
+    // Every one of these distances is measured from the search center, so an unconfirmed center
+    // makes the counts unreliable too. Saying "9 within 25 miles" without that is the same
+    // mistake in a different place.
+    const centerCaveat = searchArea.centerCheck.status === "unverified"
+      ? ` The search center itself was not confirmed, so these counts cannot be relied on: ${searchArea.centerCheck.note}`
+      : "";
+    return { ...result, candidates: checked.candidates, locationChecks: checked.checks, summary: `Employer discovery checked ${checked.checks.length} reported locations: ${within} within ${normalized.radiusMiles} miles, ${unknown} not geographically confirmed, ${outside} outside the radius and not added.${centerCaveat} Location distances are approximate, not commuting times. This is a bounded search, not an exhaustive employer inventory.` };
   } catch (error) {
     return {
       mode: "error",
@@ -184,7 +190,7 @@ export async function saveBusinessSearchResult(
         confidence: candidate.confidence,
         discovery_channel: candidate.discovery_channel,
         discovery_source_names: candidate.discovery_source_names,
-        parent_organization: candidate.parent_organization ?? "",
+        parent_organization: resolveParentOrganization(candidate.name, candidate.parent_organization),
         relevant_lanes: candidate.relevantLanes?.map((tag) => tag.lane) ?? [],
         source_notes: candidate.source_notes,
         review_state: "pending",
@@ -241,7 +247,7 @@ async function runOpenAiBusinessSearch(
               latitude: searchArea.latitude,
               longitude: searchArea.longitude,
               radius_miles: searchArea.radiusMiles,
-              city: searchArea.city,
+              city: searchArea.cityLabel,
               county: searchArea.county,
               state: searchArea.state,
               nearby_lookup: searchArea.nearbyLookup,
@@ -308,7 +314,7 @@ async function runOpenAiBusinessSearch(
     sourcePages: parsed.sourcePages,
     candidates: parsed.candidates.map((candidate) => ({
       ...candidate,
-      parent_organization: candidate.parent_organization?.trim() || "",
+      parent_organization: resolveParentOrganization(candidate.name, candidate.parent_organization),
       priority: candidate.priority ?? "medium",
       adapter_status: candidate.adapter_status ?? "manual_review",
       confidence: candidate.confidence ?? "medium",
@@ -437,4 +443,25 @@ export function extractResponseText(payload: unknown) {
   }
 
   return chunks.length ? chunks.join("") : null;
+}
+
+/**
+ * A company is not its own parent. The model is asked to leave `parent_organization` empty for a
+ * top-level organization and routinely does not, which rendered "Intuit Inc." as "Part of Intuit
+ * Inc." and let a self-parented row count towards the shared-organization notice, so the UI
+ * suggested adding a parent that was already in the list. Prompt wording did not hold; this does.
+ */
+export function resolveParentOrganization(name: string, parent?: string) {
+  const trimmed = parent?.trim() ?? "";
+  if (!trimmed) return "";
+  return normalizeOrganizationName(trimmed) === normalizeOrganizationName(name) ? "" : trimmed;
+}
+
+/** Drops legal suffixes and punctuation so "Intuit" and "Intuit Inc." compare equal. */
+function normalizeOrganizationName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\b(the|inc|incorporated|llc|llp|lp|ltd|limited|corp|corporation|company|co|plc|gmbh|ag|nv|sa)\b/g, " ")
+    .replace(/[^a-z0-9]/g, "");
 }

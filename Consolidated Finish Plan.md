@@ -536,6 +536,43 @@ routes to influence the portfolio are supplying more evidence or asking a strate
 that resists wishful thinking may well be right to work this way, but it should be a recorded
 decision rather than an absence.
 
+### Step 5 finding — 2026-10-29: the search center was never checked (employer discovery)
+
+Founder ran a 25-mile employer search on `Mountain View, CA`. Eleven plausible employers came back;
+the geography underneath was wrong by 25 miles. Geocodio returned a coarse match (formatted as
+`Mountain View, CA 94039`, the PO-box-only ZIP) whose coordinates are the Santa Clara County
+centroid, and nothing in the app was able to notice: the accuracy fields were never read, the user's
+query string was pasted over the missing city component, and the center was then asserted as a
+nearby place at zero miles.
+
+**Why this one matters beyond the bug.** The radius confirmation was vacuous rather than lucky.
+Candidate locations are geocoded through the same call, so "Mountain View, CA" resolved to the same
+bad point and the distance was measured from that point to itself. "11 within 25 miles" was a
+tautology. An integrity check that compares a value with a copy of itself reports success forever.
+
+**Repaired** — see `Employers-Opportunities Rethink.md`, "2026-10-29 — A search center nobody
+checked", for the four changes (accuracy gate with a loud failure, no query-string laundering, a
+containment check against the localities found around the center, and no fabricated zero-mile row),
+plus the `parent_organization` self-parenting fix from the same run. Typecheck clean, 987 tests.
+
+**Still open from this run:** `estimated_size` renders unlabelled AI estimates as if sourced, and
+`fit_score` clustered at 86/86/86/86/86 with a healthcare system scoring level with Google against
+three technical-manager lanes. Both are being handled separately. The founder has not yet re-run the
+Mountain View search against live Geocodio, so the repair is tested but not accepted.
+
+**Live re-run, 2026-10-29 (same day).** Confirmed on real data: the containment check fires with
+the intended wording, the fabricated zero-mile center row is gone, and self-parenting is gone. The
+accuracy gate did not fire, and one live Geocodio lookup showed why — a city-only query returns one
+result per postal code, all at full reported confidence, and three non-deliverable codes for
+Mountain View share a single placeholder coordinate 25 miles out. No confidence field could have
+caught it. Repaired by discarding duplicated coordinates and, when the center still fails its
+check, adopting the backup geocoder's center if that one passes. The radius counts now carry the
+center-check caveat. 992 tests; the picker and retry are not yet seen on live data.
+
+**What this invalidated.** Any earlier acceptance that read "N within X miles" as evidence the
+geography was right. That counter cannot fail while the center and the candidates share a geocoder,
+so previous employer-search passes prove less than they appeared to.
+
 ### Morgan fixture: not adjusted, deliberately (2026-10-28)
 
 Considered and rejected changing Morgan's resume so lanes would match. All five of Morgan's candidate
