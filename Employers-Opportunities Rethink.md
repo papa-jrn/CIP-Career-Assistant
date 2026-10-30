@@ -1542,7 +1542,10 @@ save (the EIN write retries without it) but a 990-discovered candidate's EIN is 
 `parent_organization` on saved candidates where the parent is the employer itself, and nulls `parent_key` on
 target events where it equals the employer's own key. It must run after `20261023120000` (it touches that table)
 and only fixes rows written before commit 1684ebb; ingest handles everything after. Safe to run twice, and a
-no-op once applied.
+no-op once applied. **Applied to hosted Supabase on 2026-10-30** via the dashboard SQL editor, as the
+repository's first confirmed-applied migration in this series; it ran clean, which also establishes that
+`employer_target_events` exists hosted (the second statement would have errored on a missing table).
+Confirmation in the UI — that the saved candidate queue no longer shows a self-parent — is still outstanding.
 
 ### Next, in order
 
